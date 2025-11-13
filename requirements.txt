@@ -1,0 +1,12 @@
+# Strands Agents SDK
+strands
+strands-agents-tools
+
+# MCP Protocol Support
+mcp
+
+# HTTP requests for REST API tools
+requests
+
+# Async support
+asyncio
