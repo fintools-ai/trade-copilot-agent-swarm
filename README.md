@@ -1,140 +1,48 @@
-# trade-copilot-agent-swarm
+# Trade Copilot Agent Swarm
 
-Multi-agent system for 0DTE trading signal generation built using Strands Agents framework.
+![Python](https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white)
+![Claude](https://img.shields.io/badge/LLM-Claude-orange?logo=anthropic&logoColor=white)
+![Strands](https://img.shields.io/badge/Framework-Strands_Agents-purple)
+![MCP](https://img.shields.io/badge/Protocol-MCP-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
+
+Multi-agent system for 0DTE/1DTE options trading using Strands Agents. A **Proxy Agent** acts as a human stand-in — continuously querying a 6-agent swarm, asking follow-up questions, and streaming everything to a Live UI.
 
 ## Architecture
 
-This system uses a **multi-agent swarm** architecture where specialized agents collaborate to produce high-confidence 0DTE trading recommendations:
+![Architecture](docs/img.png)
 
-- **Strands Agents**: Multi-agent orchestration framework with session state caching
-- **MCP Servers**: Model Context Protocol for financial data tools (market data, open interest)
-- **HTTP APIs**: Real-time order flow and options data
-- **Session Caching**: OI breadth data fetched once, reused across all agents via `invocation_state`
+## Vision: Proactive LLMs
 
-## Multi-Agent Workflow
+Most AI tools today are **reactive** — they wait for human input, respond, then wait again. This creates a bottleneck: the human becomes the limiting factor.
 
-```mermaid
-graph TD
-    Start([User Query: Analyze SPY for 0DTE trading]) --> SessionInit[Initialize Session]
+This system flips that model. The LLM is **proactive**:
 
-    SessionInit --> MarketBreadth[Market Breadth Agent]
+- It initiates queries without being asked
+- It decides what follow-up questions to ask
+- It requests confirmation when signals are uncertain
+- It never stops thinking
 
-    MarketBreadth --> CheckCache{OI Data<br/>Cached?}
-    CheckCache -->|No| FetchOI[Fetch Open Interest<br/>Mag 7 Tickers]
-    CheckCache -->|Yes| UseCache[Use Cached Data]
+The Proxy Agent acts like a human trader would — constantly monitoring, questioning, verifying. But it does this 24/7 without fatigue.
 
-    FetchOI --> StoreCache[Store in Session State]
-    UseCache --> StoreCache
+> "When LLMs become proactive instead of reactive, it opens the door to truly autonomous systems. The agent doesn't assist the trader — it becomes the trader's always-on thinking partner."
 
-    StoreCache --> ParallelStart{Parallel Analysis}
+The human's role shifts from **operator** to **observer**. They watch the agent's reasoning in real-time and only step in to execute trades.
 
-    ParallelStart --> OrderFlowAgent[Order Flow Agent<br/>Multi-ticker flows<br/>Institutional patterns]
-    ParallelStart --> OptionsAgent[Options Flow Agent<br/>PUT/CALL bias<br/>Unusual activity]
-    ParallelStart --> MarketDataAgent[Market Data Agent<br/>Volume profile<br/>Technical levels]
+## Stack
 
-    OrderFlowAgent --> Coordinator[Coordinator Agent]
-    OptionsAgent --> Coordinator
-    MarketDataAgent --> Coordinator
+- **Strands Agents SDK** — Multi-agent orchestration
+- **Strands Graph** — Sequential + parallel workflow
+- **MCP Servers** — Financial data (market data, open interest)
+- **Claude Haiku/Sonnet** — LLM reasoning
 
-    Coordinator --> Synthesis[Signal Synthesis<br/>Cross-validate all data<br/>Calculate conviction<br/>Determine entry/exit]
+## Agents
 
-    Synthesis --> Recommendation[Trading Recommendation<br/>Direction, Strike, Entry<br/>Stop Loss, Target<br/>Risk Parameters]
-
-    Recommendation --> End([Return to User])
-
-    style Start fill:#e1f5ff
-    style MarketBreadth fill:#fff4e6
-    style OrderFlowAgent fill:#e8f5e9
-    style OptionsAgent fill:#f3e5f5
-    style MarketDataAgent fill:#e0f2f1
-    style Coordinator fill:#fce4ec
-    style Synthesis fill:#fff9c4
-    style Recommendation fill:#c8e6c9
-    style End fill:#e1f5ff
-```
-
-### Workflow Phases
-
-**Phase 1: Market Breadth Analysis (~30s first call, instant on subsequent)**
-- Market Breadth Agent runs first
-- Fetches open interest data for Mag 7 mega-caps
-- Stores in `invocation_state` for all agents to access
-- Subsequent calls use cached data (valid for session)
-
-**Phase 2: Parallel Specialist Analysis (~15s)**
-Three specialist agents run in parallel, all reading from cached OI:
-- **Order Flow Agent**: Multi-ticker equity flows, institutional patterns
-- **Options Flow Agent**: Unusual activity, PUT/CALL bias, Greeks
-- **Market Data Agent**: Volume profile, technical indicators, ORB, FVG
-
-**Phase 3: Coordinator Synthesis (~10s)**
-- Aggregates all specialist insights
-- Cross-validates signals with OI breadth
-- Checks trading memory for consistency
-- Calculates conviction score
-- Generates final recommendation
-
-**Total Execution Time:**
-- First call (with OI fetch): **55-60 seconds**
-- Subsequent calls (OI cached): **25-30 seconds** ⚡
-
-## Tools Available
-
-### Financial Data Tools (via MCP)
-- `financial_volume_profile_tool` - Volume Profile analysis (POC, VAH, VAL)
-- `financial_technical_analysis_tool` - Technical indicators (SMA, RSI, MACD, ATR, VWAP)
-- `financial_technical_zones_tool` - Support/resistance zones
-- `financial_orb_analysis_tool` - Opening Range Breakout analysis
-- `financial_fvg_analysis_tool` - Fair Value Gap detection
-
-### Order Flow Tools (via HTTP)
-- `equity_order_flow_tool` - Real-time equity order flow analysis
-- `options_order_flow_tool` - Options flow with sweeps and blocks
-- `options_monitoring_tool` - Configure strike-specific monitoring
-
-## Setup
-
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Ensure MCP market data server is installed:
-```bash
-# Should be accessible as: mcp-market-data-server
-which mcp-market-data-server
-```
-
-3. Configure HTTP server URLs in `config/settings.py` (defaults to localhost)
-
-## Project Structure
-
-```
-trade-copilot-agent-swarm/
-├── tools/
-│   ├── financial_tools.py      # MCP-based financial data tools
-│   ├── order_flow_tools.py     # HTTP-based order flow tools
-│   └── options_flow_tools.py   # HTTP-based options tools
-├── config/
-│   └── settings.py             # Configuration settings
-├── requirements.txt
-└── README.md
-```
-
-## Usage
-
-```python
-from tools.financial_tools import financial_volume_profile_tool
-from tools.order_flow_tools import equity_order_flow_tool
-
-# Use in your Strands agent
-from strands import Agent
-
-agent = Agent(
-    tools=[
-        financial_volume_profile_tool,
-        equity_order_flow_tool,
-        # ... add other tools
-    ]
-)
-```
+| Agent | Role |
+|-------|------|
+| **Market Breadth** | Analyzes open interest, identifies max pain, put/call walls |
+| **Setup** | Configures monitoring based on OI key levels |
+| **Order Flow** | Detects institutional patterns, volume imbalances |
+| **Options Flow** | Tracks sweeps, blocks, smart money positioning |
+| **Financial Data** | Technical analysis, ORB, FVG, volume profile |
+| **Coordinator** | Synthesizes signals → PUT/CALL + conviction + entry/stop/target |
