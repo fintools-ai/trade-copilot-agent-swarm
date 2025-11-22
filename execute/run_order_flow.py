@@ -4,12 +4,17 @@ Analyzes multi-ticker equity order flow and institutional patterns
 """
 
 import sys
-sys.path.insert(0, '/Users/sayantan/Documents/Workspace/trade-copilot-agent-swarm')
+import os
+import asyncio
+
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 from agents.order_flow_agent import create_order_flow_agent
 
 
-def run_order_flow(ticker: str = "SPY"):
+async def run_order_flow(ticker: str = "SPY"):
     """
     Run Order Flow Agent standalone
 
@@ -34,9 +39,9 @@ Analyze:
 
 Provide intraday bias and key levels."""
 
-    response = agent.run(prompt)
+    response = await agent.invoke_async(prompt)
 
-    print(response.content[0].text)
+    print(response.message["content"][0]["text"])
     print(f"\n{'='*60}\n")
 
     return response
@@ -45,4 +50,4 @@ Provide intraday bias and key levels."""
 if __name__ == "__main__":
     import sys
     ticker = sys.argv[1] if len(sys.argv) > 1 else "SPY"
-    run_order_flow(ticker)
+    asyncio.run(run_order_flow(ticker))

@@ -1,5 +1,5 @@
 # Strands Agents SDK
-strands
+strands-agents
 strands-agents-tools
 
 # MCP Protocol Support
@@ -10,3 +10,6 @@ requests
 
 # Async support
 asyncio
+
+# Rich console output
+rich

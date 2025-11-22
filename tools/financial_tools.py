@@ -1,217 +1,128 @@
 """
-Financial Data Tools for Trade Copilot Agent Swarm
-Uses Strands MCP client for mcp-market-data-server integration
+Financial Tools for Trade Copilot Agent Swarm
+Uses separate MCP client instances to avoid parallel execution conflicts
 """
 
 import json
 import logging
+import re
+from datetime import datetime
 from typing import Dict, Any
 from strands import tool
 from mcp import StdioServerParameters, stdio_client
 from strands.tools.mcp import MCPClient
 
+from config.settings import MCP_MARKET_DATA_EXECUTABLE
+
 logger = logging.getLogger(__name__)
 
-# Initialize MCP client for market data server
-market_data_mcp = MCPClient(
-    lambda: stdio_client(
-        StdioServerParameters(
-            command="mcp-market-data-server",
-            args=[]
+def create_mcp_client():
+    """Create a new MCP client instance with connection pooling"""
+    return MCPClient(
+        lambda: stdio_client(
+            StdioServerParameters(
+                command=MCP_MARKET_DATA_EXECUTABLE,
+                args=[]
+            )
         )
     )
-)
-
 
 @tool
 async def financial_volume_profile_tool(symbol: str) -> str:
-    """
-    Retrieves Volume Profile structure (POC, VAH, VAL, Nodes) for granular timeframes (1m, 5m).
-
-    Use when asked about:
-    - Volume-based support/resistance levels
-    - High/low volume concentration areas
-    - Point of Control (POC) for different timeframes
-    - Value Area High/Low (VAH/VAL)
-
-    Args:
-        symbol: Stock ticker symbol (e.g., SPY, AAPL, QQQ)
-
-    Returns:
-        Volume profile analysis with POC, VAH, VAL, and high/low volume nodes
-    """
+    """Analyzes volume profile to identify key price levels."""
     try:
-        with market_data_mcp:
-            result = await market_data_mcp.call_tool(
-                "financial_volume_profile_tool",
-                {"symbol": symbol}
+        with create_mcp_client() as mcp:
+            result = await mcp.call_tool_async(
+                tool_use_id=f"volume_profile_{symbol}",
+                name="financial_volume_profile_tool",
+                arguments={"symbol": symbol}
             )
 
-            if result and "content" in result and result["content"]:
-                # Extract text from MCP response
-                content = result["content"][0]["text"]
-                return content
+            if result and result.get("status") == "success" and result.get("content"):
+                return result["content"][0]["text"]
             else:
-                error_msg = f"No volume profile data available for {symbol}"
-                logger.error(error_msg)
-                return json.dumps({"error": error_msg})
+                return json.dumps({"error": f"No volume profile data available for {symbol}"})
 
     except Exception as e:
-        error_msg = f"Error fetching volume profile for {symbol}: {str(e)}"
-        logger.exception(error_msg)
-        return json.dumps({"error": error_msg})
-
+        logger.error(f"Error fetching volume profile for {symbol}: {str(e)}")
+        return json.dumps({"error": str(e)})
 
 @tool
 async def financial_technical_analysis_tool(symbol: str) -> str:
-    """
-    Retrieves comprehensive Technical Analysis indicators (SMA, RSI, MACD, ATR, VWAP) for timeframes (1m, 5m, 1d).
-
-    Use when asked about:
-    - Trend strength and momentum
-    - Moving averages (SMA, EMA)
-    - Oscillators (RSI, MACD, Stochastic)
-    - Volatility (ATR)
-    - Volume indicators (VWAP, OBV)
-
-    Args:
-        symbol: Stock ticker symbol (e.g., SPY, NVDA, TSLA)
-
-    Returns:
-        Technical indicators across multiple timeframes with trend analysis
-    """
+    """Performs technical analysis using multiple indicators."""
     try:
-        with market_data_mcp:
-            result = await market_data_mcp.call_tool(
-                "financial_technical_analysis_tool",
-                {"symbol": symbol}
+        with create_mcp_client() as mcp:
+            result = await mcp.call_tool_async(
+                tool_use_id=f"technical_analysis_{symbol}",
+                name="financial_technical_analysis_tool",
+                arguments={"symbol": symbol}
             )
 
-            if result and "content" in result and result["content"]:
-                content = result["content"][0]["text"]
-                return content
+            if result and result.get("status") == "success" and result.get("content"):
+                return result["content"][0]["text"]
             else:
-                error_msg = f"No technical analysis data available for {symbol}"
-                logger.error(error_msg)
-                return json.dumps({"error": error_msg})
+                return json.dumps({"error": f"No technical analysis data available for {symbol}"})
 
     except Exception as e:
-        error_msg = f"Error fetching technical analysis for {symbol}: {str(e)}"
-        logger.exception(error_msg)
-        return json.dumps({"error": error_msg})
-
+        logger.error(f"Error fetching technical analysis for {symbol}: {str(e)}")
+        return json.dumps({"error": str(e)})
 
 @tool
 async def financial_technical_zones_tool(symbol: str) -> str:
-    """
-    Retrieves calculated support/resistance price zones from Volume Profile and volatility for timeframes (1m, 5m).
-
-    Use when asked about:
-    - Precise entry/exit levels
-    - Support and resistance zones
-    - Stop-loss placement
-    - High-probability price levels
-
-    Args:
-        symbol: Stock ticker symbol (e.g., SPY, AAPL)
-
-    Returns:
-        Support/resistance zones with strength and confidence levels
-    """
+    """Identifies support and resistance zones."""
     try:
-        with market_data_mcp:
-            result = await market_data_mcp.call_tool(
-                "financial_technical_zones_tool",
-                {"symbol": symbol}
+        with create_mcp_client() as mcp:
+            result = await mcp.call_tool_async(
+                tool_use_id=f"technical_zones_{symbol}",
+                name="financial_technical_zones_tool",
+                arguments={"symbol": symbol}
             )
 
-            if result and "content" in result and result["content"]:
-                content = result["content"][0]["text"]
-                return content
+            if result and result.get("status") == "success" and result.get("content"):
+                return result["content"][0]["text"]
             else:
-                error_msg = f"No technical zones data available for {symbol}"
-                logger.error(error_msg)
-                return json.dumps({"error": error_msg})
+                return json.dumps({"error": f"No technical zones data available for {symbol}"})
 
     except Exception as e:
-        error_msg = f"Error fetching technical zones for {symbol}: {str(e)}"
-        logger.exception(error_msg)
-        return json.dumps({"error": error_msg})
-
+        logger.error(f"Error fetching technical zones for {symbol}: {str(e)}")
+        return json.dumps({"error": str(e)})
 
 @tool
 async def financial_orb_analysis_tool(symbol: str) -> str:
-    """
-    Analyzes Opening Range Breakout (ORB) levels for multiple timeframes (5, 15, 30 minutes).
-
-    Use when asked about:
-    - 0DTE trading strategies
-    - Intraday breakout levels
-    - Opening range high/low
-    - Breakout confirmation with volume
-    - Extension targets
-
-    Args:
-        symbol: Stock ticker symbol (e.g., SPY, QQQ)
-
-    Returns:
-        ORB analysis with breakout status, volume confirmation, and extension targets
-    """
+    """Analyzes Opening Range Breakout levels."""
     try:
-        with market_data_mcp:
-            result = await market_data_mcp.call_tool(
-                "financial_orb_analysis_tool",
-                {"symbol": symbol}
+        with create_mcp_client() as mcp:
+            result = await mcp.call_tool_async(
+                tool_use_id=f"orb_analysis_{symbol}",
+                name="financial_orb_analysis_tool",
+                arguments={"symbol": symbol}
             )
 
-            if result and "content" in result and result["content"]:
-                content = result["content"][0]["text"]
-                return content
+            if result and result.get("status") == "success" and result.get("content"):
+                return result["content"][0]["text"]
             else:
-                error_msg = f"No ORB analysis data available for {symbol}"
-                logger.error(error_msg)
-                return json.dumps({"error": error_msg})
+                return json.dumps({"error": f"No ORB analysis data available for {symbol}"})
 
     except Exception as e:
-        error_msg = f"Error fetching ORB analysis for {symbol}: {str(e)}"
-        logger.exception(error_msg)
-        return json.dumps({"error": error_msg})
-
+        logger.error(f"Error fetching ORB analysis for {symbol}: {str(e)}")
+        return json.dumps({"error": str(e)})
 
 @tool
 async def financial_fvg_analysis_tool(symbol: str) -> str:
-    """
-    Analyzes Fair Value Gaps (FVGs) across multiple timeframes (1m, 5m, 15m).
-
-    Use when asked about:
-    - Price imbalances and gaps
-    - Mean reversion opportunities
-    - Unfilled gaps as support/resistance
-    - 3-candle pattern gaps
-    - Gap fill probability
-
-    Args:
-        symbol: Stock ticker symbol (e.g., NVDA, TSLA)
-
-    Returns:
-        FVG analysis with gap levels, fill status, volume data, and nearest gaps
-    """
+    """Detects and analyzes Fair Value Gaps."""
     try:
-        with market_data_mcp:
-            result = await market_data_mcp.call_tool(
-                "financial_fvg_analysis_tool",
-                {"symbol": symbol}
+        with create_mcp_client() as mcp:
+            result = await mcp.call_tool_async(
+                tool_use_id=f"fvg_analysis_{symbol}",
+                name="financial_fvg_analysis_tool",
+                arguments={"symbol": symbol}
             )
 
-            if result and "content" in result and result["content"]:
-                content = result["content"][0]["text"]
-                return content
+            if result and result.get("status") == "success" and result.get("content"):
+                return result["content"][0]["text"]
             else:
-                error_msg = f"No FVG analysis data available for {symbol}"
-                logger.error(error_msg)
-                return json.dumps({"error": error_msg})
+                return json.dumps({"error": f"No FVG analysis data available for {symbol}"})
 
     except Exception as e:
-        error_msg = f"Error fetching FVG analysis for {symbol}: {str(e)}"
-        logger.exception(error_msg)
-        return json.dumps({"error": error_msg})
+        logger.error(f"Error fetching FVG analysis for {symbol}: {str(e)}")
+        return json.dumps({"error": str(e)})

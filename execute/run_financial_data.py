@@ -4,12 +4,17 @@ Analyzes technical indicators, volume profile, ORB, and FVG
 """
 
 import sys
-sys.path.insert(0, '/Users/sayantan/Documents/Workspace/trade-copilot-agent-swarm')
+import os
+import asyncio
+
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 from agents.financial_data_agent import create_financial_data_agent
 
 
-def run_financial_data(ticker: str = "SPY"):
+async def run_financial_data(ticker: str = "SPY"):
     """
     Run Financial Data Agent standalone
 
@@ -34,9 +39,9 @@ Analyze:
 
 Provide technical bias and key intraday levels."""
 
-    response = agent.run(prompt)
+    response = await agent.invoke_async(prompt)
 
-    print(response.content[0].text)
+    print(response.message["content"][0]["text"])
     print(f"\n{'='*60}\n")
 
     return response
@@ -45,4 +50,4 @@ Provide technical bias and key intraday levels."""
 if __name__ == "__main__":
     import sys
     ticker = sys.argv[1] if len(sys.argv) > 1 else "SPY"
-    run_financial_data(ticker)
+    asyncio.run(run_financial_data(ticker))

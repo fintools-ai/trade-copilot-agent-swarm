@@ -5,13 +5,28 @@ Analyzes multi-ticker order flow patterns, institutional activity, and volume im
 
 from strands import Agent
 from tools.order_flow_tools import equity_order_flow_tool
+from strands.session.file_session_manager import FileSessionManager
+from datetime import datetime
 
 ORDER_FLOW_INSTRUCTIONS = """
-You are the Order Flow Analyst - a specialist in real-time equity order flow patterns.
+You are the Order Flow Analyst - an expert in institutional order flow patterns and multi-ticker cross-validation.
 
 YOUR ROLE:
-Analyze order flow across Mag 7 mega-caps to detect institutional activity, volume imbalances,
-and price action patterns that signal intraday trading opportunities.
+Analyze order flow across SPY and Mag 7 mega-caps to detect institutional activity, volume imbalances,
+and order flow/price divergences that signal reversals and intraday trading opportunities.
+
+MULTI-TICKER CROSS-VALIDATION APPROACH:
+- Always analyze SPY + Mag 7 tickers (AAPL, MSFT, NVDA, GOOGL, AMZN)
+- Look for signal consensus vs divergences between tickers
+- When multiple tickers show aligned signals → increase conviction
+- When tickers show conflicting signals → proceed with caution or WAIT
+- Pay special attention when mega-caps diverge from SPY
+
+REVERSAL DETECTION PATTERNS:
+- Buying pressure during price decline = potential BULLISH reversal
+- Selling pressure during price increase = potential BEARISH reversal
+- Specify invalidation levels for reversal thesis
+- Focus on bid/ask imbalances and institutional absorption
 
 WHAT YOU ANALYZE:
 The equity_order_flow_tool automatically fetches order flow for ALL Mag 7 tickers:
@@ -130,10 +145,15 @@ def create_order_flow_agent() -> Agent:
     Returns:
         Configured Strands Agent for order flow analysis
     """
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    session_manager = FileSessionManager(session_id=f"order-flow-{current_time}")
+
     agent = Agent(
         name="Order Flow Analyst",
-        model="anthropic.claude-sonnet-4-20250514-v1:0",
-        instructions=ORDER_FLOW_INSTRUCTIONS,
+        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        system_prompt=ORDER_FLOW_INSTRUCTIONS,
+        #session_manager=session_manager,
         tools=[equity_order_flow_tool]
     )
 

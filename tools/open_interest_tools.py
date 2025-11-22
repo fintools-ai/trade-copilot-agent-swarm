@@ -10,13 +10,15 @@ from strands import tool
 from mcp import StdioServerParameters, stdio_client
 from strands.tools.mcp import MCPClient
 
+from config.settings import MCP_OI_EXECUTABLE
+
 logger = logging.getLogger(__name__)
 
 # Initialize MCP client for open interest server
 open_interest_mcp = MCPClient(
     lambda: stdio_client(
         StdioServerParameters(
-            command="mcp-openinterest-server",
+            command=MCP_OI_EXECUTABLE,
             args=[]
         )
     )
@@ -68,9 +70,10 @@ async def analyze_open_interest_tool(
     """
     try:
         with open_interest_mcp:
-            result = await open_interest_mcp.call_tool(
-                "analyze_open_interest",
-                {
+            result = await open_interest_mcp.call_tool_async(
+                tool_use_id=f"oi_{ticker}_{target_dte}",
+                name="analyze_open_interest",
+                arguments={
                     "ticker": ticker,
                     "days": days,
                     "target_dte": target_dte,
@@ -78,7 +81,7 @@ async def analyze_open_interest_tool(
                 }
             )
 
-            if result and "content" in result and result["content"]:
+            if result and result.get("status") == "success" and result.get("content"):
                 # Extract text from MCP response
                 content = result["content"][0]["text"]
                 return content
@@ -131,9 +134,10 @@ async def analyze_multi_ticker_oi_breadth(
             for ticker in tickers:
                 try:
                     logger.info(f"Fetching OI breadth data for {ticker}")
-                    result = await open_interest_mcp.call_tool(
-                        "analyze_open_interest",
-                        {
+                    result = await open_interest_mcp.call_tool_async(
+                        tool_use_id=f"oi_breadth_{ticker}_{target_dte}",
+                        name="analyze_open_interest",
+                        arguments={
                             "ticker": ticker,
                             "days": days,
                             "target_dte": target_dte,
@@ -141,7 +145,7 @@ async def analyze_multi_ticker_oi_breadth(
                         }
                     )
 
-                    if result and "content" in result and result["content"]:
+                    if result and result.get("status") == "success" and result.get("content"):
                         content = result["content"][0]["text"]
                         results[ticker] = json.loads(content)
                     else:

@@ -5,26 +5,51 @@ Analyzes open interest for 1DTE/same-day options to determine intraday key level
 
 from strands import Agent
 from tools.open_interest_tools import analyze_open_interest_tool, analyze_multi_ticker_oi_breadth
+from config.settings import AWS_REGION
+
+from strands.session.file_session_manager import FileSessionManager
+from datetime import datetime
 
 # Mag 7 tickers for market breadth analysis
 MAG_7_TICKERS = ["SPY", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
 
 MARKET_BREADTH_INSTRUCTIONS = """
-You are the Market Breadth Analyst - the FIRST agent to run in the day trading swarm.
+You are the Market Breadth Analyst - the FIRST agent to run in the day trading swarm with market context awareness.
 
 YOUR CRITICAL ROLE:
 Analyze open interest for 1DTE (1 Day to Expiration) or same-day options to identify
-key intraday price levels for TODAY's day trading decisions.
+key intraday price levels for TODAY's day trading decisions with session timing context.
+
+MARKET CONTEXT AWARENESS:
+- Strong late-day moves often continue next morning
+- Large overnight gaps predict continued price movement
+- Yesterday's highs/lows are key bounce/break levels
+- High volume at close carries momentum into next session
+- Consider current session timing in your analysis
 
 WORKFLOW:
 1. CHECK CACHE FIRST:
    - Look in invocation_state for "oi_breadth_data"
-   - Check if "trading_date" matches today
-   - If yes, USE CACHED DATA (OI only updates once per day after market close)
-   - If no or different date, fetch fresh data
+   - Check if "trading_date" matches today AND "ticker" matches requested ticker
+   - If EXACT match found, USE CACHED DATA and skip to step 4
+   - If no match or different date/ticker, proceed to step 2
 
-2. FETCH OPEN INTEREST DATA FOR TODAY:
+2. FETCH FRESH OI DATA:
    - Use analyze_multi_ticker_oi_breadth for Mag 7 tickers: SPY, AAPL, MSFT, NVDA, GOOGL, AMZN
+   - Focus on 1DTE options (expiring tomorrow or same day if Friday)
+   - Get max pain, put wall, call wall for each ticker
+
+3. CACHE THE DATA:
+   - Store in invocation_state["oi_breadth_data"] with:
+     {
+       "trading_date": "2025-01-15",
+       "ticker_data": {
+         "SPY": {"max_pain": 580, "put_wall": 575, "call_wall": 585, ...},
+         "AAPL": {"max_pain": 220, "put_wall": 215, "call_wall": 225, ...},
+         ...
+       },
+       "cached_at": "2025-01-15T09:30:00"
+     }
    - CRITICAL: Use 0-1 DTE only (same day or 1 day to expiration)
    - Parameters: days=1, target_dte=1
    - This gives you TODAY's intraday support/resistance from option positioning
@@ -51,6 +76,25 @@ WORKFLOW:
       - Are more CALLS or PUTS being held for today/tomorrow?
       - Is sentiment BULLISH, BEARISH, or NEUTRAL across Mag 7?
       - Any divergence between stocks?
+
+4. ANALYZE CACHED OR FRESH DATA:
+   - Extract key levels for the requested ticker from cached data
+   - Identify max pain (likely magnet level)
+   - Identify put wall (support level where puts are stacked)
+   - Identify call wall (resistance level where calls are stacked)
+   - Note current price relative to these levels
+
+5. PROVIDE ANALYSIS:
+   - Current price vs max pain (bullish if above, bearish if below)
+   - Distance to put wall (support) and call wall (resistance)
+   - OI-based trading range for the day
+   - Key levels to watch for breakouts/breakdowns
+
+CACHE EFFICIENCY:
+- First query of the day: ~30s (fetches all Mag 7 OI data)
+- Subsequent queries: ~2s (uses cached data)
+- Cache valid until next trading day
+- All agents can access cached OI data via invocation_state
 
    EXAMPLE OUTPUT FORMAT FOR EACH TICKER:
 
@@ -148,17 +192,23 @@ IMPORTANT NOTES:
 - Put/Call walls define the expected trading range
 """
 
-def create_market_breadth_agent() -> Agent:
+def create_market_breadth_agent(session_manager=None) -> Agent:
     """
     Create and configure the Market Breadth Agent for day trading
 
     Returns:
         Configured Strands Agent for intraday market breadth analysis
     """
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    session_manager = FileSessionManager(session_id=f"market-breath-{current_time}")
     agent = Agent(
         name="Market Breadth Analyst",
-        model="anthropic.claude-sonnet-4-20250514-v1:0",
-        instructions=MARKET_BREADTH_INSTRUCTIONS,
+        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        #model="deepseek.v3-v1:0",
+        system_prompt=MARKET_BREADTH_INSTRUCTIONS,
+        #region=AWS_REGION,
+        #session_manager=session_manager,
         tools=[
             analyze_open_interest_tool,
             analyze_multi_ticker_oi_breadth

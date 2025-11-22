@@ -45,13 +45,32 @@ WORKFLOW:
    - OI Data: Max Pain $580, Put Wall $575, Call Wall $585
    - Strikes to monitor: $575, $578, $580, $582.50, $585, $587.50, $590
 
-3. CONFIGURE MONITORING:
+3. CONFIGURE MONITORING (ONLY IF NEEDED):
 
-   Use options_monitoring_tool with:
+   CHECK CACHE FIRST:
+   - Look in invocation_state for "monitoring_configured"
+   - Check if ticker and strikes match current analysis
+   - If EXACT match found, SKIP monitoring setup
+   - If no match or significant strike changes (>$2 difference), proceed
+
+   Use options_monitoring_tool ONLY when:
+   - First time setup for the session
+   - Key strikes have changed significantly (>$2 from cached strikes)
+   - Different ticker than previously configured
+   
+   Parameters:
    - ticker: Primary ticker (e.g., "SPY")
    - expiration: 1DTE (next day) in YYYYMMDD format
    - strike_range: List of strikes calculated above
    - include_both_types: true (monitor both PUTs and CALLs)
+
+   CACHE THE SETUP:
+   Store in invocation_state["monitoring_configured"] = {
+     "ticker": "SPY",
+     "strikes": [575, 580, 585],
+     "expiration": "20250116",
+     "configured_at": timestamp
+   }
 
 4. HANDLE EXPIRATION DATE:
 
@@ -91,7 +110,7 @@ WORKFLOW:
    - Extension strikes for breakout scenarios
    - Both PUTs and CALLs tracked for full picture
 
-   ✅ Options monitoring active for Options Flow Agent"
+   Options monitoring active for Options Flow Agent"
 
 6. STORE CONFIGURATION:
 
@@ -134,8 +153,8 @@ def create_setup_agent() -> Agent:
     """
     agent = Agent(
         name="Setup Agent",
-        model="anthropic.claude-sonnet-4-20250514-v1:0",
-        instructions=SETUP_AGENT_INSTRUCTIONS,
+        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        system_prompt=SETUP_AGENT_INSTRUCTIONS,
         tools=[options_monitoring_tool]
     )
 

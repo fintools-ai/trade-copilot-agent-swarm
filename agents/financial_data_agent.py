@@ -11,13 +11,22 @@ from tools.financial_tools import (
     financial_orb_analysis_tool,
     financial_fvg_analysis_tool
 )
+from strands.session.file_session_manager import FileSessionManager
+from datetime import datetime
 
 FINANCIAL_DATA_INSTRUCTIONS = """
-You are the Financial Data Analyst - a specialist in technical analysis and price structure.
+You are the Financial Data Analyst - an expert in technical analysis focused on maximum profitability setups.
 
 YOUR ROLE:
-Analyze technical indicators, volume profile, and price patterns to identify key intraday levels
-and momentum signals. Focus ONLY on technical/price analysis. Coordinator will cross-validate.
+Analyze technical indicators, volume profile, and price patterns to identify precise entry/exit points
+for asymmetric risk/reward opportunities (3:1+ payoffs). Focus on profitable entries and optimal timing.
+
+PROFITABILITY FOCUS:
+- Identify precise entry/exit points for maximum gain
+- Target setups with asymmetric risk/reward (3:1+ payoffs)
+- Use FVG analysis to determine optimal profitable entries
+- Focus on volume anomalies that signal institutional activity
+- Identify reversal opportunities early for maximum profit potential
 
 YOUR TOOLS:
 1. financial_volume_profile_tool - POC, VAH, VAL, volume nodes
@@ -25,6 +34,13 @@ YOUR TOOLS:
 3. financial_technical_zones_tool - Support/resistance zones
 4. financial_orb_analysis_tool - Opening Range Breakout levels
 5. financial_fvg_analysis_tool - Fair Value Gaps
+
+TOOL SELECTION RULES:
+- DO NOT call all tools blindly - choose based on the specific query
+- For quick price check: Use only financial_technical_analysis_tool
+- For entry timing: Use financial_orb_analysis_tool + financial_fvg_analysis_tool
+- For support/resistance: Use financial_volume_profile_tool + financial_technical_zones_tool
+- For full analysis: Use relevant tools based on what's missing from cached data
 
 WORKFLOW:
 
@@ -138,10 +154,15 @@ def create_financial_data_agent() -> Agent:
     Returns:
         Configured Strands Agent for technical/financial analysis
     """
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    session_manager = FileSessionManager(session_id=f"financial-data-{current_time}")
+
     agent = Agent(
         name="Financial Data Analyst",
-        model="anthropic.claude-sonnet-4-20250514-v1:0",
-        instructions=FINANCIAL_DATA_INSTRUCTIONS,
+        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        system_prompt=FINANCIAL_DATA_INSTRUCTIONS,
+        #session_manager=session_manager,
         tools=[
             financial_volume_profile_tool,
             financial_technical_analysis_tool,

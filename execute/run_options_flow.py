@@ -4,12 +4,17 @@ Analyzes options sweeps, blocks, and PUT/CALL bias
 """
 
 import sys
-sys.path.insert(0, '/Users/sayantan/Documents/Workspace/trade-copilot-agent-swarm')
+import os
+import asyncio
+
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 from agents.options_flow_agent import create_options_flow_agent
 
 
-def run_options_flow(ticker: str = "SPY"):
+async def run_options_flow(ticker: str = "SPY"):
     """
     Run Options Flow Agent standalone
 
@@ -35,9 +40,9 @@ Analyze:
 
 Provide directional bias and conviction."""
 
-    response = agent.run(prompt)
+    response = await agent.invoke_async(prompt)
 
-    print(response.content[0].text)
+    print(response.message["content"][0]["text"])
     print(f"\n{'='*60}\n")
 
     return response
@@ -46,4 +51,4 @@ Provide directional bias and conviction."""
 if __name__ == "__main__":
     import sys
     ticker = sys.argv[1] if len(sys.argv) > 1 else "SPY"
-    run_options_flow(ticker)
+    asyncio.run(run_options_flow(ticker))

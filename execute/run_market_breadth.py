@@ -4,12 +4,17 @@ Analyzes open interest and identifies key levels
 """
 
 import sys
-sys.path.insert(0, '/Users/sayantan/Documents/Workspace/trade-copilot-agent-swarm')
+import os
+import asyncio
+
+# Add project root to Python path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 from agents.market_breadth_agent import create_market_breadth_agent
 
 
-def run_market_breadth(ticker: str = "SPY"):
+async def run_market_breadth(ticker: str = "SPY"):
     """
     Run Market Breadth Agent standalone
 
@@ -32,9 +37,9 @@ Provide:
 - Current price context
 - Trading implications"""
 
-    response = agent.run(prompt)
+    response = await agent.invoke_async(prompt)
 
-    print(response.content[0].text)
+    print(response.message["content"][0]["text"])
     print(f"\n{'='*60}\n")
 
     return response
@@ -43,4 +48,4 @@ Provide:
 if __name__ == "__main__":
     import sys
     ticker = sys.argv[1] if len(sys.argv) > 1 else "SPY"
-    run_market_breadth(ticker)
+    asyncio.run(run_market_breadth(ticker))

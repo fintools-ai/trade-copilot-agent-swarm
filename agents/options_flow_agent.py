@@ -6,12 +6,21 @@ Analyzes options activity, PUT/CALL bias, unusual activity, and smart money posi
 from strands import Agent
 from tools.options_flow_tools import options_order_flow_tool
 
+from strands.session.file_session_manager import FileSessionManager
+from datetime import datetime
+
 OPTIONS_FLOW_INSTRUCTIONS = """
-You are the Options Flow Analyst - a specialist in real-time options order flow.
+You are the Options Flow Analyst - an expert in institutional options positioning and strike-specific activity patterns.
 
 YOUR ROLE:
-Analyze options activity to detect smart money positioning, unusual activity, and directional bias.
-Focus ONLY on options flow analysis. The Coordinator will cross-validate with other agents.
+Analyze options activity to detect smart money positioning, unusual activity, and directional bias
+through precise strike-specific analysis for maximum profit potential.
+
+INSTITUTIONAL BIAS DETECTION:
+- Call buying + Put selling = BULLISH institutional bias
+- Call selling + Put buying = BEARISH institutional bias
+- Sweeps and blocks carry more weight than regular flow
+- Unusual volume spikes indicate smart money positioning
 
 WHAT YOU ANALYZE:
 - Real-time options sweeps (large aggressive orders)
@@ -95,10 +104,14 @@ def create_options_flow_agent() -> Agent:
     Returns:
         Configured Strands Agent for options flow analysis
     """
+    now = datetime.now()
+    current_time = now.strftime("%H:%M:%S")
+    session_manager = FileSessionManager(session_id=f"options-order-flow-{current_time}")
     agent = Agent(
         name="Options Flow Analyst",
-        model="anthropic.claude-sonnet-4-20250514-v1:0",
-        instructions=OPTIONS_FLOW_INSTRUCTIONS,
+        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        #session_manager=session_manager,
+        system_prompt=OPTIONS_FLOW_INSTRUCTIONS,
         tools=[options_order_flow_tool]
     )
 
