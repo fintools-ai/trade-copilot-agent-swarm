@@ -14,6 +14,7 @@ The agent will:
 4. Never stop - keeps thinking and asking forever
 """
 
+import json
 from datetime import datetime
 from strands import Agent, tool
 from rich.console import Console
@@ -54,135 +55,150 @@ def stream_to_ui(message_type: str, content: str, signal: dict = None):
     console.print(content[:500] + "..." if len(content) > 500 else content)
 
 
-@tool
-def call_swarm(query: str) -> str:
-    """
-    Call the trading swarm with a query about SPY 0DTE trading.
-
-    Automatically routes to FAST MODE for follow-up/validation questions.
-
-    Args:
-        query: Your question to the swarm (e.g., "Analyze SPY for 0DTE")
-
-    Returns:
-        The swarm's full analysis and recommendation
-    """
+def _call_swarm_internal(query: str, fast_mode: bool) -> str:
+    """Internal helper to call swarm and stream to UI."""
     # Stream the agent's question to UI immediately
     stream_to_ui("AGENT_QUESTION", query)
 
-    # Detect if this is a follow-up/validation question (use fast mode)
-    query_lower = query.lower()
-
-    # Keywords that force FULL mode (all 6 agents) - overrides fast mode
-    full_mode_keywords = [
-        "full market", "complete market", "entire market", "full check",
-        "complete check", "full analysis", "complete analysis", "deep dive",
-        "comprehensive", "all agents"
-    ]
-
-    # Keywords that trigger FAST mode (Order Flow + Technical only)
-    fast_mode_keywords = [
-        "double-check", "double check", "are you sure", "confirm", "verify", "validate",
-        "cross-check", "cross check", "has anything changed", "what changed", "still",
-        "recheck", "re-check", "check again", "update", "invalidate", "quick update"
-    ]
-
-    # Check if full mode explicitly requested (takes priority)
-    force_full_mode = any(keyword in query_lower for keyword in full_mode_keywords)
-
-    # Use fast mode only if not forced to full mode
-    use_fast_mode = (not force_full_mode) and any(keyword in query_lower for keyword in fast_mode_keywords)
-
-    # Call the swarm (fast or full mode)
+    # Call the swarm
     swarm = get_swarm()
-    response = swarm.ask(query, fast_mode=use_fast_mode)
+    response = swarm.ask(query, fast_mode=fast_mode)
+
+    # Extract signal from last line (coordinator outputs JSON)
+    signal = None
+    lines = response.strip().split('\n')
+    last_line = lines[-1].strip()
+    try:
+        signal = json.loads(last_line)
+        # Remove signal JSON from displayed content
+        response = '\n'.join(lines[:-1])
+    except (json.JSONDecodeError, ValueError):
+        pass  # No valid signal JSON
 
     # Stream the swarm's response to UI with mode indicator
-    if use_fast_mode:
-        mode_note = "\n\n---\n*[Fast Mode: Order Flow + Technical only]*"
-    elif force_full_mode:
-        mode_note = "\n\n---\n*[Full Mode: All 6 agents - Complete market analysis]*"
-    else:
-        mode_note = ""
-
-    stream_to_ui("SWARM_RESPONSE", response + mode_note)
+    mode_note = "\n\n---\n*[Fast Mode]*" if fast_mode else "\n\n---\n*[Full Mode]*"
+    stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
 
     return response
+
+
+@tool
+def analyze_market(query: str) -> str:
+    """
+    FULL ANALYSIS - Runs all 6 agents (25-60 seconds).
+
+    Use for DECISION POINTS:
+    - Initial analysis ("Analyze SPY for 0DTE")
+    - Signal flipped (PUT changed to CALL or vice versa)
+    - Conviction dropped (HIGH to MED, or MED to LOW)
+    - Periodic refresh (every 4-5 fast checks)
+
+    Args:
+        query: Your question (e.g., "Analyze SPY for 0DTE - PUT or CALL?")
+    """
+    return _call_swarm_internal(query, fast_mode=False)
+
+
+@tool
+def fast_follow(query: str) -> str:
+    """
+    FAST FOLLOW-UP - Runs 2 agents only (8-12 seconds).
+
+    Use for MONITORING between decisions:
+    - Validation ("Double check - flow confirms?")
+    - Updates ("Entry still valid?", "Momentum holding?")
+    - Risk checks ("Biggest risk now?")
+
+    Do NOT use for initial analysis or when signal/conviction changed.
+
+    Args:
+        query: Your quick question (e.g., "Has flow changed?")
+    """
+    return _call_swarm_internal(query, fast_mode=True)
 
 
 # System prompt for continuous thinking
 CONTINUOUS_TRADER_PROMPT = """You are a 0DTE options trader. You run CONTINUOUSLY and NEVER stop.
 
-This is ZERO-DTE (same-day expiring options) - SPEED IS CRITICAL.
-- Keep questions SHORT and SPECIFIC
-- Ask for KEY POINTS only, not detailed explanations
-- Move fast - the market doesn't wait
+0DTE = same-day expiring options. Theta decay is brutal. SPEED IS CRITICAL.
 
-Your job is to constantly monitor the market by querying the trading swarm using the call_swarm tool.
-Think like a day trader making split-second decisions - quick checks, not long analysis.
+## YOUR TWO TOOLS
 
-## Your Behavior
+1. `analyze_market` - FULL analysis, all 6 agents (25-60s)
+2. `fast_follow` - FAST follow-up, 2 agents only (8-12s)
 
-1. Start by asking the swarm for the current SPY analysis: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
+## TRACK FROM EVERY RESPONSE
 
-2. IMMEDIATELY after the initial recommendation, ask ONE validation question:
-   "Double check your recommendation,  do they confirm this direction?"
+After each response, note the SIGNAL (PUT/CALL/WAIT) and CONVICTION (HIGH/MED/LOW).
 
-3. After validation, rotate through these follow-up questions (DON'T repeat the same question):
-   - "What's the invalidation price? Where does this setup break?"
-   - "Has anything changed in order flow? Quick update."
-   - "Current entry price still valid or wait?"
-   - "What's the biggest risk to this trade right now?"
-   - "Any new options flow activity?"
+## WHEN TO USE EACH TOOL
+
+Use `analyze_market` for DECISION POINTS:
+- Initial analysis
+- Signal flipped (PUT↔CALL)
+- Conviction dropped (HIGH→MED or MED→LOW)
+- Every 4-5 fast_follows (periodic refresh)
+
+Use `fast_follow` for MONITORING (everything else)
+
+## YOUR BEHAVIOR
+
+1. START with analyze_market: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
+
+2. VALIDATE with fast_follow: "Double check - does order flow confirm this direction?"
+
+3. MONITOR with fast_follow - rotate through these (don't repeat back-to-back):
+   - "Entry still valid or should I wait?"
+   - "Has order flow changed?"
    - "Is momentum strengthening or weakening?"
+   - "What's the invalidation level?"
+   - "Biggest risk to this trade right now?"
+   - "Any new options activity?"
 
-4. Keep asking questions FOREVER - never output a "final" answer and stop
+4. After 4-5 fast_follows → analyze_market: "Periodic refresh - full market analysis"
 
-5. If you notice the market changed, react and ask about it immediately
+5. IF signal or conviction changed → analyze_market immediately to confirm
 
-6. DO NOT keep asking "are you sure about PUT vs CALL" repeatedly - ask it ONCE after initial recommendation, then MOVE ON
+6. NEVER STOP - keep the loop going forever
 
-7. FULL MARKET CHECK - Every 2-3 questions, run a complete analysis with ALL agents:
-   Ask: "Full market check - run complete analysis with all agents"
+## RULES
 
-   This triggers all 6 agents (Market Breadth, Setup, Order Flow, Options Flow, Financial Data, Coordinator)
-   to get fresh OI levels, options flow, and comprehensive update. Use this to catch major market shifts.
-
-## Important Rules
-
-- NEVER stop - keep the conversation going forever
 - Keep questions SHORT - this is 0DTE, every second counts
-- DON'T repeat the same validation question over and over
-- Vary your questions - check different angles (price, flow, technicals, risk)
-- Always use the call_swarm tool - that's how you query the market
-- Your questions should feel like rapid-fire trader checks, not academic analysis
+- Don't repeat same question back-to-back
+- React to signal/conviction changes immediately
+- Vary your monitoring questions
 
-## Example Flow
+## EXAMPLE FLOW
 
-You: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
-[FULL MODE: All 6 agents run - initial analysis]
+analyze_market: "Analyze SPY for 0DTE - PUT or CALL?"
+→ Response: "Based on analysis... PUT recommended with HIGH conviction. Entry at $1.85..."
+→ You note: PUT, HIGH
 
-You: "Double check your recommendation, do they confirm this direction?"
-[FAST MODE: Quick validation]
+fast_follow: "Double check - flow confirms bearish?"
+→ Response: "Order flow confirms selling pressure, conviction remains HIGH..."
+→ You note: Still PUT, HIGH ✓ (no change, continue monitoring)
 
-You: "What's the invalidation price? Where does this setup break?"
-[FAST MODE: Quick check]
+fast_follow: "Entry still valid?"
+→ Response: "Yes, entry at $1.85 still valid, price holding below resistance..."
+→ You note: PUT, HIGH ✓
 
-You: "Full market check - run complete analysis with all agents"
-[FULL MODE: All 6 agents run - comprehensive refresh after 2-3 questions]
+fast_follow: "Momentum holding?"
+→ Response: "Momentum weakening slightly, conviction now MEDIUM..."
+→ You note: PUT, MED ⚠️ (conviction dropped! trigger full analysis)
 
-You: "Has anything changed in order flow? Quick update."
-[FAST MODE: Quick check]
+analyze_market: "Conviction dropped to MED - need full analysis"
+→ Response: "Full analysis shows reversal forming... CALL now recommended, MED conviction..."
+→ You note: CALL, MED ⚠️ (signal flipped! confirm with another full)
 
-You: "Current entry price still valid or wait?"
-[FAST MODE: Quick check]
+analyze_market: "Signal flipped PUT→CALL - confirm this setup"
+→ Response: "Confirmed. CALL setup valid, conviction upgraded to HIGH..."
+→ You note: CALL, HIGH ✓
 
-You: "Full market check - run complete analysis with all agents"
-[FULL MODE: All 6 agents run - periodic comprehensive update]
+fast_follow: "Entry for calls?"
+→ Response: "Entry at $1.45 for 585C..."
+... continue forever ...
 
-... continue forever alternating between quick checks (FAST) and full market checks (FULL) ...
-
-START NOW. Ask your first question about SPY."""
+START NOW."""
 
 
 def create_zero_dte_agent() -> Agent:
@@ -190,7 +206,7 @@ def create_zero_dte_agent() -> Agent:
     return Agent(
         model="us.anthropic.claude-3-5-haiku-20241022-v1:0",
         system_prompt=CONTINUOUS_TRADER_PROMPT,
-        tools=[call_swarm]
+        tools=[analyze_market, fast_follow]
     )
 
 

@@ -276,6 +276,22 @@ IMPORTANT RULES:
 - Be CONSERVATIVE - better to pass than force a trade
 - Risk management on every recommendation
 - For day trading, always include time-based exits
+
+9. REQUIRED: SIGNAL JSON (ALWAYS ADD AS LAST LINE):
+
+   End EVERY response with this JSON on its own line:
+
+   {"direction": "CALL", "conviction": "HIGH"}
+
+   Direction: "CALL", "PUT", or "WAIT"
+   Conviction: "HIGH", "MED", or "LOW"
+
+   Examples:
+   {"direction": "CALL", "conviction": "HIGH"}
+   {"direction": "PUT", "conviction": "MED"}
+   {"direction": "WAIT", "conviction": "LOW"}
+
+   This MUST be the last line. The UI parses it to show the signal at a glance.
 """
 
 def create_coordinator_agent() -> Agent:
