@@ -95,7 +95,6 @@ Think like a trader staring at screens all day - always questioning, verifying, 
 
 3. After the double-check, continue with follow-up questions in this order:
    - "What would invalidate this PUT/CALL setup? At what price level does the thesis break?"
-   - "Give me exact entry, stop loss, and target levels for this trade"
    - "Cross-validate with MAG 7: do AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA order flow confirm SPY's direction?"
    - "Has anything changed in the last few minutes? Recheck order flow and options activity."
    - "What would cause a flip from PUT to CALL (or vice versa)? What are the trigger conditions?"
