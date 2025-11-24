@@ -4,6 +4,7 @@ Uses Strands MCP client for mcp-openinterest-server integration
 """
 
 import json
+import asyncio
 import logging
 from typing import Dict, Any
 from strands import tool
@@ -13,6 +14,9 @@ from strands.tools.mcp import MCPClient
 from config.settings import MCP_OI_EXECUTABLE
 
 logger = logging.getLogger(__name__)
+
+# Lock to prevent concurrent MCP client access (fixes race condition)
+_mcp_lock = asyncio.Lock()
 
 # Initialize MCP client for open interest server
 open_interest_mcp = MCPClient(
@@ -69,26 +73,28 @@ async def analyze_open_interest_tool(
         - News context (if requested)
     """
     try:
-        with open_interest_mcp:
-            result = await open_interest_mcp.call_tool_async(
-                tool_use_id=f"oi_{ticker}_{target_dte}",
-                name="analyze_open_interest",
-                arguments={
-                    "ticker": ticker,
-                    "days": days,
-                    "target_dte": target_dte,
-                    "include_news": include_news
-                }
-            )
+        # Use lock to prevent concurrent access to MCP client
+        async with _mcp_lock:
+            with open_interest_mcp:
+                result = await open_interest_mcp.call_tool_async(
+                    tool_use_id=f"oi_{ticker}_{target_dte}",
+                    name="analyze_open_interest",
+                    arguments={
+                        "ticker": ticker,
+                        "days": days,
+                        "target_dte": target_dte,
+                        "include_news": include_news
+                    }
+                )
 
-            if result and result.get("status") == "success" and result.get("content"):
-                # Extract text from MCP response
-                content = result["content"][0]["text"]
-                return content
-            else:
-                error_msg = f"No open interest data available for {ticker}"
-                logger.error(error_msg)
-                return json.dumps({"error": error_msg})
+                if result and result.get("status") == "success" and result.get("content"):
+                    # Extract text from MCP response
+                    content = result["content"][0]["text"]
+                    return content
+                else:
+                    error_msg = f"No open interest data available for {ticker}"
+                    logger.error(error_msg)
+                    return json.dumps({"error": error_msg})
 
     except Exception as e:
         error_msg = f"Error fetching open interest for {ticker}: {str(e)}"
@@ -129,31 +135,33 @@ async def analyze_multi_ticker_oi_breadth(
         results = {}
         errors = []
 
-        with open_interest_mcp:
-            # Fetch OI data for all tickers
-            for ticker in tickers:
-                try:
-                    logger.info(f"Fetching OI breadth data for {ticker}")
-                    result = await open_interest_mcp.call_tool_async(
-                        tool_use_id=f"oi_breadth_{ticker}_{target_dte}",
-                        name="analyze_open_interest",
-                        arguments={
-                            "ticker": ticker,
-                            "days": days,
-                            "target_dte": target_dte,
-                            "include_news": False  # Skip news for breadth analysis
-                        }
-                    )
+        # Use lock to prevent concurrent access to MCP client
+        async with _mcp_lock:
+            with open_interest_mcp:
+                # Fetch OI data for all tickers
+                for ticker in tickers:
+                    try:
+                        logger.info(f"Fetching OI breadth data for {ticker}")
+                        result = await open_interest_mcp.call_tool_async(
+                            tool_use_id=f"oi_breadth_{ticker}_{target_dte}",
+                            name="analyze_open_interest",
+                            arguments={
+                                "ticker": ticker,
+                                "days": days,
+                                "target_dte": target_dte,
+                                "include_news": False  # Skip news for breadth analysis
+                            }
+                        )
 
-                    if result and result.get("status") == "success" and result.get("content"):
-                        content = result["content"][0]["text"]
-                        results[ticker] = json.loads(content)
-                    else:
-                        errors.append(f"{ticker}: No data available")
+                        if result and result.get("status") == "success" and result.get("content"):
+                            content = result["content"][0]["text"]
+                            results[ticker] = json.loads(content)
+                        else:
+                            errors.append(f"{ticker}: No data available")
 
-                except Exception as e:
-                    logger.error(f"Error fetching OI for {ticker}: {str(e)}")
-                    errors.append(f"{ticker}: {str(e)}")
+                    except Exception as e:
+                        logger.error(f"Error fetching OI for {ticker}: {str(e)}")
+                        errors.append(f"{ticker}: {str(e)}")
 
         # Format breadth analysis response
         if not results:

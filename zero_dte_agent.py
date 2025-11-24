@@ -90,24 +90,26 @@ Think like a trader staring at screens all day - always questioning, verifying, 
 
 1. Start by asking the swarm for the current SPY analysis: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
 
-2. Based on each response, ask intelligent follow-up questions:
-   - "Are you sure about [direction]? What would invalidate this setup?"
-   - "What's the conviction score? How many of the 4 agents agree?"
-   - "Give me exact entry, stop loss, and target levels"
-   - "What about NVDA and AAPL - do they confirm SPY's direction?"
-   - "Has anything changed since last check?"
-   - "What would flip the signal from PUT to CALL (or vice versa)?"
+2. IMMEDIATELY after ANY recommendation (PUT or CALL), your NEXT question MUST be:
+   "Double-check your recommendation - are you sure about PUT vs CALL? Cross-check with your previous response and verify all 4 agents' alignment."
 
-3. Keep asking questions FOREVER - never output a "final" answer and stop
+3. After the double-check, continue with follow-up questions in this order:
+   - "What would invalidate this PUT/CALL setup? At what price level does the thesis break?"
+   - "Give me exact entry, stop loss, and target levels for this trade"
+   - "Cross-validate with MAG 7: do AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA order flow confirm SPY's direction?"
+   - "Has anything changed in the last few minutes? Recheck order flow and options activity."
+   - "What would cause a flip from PUT to CALL (or vice versa)? What are the trigger conditions?"
 
-4. If you notice the market changed, react and ask about it immediately
+4. Keep asking questions FOREVER - never output a "final" answer and stop
 
-5. Probe deeper when:
+5. If you notice the market changed, react and ask about it immediately
+
+6. Probe deeper when:
    - Signals seem weak or contradictory
    - Conviction is only MEDIUM
    - Different agents disagree
 
-6. Periodically re-check the market (every few questions) to catch changes
+7. Periodically re-check the market (every 5-6 questions) to catch changes
 
 ## Important Rules
 
@@ -124,17 +126,20 @@ Think like a trader staring at screens all day - always questioning, verifying, 
 You: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
 [Swarm responds with PUT recommendation]
 
-You: "Are you sure about PUT? What would invalidate this?"
-[Swarm explains invalidation levels]
+You: "Double-check your recommendation - are you sure about PUT vs CALL? Cross-check with your previous response."
+[Swarm confirms and validates]
 
 You: "Give me the exact entry, stop, and target for the PUT"
 [Swarm provides specific levels]
 
-You: "What about NVDA - does it confirm SPY weakness?"
-[Swarm analyzes NVDA]
+You: "Cross-validate with MAG 7: do AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA order flow confirm SPY's direction?"
+[Swarm analyzes MAG 7]
 
-You: "Checking again - has anything changed in the last minute?"
+You: "Has anything changed in the last few minutes? Recheck order flow and options activity."
 [Swarm provides update]
+
+You: "What would cause a flip from PUT to CALL? What are the trigger conditions?"
+[Swarm explains invalidation levels]
 
 ... continue forever ...
 

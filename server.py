@@ -104,9 +104,9 @@ def run_server(port: int = 5000):
     """Run the HTTP/SSE server with Redis"""
     global redis_stream
 
-    # Initialize Redis and reset session (clears old history)
+    # Initialize Redis (history persists with TTL)
     try:
-        redis_stream = get_stream(reset_on_init=True)
+        redis_stream = get_stream(reset_on_init=False)
     except Exception as e:
         console.print(f"[red]Failed to connect to Redis: {e}[/red]")
         console.print("[yellow]Make sure Redis is running: brew services start redis[/yellow]")
@@ -123,7 +123,7 @@ def run_server(port: int = 5000):
 ║  SSE:     http://localhost:{port}/stream                   ║
 ║  History: http://localhost:{port}/history                  ║
 ║                                                          ║
-║  [green]Session reset - fresh start[/green]                          ║
+║  [yellow]History persists (8hr TTL)[/yellow]                            ║
 ║                                                          ║
 ║  [green]Start the agent in another terminal:[/green]                   ║
 ║  [yellow]python zero_dte_agent.py[/yellow]                              ║

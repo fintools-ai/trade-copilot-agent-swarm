@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>0DTE Live Thinking Stream</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -166,6 +167,62 @@
       font-size: 14px;
       line-height: 1.6;
       color: #d4d4d4;
+    }
+
+    /* Markdown styling for swarm responses */
+    .message-body h1, .message-body h2, .message-body h3 {
+      color: #fff;
+      margin: 12px 0 8px 0;
+      font-weight: 600;
+    }
+
+    .message-body h1 { font-size: 18px; }
+    .message-body h2 { font-size: 16px; }
+    .message-body h3 { font-size: 14px; }
+
+    .message-body ul, .message-body ol {
+      margin: 8px 0;
+      padding-left: 24px;
+    }
+
+    .message-body li {
+      margin: 4px 0;
+    }
+
+    .message-body p {
+      margin: 8px 0;
+    }
+
+    .message-body code {
+      background: #1a1a1a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'SF Mono', monospace;
+      font-size: 13px;
+      color: #fbbf24;
+    }
+
+    .message-body pre {
+      background: #1a1a1a;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      margin: 8px 0;
+    }
+
+    .message-body pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .message-body strong {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .message-body em {
+      color: #a3a3a3;
+      font-style: italic;
     }
 
     .message.agent .message-body {
@@ -495,6 +552,9 @@
           `;
         }
 
+        // Render markdown for swarm responses
+        const renderedContent = marked.parse(msg.content);
+
         return `
           <div class="message swarm">
             <div class="message-icon swarm">📊</div>
@@ -503,7 +563,7 @@
                 <span class="message-sender swarm">Swarm</span>
                 <span class="message-time">${msg.timestamp}</span>
               </div>
-              <div class="message-body">${msg.content.replace(/\n/g, '<br>')}</div>
+              <div class="message-body">${renderedContent}</div>
               ${signalCard}
             </div>
           </div>
