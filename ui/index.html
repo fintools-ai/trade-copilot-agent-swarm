@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0DTE Live Thinking Stream</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      background: #141414;
+      border-bottom: 1px solid #262626;
+      flex-shrink: 0;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .live-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #ef4444;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: #ef4444;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 8px #ef4444; }
+      50% { opacity: 0.5; box-shadow: 0 0 2px #ef4444; }
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: #737373;
+      margin-left: 8px;
+    }
+
+    .timestamp {
+      font-size: 14px;
+      color: #737373;
+    }
+
+    /* Stream Container */
+    .stream-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Message Styles */
+    .message {
+      display: flex;
+      gap: 12px;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .message-icon.agent {
+      background: #1e3a5f;
+    }
+
+    .message-icon.swarm {
+      background: #1a1a2e;
+    }
+
+    .message-icon.signal {
+      background: #1a2e1a;
+    }
+
+    .message-icon.alert {
+      background: #3d2e0a;
+    }
+
+    .message-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .message-sender {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .message-sender.agent { color: #60a5fa; }
+    .message-sender.swarm { color: #a78bfa; }
+    .message-sender.signal { color: #4ade80; }
+    .message-sender.alert { color: #fbbf24; }
+
+    .message-time {
+      font-size: 11px;
+      color: #525252;
+    }
+
+    .message-body {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #d4d4d4;
+    }
+
+    .message.agent .message-body {
+      color: #93c5fd;
+      font-style: italic;
+    }
+
+    /* Signal Card (embedded in swarm response) */
+    .signal-card {
+      margin-top: 12px;
+      padding: 12px 16px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      border-left: 3px solid #525252;
+    }
+
+    .signal-card.put {
+      border-left-color: #ef4444;
+      background: linear-gradient(90deg, rgba(239,68,68,0.1) 0%, #1a1a1a 100%);
+    }
+
+    .signal-card.call {
+      border-left-color: #22c55e;
+      background: linear-gradient(90deg, rgba(34,197,94,0.1) 0%, #1a1a1a 100%);
+    }
+
+    .signal-row {
+      display: flex;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .signal-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .signal-label {
+      font-size: 10px;
+      color: #525252;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .signal-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .signal-value.direction.put { color: #ef4444; }
+    .signal-value.direction.call { color: #22c55e; }
+    .signal-value.conviction.high { color: #fbbf24; }
+    .signal-value.conviction.med { color: #a3a3a3; }
+
+    /* Alert Message */
+    .message.alert-flip {
+      background: linear-gradient(90deg, rgba(251,191,36,0.1) 0%, transparent 100%);
+      padding: 12px;
+      border-radius: 8px;
+      margin: 8px 0;
+    }
+
+    .alert-content {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .alert-badge {
+      background: #fbbf24;
+      color: #000;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .alert-text {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    /* Scrollbar */
+    .stream-container::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .stream-container::-webkit-scrollbar-track {
+      background: #1a1a1a;
+    }
+
+    .stream-container::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 3px;
+    }
+
+    /* Thinking indicator */
+    .thinking {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      color: #525252;
+      font-size: 13px;
+    }
+
+    .thinking-dots {
+      display: flex;
+      gap: 4px;
+    }
+
+    .thinking-dots span {
+      width: 6px;
+      height: 6px;
+      background: #525252;
+      border-radius: 50%;
+      animation: thinking 1.4s infinite ease-in-out;
+    }
+
+    .thinking-dots span:nth-child(1) { animation-delay: 0s; }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes thinking {
+      0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .header {
+        padding: 12px 16px;
+      }
+
+      .stream-container {
+        padding: 12px 16px;
+      }
+
+      .signal-row {
+        gap: 16px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-left">
+        <div class="live-indicator">
+          <div class="live-dot"></div>
+          Live
+        </div>
+        <div class="title">SPY 0DTE</div>
+        <div class="subtitle">Thinking Stream</div>
+      </div>
+      <div class="timestamp" id="current-time">10:47 AM</div>
+    </div>
+
+    <!-- Stream -->
+    <div class="stream-container" id="stream">
+      <!-- Messages will be injected here -->
+    </div>
+  </div>
+
+  <script>
+    // Mock data - simulates the continuous thinking stream
+    const mockMessages = [
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:47:32",
+        content: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:47:58",
+        content: "PUT recommended. 4/4 agents aligned.\n\n• Order flow: Bearish, institutional selling detected at 585\n• Options flow: Heavy put buying at 580 strike, 2.5x normal volume\n• Technical: Below VWAP, RSI divergence forming\n• Market breadth: Mag7 confirming weakness (5/7 bearish)\n\nKey levels: Support 580, Resistance 585, Max Pain 582",
+        signal: {
+          direction: "PUT",
+          conviction: "HIGH",
+          strike: "582P",
+          entry: 1.85,
+          stop: 1.20,
+          target: 3.30
+        }
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:48:01",
+        content: "Are you sure about PUT? What would invalidate this setup?"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:48:25",
+        content: "Yes, confident on PUT. Conviction remains HIGH.\n\nInvalidation triggers:\n• SPY reclaims 585 with volume (>2M shares)\n• VIX drops below 14\n• Order flow flips to absorption pattern\n\nCurrent price: $583.50, sitting below resistance. Setup is intact."
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:48:28",
+        content: "Give me exact entry, stop loss, and target for the PUT"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:48:52",
+        content: "Recommendation: SPY 582P (0DTE)\n\n• Entry: $1.85 (current ask)\n• Stop: $1.20 (triggered if SPY breaks above 585)\n• Target: $3.30 (at 580 support test)\n• Risk:Reward = 3.2:1\n\nPosition sizing: Risk no more than 2% of account on this trade."
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:48:55",
+        content: "Has anything changed in the last few minutes? Still PUT?"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:49:20",
+        content: "Still PUT. Conviction remains HIGH.\n\n• Order flow: Continued selling pressure\n• Price action: Consolidating below 584\n• No reversal signals detected\n\nSetup is strengthening. Watching for breakdown below 583."
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:49:23",
+        content: "What about NVDA and AAPL flow? Do they confirm SPY weakness?"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:49:48",
+        content: "Cross-validation from Mag7:\n\n• NVDA: Bearish, put wall at 138, heavy selling\n• AAPL: Neutral, mixed signals, watching 182\n• MSFT: Bearish, below all key MAs\n• GOOGL: Bearish, order flow negative\n• AMZN: Neutral, consolidating\n\nOverall: 5/7 Mag7 bearish. Confirms SPY PUT thesis."
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:50:15",
+        content: "Checking again - any change in order flow or options activity?"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:50:42",
+        content: "Update on flow:\n\n• Order flow: Still bearish, large sell imbalance at 583.80\n• Options: New put sweep detected - 5000 contracts at 580P\n• Dark pool: Selling accelerating\n\nConviction upgraded - this is a strong setup. Consider adding to position if 583 breaks."
+      },
+      {
+        type: "SIGNAL_UPDATE",
+        timestamp: "10:52:15",
+        content: "Direction FLIP detected",
+        previous: "PUT",
+        current: "CALL"
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:52:18",
+        content: "Wait - what just happened? Why the flip to CALL?"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:52:45",
+        content: "REVERSAL DETECTED. Updating recommendation to CALL.\n\n• Order flow: Massive buy absorption at 582 support\n• Options: Call sweep - 8000 contracts at 585C\n• Price action: V-bottom forming, reclaimed VWAP\n\nNew setup emerging. Previous PUT thesis invalidated.",
+        signal: {
+          direction: "CALL",
+          conviction: "MED",
+          strike: "585C",
+          entry: 1.45,
+          stop: 0.90,
+          target: 2.80
+        }
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:52:48",
+        content: "Only MEDIUM conviction? What would make it HIGH?"
+      },
+      {
+        type: "SWARM_RESPONSE",
+        timestamp: "10:53:15",
+        content: "Currently 3/4 agents aligned (Order Flow dissenting).\n\nFor HIGH conviction, need:\n• SPY to hold above 583 for 5+ minutes\n• Order flow to confirm (currently lagging)\n• VIX to stabilize below 15.5\n\nWatching closely. Will update if conviction changes."
+      }
+    ];
+
+    function renderMessage(msg) {
+      if (msg.type === "AGENT_QUESTION") {
+        return `
+          <div class="message agent">
+            <div class="message-icon agent">🤖</div>
+            <div class="message-content">
+              <div class="message-header">
+                <span class="message-sender agent">Agent</span>
+                <span class="message-time">${msg.timestamp}</span>
+              </div>
+              <div class="message-body">"${msg.content}"</div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (msg.type === "SWARM_RESPONSE") {
+        let signalCard = '';
+        if (msg.signal) {
+          const dir = msg.signal.direction.toLowerCase();
+          const conv = msg.signal.conviction.toLowerCase();
+          signalCard = `
+            <div class="signal-card ${dir}">
+              <div class="signal-row">
+                <div class="signal-item">
+                  <span class="signal-label">Direction</span>
+                  <span class="signal-value direction ${dir}">${msg.signal.direction}</span>
+                </div>
+                <div class="signal-item">
+                  <span class="signal-label">Conviction</span>
+                  <span class="signal-value conviction ${conv}">${msg.signal.conviction}</span>
+                </div>
+                <div class="signal-item">
+                  <span class="signal-label">Strike</span>
+                  <span class="signal-value">${msg.signal.strike}</span>
+                </div>
+                <div class="signal-item">
+                  <span class="signal-label">Entry</span>
+                  <span class="signal-value">$${msg.signal.entry.toFixed(2)}</span>
+                </div>
+                <div class="signal-item">
+                  <span class="signal-label">Stop</span>
+                  <span class="signal-value">$${msg.signal.stop.toFixed(2)}</span>
+                </div>
+                <div class="signal-item">
+                  <span class="signal-label">Target</span>
+                  <span class="signal-value">$${msg.signal.target.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="message swarm">
+            <div class="message-icon swarm">📊</div>
+            <div class="message-content">
+              <div class="message-header">
+                <span class="message-sender swarm">Swarm</span>
+                <span class="message-time">${msg.timestamp}</span>
+              </div>
+              <div class="message-body">${msg.content.replace(/\n/g, '<br>')}</div>
+              ${signalCard}
+            </div>
+          </div>
+        `;
+      }
+
+      if (msg.type === "SIGNAL_UPDATE") {
+        return `
+          <div class="message alert-flip">
+            <div class="alert-content">
+              <span class="alert-badge">⚡ FLIP</span>
+              <span class="alert-text">Direction changed from ${msg.previous} to ${msg.current}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      return '';
+    }
+
+    function renderThinking() {
+      return `
+        <div class="thinking">
+          <div class="thinking-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span>Agent thinking...</span>
+        </div>
+      `;
+    }
+
+    // Live messages array
+    const messages = [];
+
+    function render() {
+      const stream = document.getElementById('stream');
+      const html = messages.map(renderMessage).join('');
+      stream.innerHTML = html + renderThinking();
+
+      // Auto-scroll to bottom
+      stream.scrollTop = stream.scrollHeight;
+
+      // Update time
+      const now = new Date();
+      document.getElementById('current-time').textContent =
+        now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }
+
+    function appendMessage(msg) {
+      messages.push(msg);
+      // Keep last 100 messages to prevent memory issues
+      if (messages.length > 100) {
+        messages.shift();
+      }
+      render();
+    }
+
+    function showConnectionStatus(status, isError = false) {
+      const stream = document.getElementById('stream');
+      const statusHtml = `
+        <div class="message" style="justify-content: center; padding: 40px;">
+          <div style="text-align: center; color: ${isError ? '#ef4444' : '#525252'};">
+            <div style="font-size: 24px; margin-bottom: 8px;">${isError ? '⚠️' : '🔌'}</div>
+            <div>${status}</div>
+          </div>
+        </div>
+      `;
+      stream.innerHTML = statusHtml;
+    }
+
+    // Connect to SSE stream
+    function connectSSE() {
+      showConnectionStatus('Connecting to Zero-DTE Agent...');
+
+      const eventSource = new EventSource('/stream');
+
+      eventSource.onopen = () => {
+        console.log('SSE connected');
+        showConnectionStatus('Connected. Waiting for agent to start...');
+      };
+
+      eventSource.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'CONNECTED') {
+            showConnectionStatus('Connected. Waiting for agent messages...');
+          } else {
+            appendMessage(msg);
+          }
+        } catch (e) {
+          console.error('Error parsing SSE message:', e);
+        }
+      };
+
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error);
+        eventSource.close();
+        showConnectionStatus('Connection lost. Reconnecting in 3 seconds...', true);
+        setTimeout(connectSSE, 3000);
+      };
+    }
+
+    // Check if we're being served by the SSE server or opened directly
+    if (window.location.protocol === 'file:') {
+      // Opened directly - show mock data
+      console.log('Running in mock mode (opened directly)');
+      messages.push(...mockMessages);
+      render();
+    } else {
+      // Served by server - connect to SSE
+      console.log('Running in live mode (connecting to SSE)');
+      connectSSE();
+    }
+
+    // Update clock every second
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('current-time').textContent =
+        now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    }, 1000);
+  </script>
+</body>
+</html>
