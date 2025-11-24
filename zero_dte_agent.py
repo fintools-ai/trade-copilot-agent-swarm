@@ -14,6 +14,7 @@ The agent will:
 4. Never stop - keeps thinking and asking forever
 """
 
+import json
 from datetime import datetime
 from strands import Agent, tool
 from rich.console import Console
@@ -63,9 +64,21 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     swarm = get_swarm()
     response = swarm.ask(query, fast_mode=fast_mode)
 
-    # Stream the swarm's response to UI with mode indicator
+    # Extract signal from last line for UI banner
+    signal = None
+    lines = response.strip().split('\n')
+    if lines:
+        last_line = lines[-1].strip()
+        try:
+            parsed = json.loads(last_line)
+            if isinstance(parsed, dict) and 'direction' in parsed:
+                signal = parsed
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # Stream the swarm's response to UI with mode indicator and signal
     mode_note = "\n\n---\n*[Fast Mode]*" if fast_mode else "\n\n---\n*[Full Mode]*"
-    stream_to_ui("SWARM_RESPONSE", response + mode_note)
+    stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
 
     return response
 
@@ -155,6 +168,8 @@ Use `fast_follow` for MONITORING (everything else)
 - Don't repeat same question back-to-back
 - React to signal/conviction changes immediately
 - Vary your monitoring questions
+- NEVER ask for human input - you are fully autonomous
+- NEVER stop - always call a tool after receiving a response
 
 ## EXAMPLE FLOW
 
