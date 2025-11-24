@@ -14,7 +14,6 @@ The agent will:
 4. Never stop - keeps thinking and asking forever
 """
 
-import json
 from datetime import datetime
 from strands import Agent, tool
 from rich.console import Console
@@ -64,22 +63,9 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     swarm = get_swarm()
     response = swarm.ask(query, fast_mode=fast_mode)
 
-    # Extract signal from last line for banner (keep full response for display)
-    signal = None
-    lines = response.strip().split('\n')
-    if lines:
-        last_line = lines[-1].strip()
-        try:
-            parsed = json.loads(last_line)
-            if isinstance(parsed, dict) and 'direction' in parsed:
-                signal = parsed
-                # DON'T remove from response - user wants to see full output
-        except (json.JSONDecodeError, ValueError):
-            pass  # Not valid JSON, that's fine
-
     # Stream the swarm's response to UI with mode indicator
     mode_note = "\n\n---\n*[Fast Mode]*" if fast_mode else "\n\n---\n*[Full Mode]*"
-    stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
+    stream_to_ui("SWARM_RESPONSE", response + mode_note)
 
     return response
 
