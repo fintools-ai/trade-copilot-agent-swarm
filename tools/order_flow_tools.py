@@ -36,7 +36,7 @@ async def equity_order_flow_tool(
      Returns:
          Multi-ticker order flow analysis with:
          - Primary ticker data prominently displayed
-         - Supporting Mag 7 ticker flows for cross-validation
+         - Supporting top tech ticker flows (NVDA, AAPL, GOOGL) for cross-validation
          - Divergence detection notes
          - Signal strength validation across mega-caps
      """
@@ -82,7 +82,7 @@ async def equity_order_flow_tool(
             "primary_ticker": ticker,
             "primary_data": primary_result,
             "cross_validation": ticker_results,
-            "analysis_note": f"Multi-ticker analysis for {ticker} with Mag 7 cross-validation"
+            "analysis_note": f"Multi-ticker analysis for {ticker} with top tech (NVDA, AAPL, GOOGL) cross-validation"
         }, indent=2)
     else:
         return json.dumps({

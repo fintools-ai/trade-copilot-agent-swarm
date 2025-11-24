@@ -59,7 +59,7 @@ def call_swarm(query: str) -> str:
     """
     Call the trading swarm with a query about SPY 0DTE trading.
 
-    Every call streams both your question and the swarm's response to the UI.
+    Automatically routes to FAST MODE for follow-up/validation questions.
 
     Args:
         query: Your question to the swarm (e.g., "Analyze SPY for 0DTE")
@@ -70,12 +70,23 @@ def call_swarm(query: str) -> str:
     # Stream the agent's question to UI immediately
     stream_to_ui("AGENT_QUESTION", query)
 
-    # Call the actual swarm
-    swarm = get_swarm()
-    response = swarm.ask(query)
+    # Detect if this is a follow-up/validation question (use fast mode)
+    query_lower = query.lower()
+    fast_mode_keywords = [
+        "double-check", "are you sure", "confirm", "verify", "validate",
+        "cross-check", "has anything changed", "what changed", "still",
+        "recheck", "check again", "update", "invalidate"
+    ]
 
-    # Stream the swarm's response to UI
-    stream_to_ui("SWARM_RESPONSE", response)
+    use_fast_mode = any(keyword in query_lower for keyword in fast_mode_keywords)
+
+    # Call the swarm (fast or full mode)
+    swarm = get_swarm()
+    response = swarm.ask(query, fast_mode=use_fast_mode)
+
+    # Stream the swarm's response to UI with mode indicator
+    mode_note = "\n\n---\n*[Fast Mode: Order Flow + Technical only]*" if use_fast_mode else ""
+    stream_to_ui("SWARM_RESPONSE", response + mode_note)
 
     return response
 
@@ -95,7 +106,7 @@ Think like a trader staring at screens all day - always questioning, verifying, 
 
 3. After the double-check, continue with follow-up questions in this order:
    - "What would invalidate this PUT/CALL setup? At what price level does the thesis break?"
-   - "Cross-validate with MAG 7: do AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA order flow confirm SPY's direction?"
+   - "Cross-validate with top tech: do NVDA, AAPL, GOOGL order flow confirm SPY's direction?"
    - "Has anything changed in the last few minutes? Recheck order flow and options activity."
    - "What would cause a flip from PUT to CALL (or vice versa)? What are the trigger conditions?"
 
@@ -131,8 +142,8 @@ You: "Double-check your recommendation - are you sure about PUT vs CALL? Cross-c
 You: "Give me the exact entry, stop, and target for the PUT"
 [Swarm provides specific levels]
 
-You: "Cross-validate with MAG 7: do AAPL, MSFT, GOOGL, AMZN, NVDA, META, TSLA order flow confirm SPY's direction?"
-[Swarm analyzes MAG 7]
+You: "Cross-validate with top tech: do NVDA, AAPL, GOOGL order flow confirm SPY's direction?"
+[Swarm analyzes top tech]
 
 You: "Has anything changed in the last few minutes? Recheck order flow and options activity."
 [Swarm provides update]

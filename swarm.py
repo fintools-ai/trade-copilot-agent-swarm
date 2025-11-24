@@ -26,6 +26,7 @@ from agents.setup_agent import create_setup_agent
 from agents.order_flow_agent import create_order_flow_agent
 from agents.options_flow_agent import create_options_flow_agent
 from agents.financial_data_agent import create_financial_data_agent
+from agents.financial_data_agent_fast import create_fast_financial_agent
 from agents.coordinator_agent import create_coordinator_agent
 
 console = Console()
@@ -72,11 +73,13 @@ class TradingSwarm:
         #)
 
         self.session_id = session_id
-        self.graph = self._build_graph()
+        self.graph_full = self._build_graph()
+        self.graph_fast = self._build_fast_graph()
 
         console.print(Panel.fit(
             f"[bold green]Trade Copilot Agent Swarm Ready[/bold green]\n"
-            f"[cyan]Agents:[/cyan] 6-Agent Multi-Specialist System\n"
+            f"[cyan]Full Mode:[/cyan] 6-Agent Multi-Specialist System\n"
+            f"[cyan]Fast Mode:[/cyan] OrderFlow + FastFinancial + Coordinator\n"
             f"[yellow]Flow:[/yellow] MarketBreadth → Setup → [OrderFlow, OptionsFlow, FinancialData] → Coordinator\n"
             f"[blue]Session:[/blue] {session_id or 'No session'}\n"
             f"[magenta]Architecture:[/magenta] Sequential + Parallel + Synthesis",
@@ -138,7 +141,38 @@ class TradingSwarm:
         # Build graph with session manager to preserve OI cache
         return builder.build()
 
-    def ask(self, query: str) -> str:
+    def _build_fast_graph(self) -> Graph:
+        """
+        Build FAST graph for follow-ups: OrderFlow + FastFinancial + Coordinator
+
+        Skips:
+        - Market Breadth (OI cached)
+        - Setup (monitoring already configured)
+        - Options Flow (slower, less critical for quick checks)
+        - Full Financial Agent (use fast version with only 2 tools)
+
+        Returns:
+            Fast Strands Graph for 8-12s follow-up analysis
+        """
+        # Initialize only agents needed for fast mode
+        order_flow_agent = create_order_flow_agent()
+        fast_financial_agent = create_fast_financial_agent()  # Only 2 tools
+        coordinator_agent = create_coordinator_agent()
+
+        builder = GraphBuilder()
+
+        # FAST MODE: Only 3 agents
+        builder.add_node(order_flow_agent, "order_flow")
+        builder.add_node(fast_financial_agent, "financial_data_fast")
+        builder.add_node(coordinator_agent, "coordinator")
+
+        # Parallel execution → coordinator
+        builder.add_edge("order_flow", "coordinator")
+        builder.add_edge("financial_data_fast", "coordinator")
+
+        return builder.build()
+
+    def ask(self, query: str, fast_mode: bool = False) -> str:
         """
         Ask the trading swarm a question about trading opportunities
 
@@ -168,8 +202,44 @@ class TradingSwarm:
             border_style="yellow"
         ))
 
-        # Build comprehensive prompt for the graph
-        graph_prompt = f"""USER QUERY: {query}
+        # Build prompt and select graph based on mode
+        if fast_mode:
+            # FAST MODE: Only Order Flow + Fast Financial
+            graph_prompt = f"""USER QUERY: {query}
+
+TICKER: {ticker}
+DATE: {trading_date}
+
+FAST MODE - FOLLOW-UP ANALYSIS:
+
+[ORDER FLOW AGENT]
+Analyze CURRENT order flow for {ticker}, NVDA, AAPL, GOOGL. Focus on CHANGES:
+- New institutional buying/selling patterns
+- Volume imbalance shifts
+- Breakout/breakdown signals
+
+[FINANCIAL DATA AGENT - FAST MODE]
+Quick technical update (RSI, MACD, ORB status only):
+- What CHANGED since last check?
+- Any new breakouts?
+- Momentum shift?
+
+[COORDINATOR AGENT]
+Use cached OI/Options data from previous analysis.
+Focus on Order Flow + Technical CHANGES only.
+
+Quick validation:
+- Confirm or invalidate previous recommendation?
+- Conviction change (HIGH/MED/LOW)?
+- New risk levels?
+
+Keep response CONCISE - focus on CHANGES."""
+
+            graph = self.graph_fast
+            workflow_text = "FAST mode (Order Flow + Technical)"
+        else:
+            # FULL MODE: All 6 agents
+            graph_prompt = f"""USER QUERY: {query}
 
 TICKER: {ticker}
 DATE: {trading_date}
@@ -183,7 +253,7 @@ Analyze open interest breadth for {ticker} and identify key levels (max pain, pu
 Configure options monitoring for {ticker} based on the OI key levels identified by the Market Breadth Agent.
 
 [ORDER FLOW AGENT]
-Analyze order flow for {ticker} and Mag 7 tickers to detect institutional patterns, volume imbalances, and intraday trading signals.
+Analyze order flow for {ticker}, NVDA, AAPL, GOOGL to detect institutional patterns, volume imbalances, and intraday trading signals.
 
 [OPTIONS FLOW AGENT]
 Analyze options flow for {ticker} to identify smart money positioning, sweeps, blocks, and PUT/CALL bias.
@@ -198,16 +268,19 @@ Synthesize all specialist insights and provide TWO separate 0DTE recommendations
 
 Cross-validate signals across all 4 agents, identify the best setup, and provide actionable entry/exit/stop levels."""
 
+            graph = self.graph_full
+            workflow_text = "6-agent workflow"
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]Executing 6-agent workflow...", total=None)
-            
-            # Execute the graph
-            result = self.graph(graph_prompt)
-            
+            task = progress.add_task(f"[cyan]Executing {workflow_text}...", total=None)
+
+            # Execute the appropriate graph
+            result = graph(graph_prompt)
+
             progress.update(task, description="[green]Analysis Complete!")
 
         # Extract coordinator's final recommendation - check NodeResult structure
@@ -247,7 +320,8 @@ Cross-validate signals across all 4 agents, identify the best setup, and provide
             final_recommendation = "No results found"
 
         # Show execution metrics if available
-        metrics_text = f"[blue]Agents Executed:[/blue] {len(result.results) if hasattr(result, 'results') and result.results else 0}/6"
+        expected_agents = 3 if fast_mode else 6
+        metrics_text = f"[blue]Agents Executed:[/blue] {len(result.results) if hasattr(result, 'results') and result.results else 0}/{expected_agents}"
         
         if hasattr(result, 'total_tokens'):
             metrics_text = f"[green]Total Tokens:[/green] {result.total_tokens:,}\n" + metrics_text

@@ -10,8 +10,8 @@ from config.settings import AWS_REGION
 from strands.session.file_session_manager import FileSessionManager
 from datetime import datetime
 
-# Mag 7 tickers for market breadth analysis
-MAG_7_TICKERS = ["SPY", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
+# Top tech tickers for market breadth analysis (SPY + top 3 tech)
+TOP_TICKERS = ["SPY", "NVDA", "AAPL", "GOOGL"]
 
 MARKET_BREADTH_INSTRUCTIONS = """
 You are the Market Breadth Analyst - the FIRST agent to run in the day trading swarm with market context awareness.
@@ -35,7 +35,7 @@ WORKFLOW:
    - If no match or different date/ticker, proceed to step 2
 
 2. FETCH FRESH OI DATA:
-   - Use analyze_multi_ticker_oi_breadth for Mag 7 tickers: SPY, AAPL, MSFT, NVDA, GOOGL, AMZN
+   - Use analyze_multi_ticker_oi_breadth for top tickers: SPY, NVDA, AAPL, GOOGL (only 4 for speed)
    - Focus on 1DTE options (expiring tomorrow or same day if Friday)
    - Get max pain, put wall, call wall for each ticker
 
