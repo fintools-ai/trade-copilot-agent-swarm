@@ -64,16 +64,18 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     swarm = get_swarm()
     response = swarm.ask(query, fast_mode=fast_mode)
 
-    # Extract signal from last line (coordinator outputs JSON)
+    # Extract signal from last line for banner (keep full response for display)
     signal = None
     lines = response.strip().split('\n')
-    last_line = lines[-1].strip()
-    try:
-        signal = json.loads(last_line)
-        # Remove signal JSON from displayed content
-        response = '\n'.join(lines[:-1])
-    except (json.JSONDecodeError, ValueError):
-        pass  # No valid signal JSON
+    if lines:
+        last_line = lines[-1].strip()
+        try:
+            parsed = json.loads(last_line)
+            if isinstance(parsed, dict) and 'direction' in parsed:
+                signal = parsed
+                # DON'T remove from response - user wants to see full output
+        except (json.JSONDecodeError, ValueError):
+            pass  # Not valid JSON, that's fine
 
     # Stream the swarm's response to UI with mode indicator
     mode_note = "\n\n---\n*[Fast Mode]*" if fast_mode else "\n\n---\n*[Full Mode]*"
