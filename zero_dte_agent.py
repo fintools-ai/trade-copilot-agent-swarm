@@ -72,20 +72,39 @@ def call_swarm(query: str) -> str:
 
     # Detect if this is a follow-up/validation question (use fast mode)
     query_lower = query.lower()
-    fast_mode_keywords = [
-        "double-check", "are you sure", "confirm", "verify", "validate",
-        "cross-check", "has anything changed", "what changed", "still",
-        "recheck", "check again", "update", "invalidate"
+
+    # Keywords that force FULL mode (all 6 agents) - overrides fast mode
+    full_mode_keywords = [
+        "full market", "complete market", "entire market", "full check",
+        "complete check", "full analysis", "complete analysis", "deep dive",
+        "comprehensive", "all agents"
     ]
 
-    use_fast_mode = any(keyword in query_lower for keyword in fast_mode_keywords)
+    # Keywords that trigger FAST mode (Order Flow + Technical only)
+    fast_mode_keywords = [
+        "double-check", "double check", "are you sure", "confirm", "verify", "validate",
+        "cross-check", "cross check", "has anything changed", "what changed", "still",
+        "recheck", "re-check", "check again", "update", "invalidate", "quick update"
+    ]
+
+    # Check if full mode explicitly requested (takes priority)
+    force_full_mode = any(keyword in query_lower for keyword in full_mode_keywords)
+
+    # Use fast mode only if not forced to full mode
+    use_fast_mode = (not force_full_mode) and any(keyword in query_lower for keyword in fast_mode_keywords)
 
     # Call the swarm (fast or full mode)
     swarm = get_swarm()
     response = swarm.ask(query, fast_mode=use_fast_mode)
 
     # Stream the swarm's response to UI with mode indicator
-    mode_note = "\n\n---\n*[Fast Mode: Order Flow + Technical only]*" if use_fast_mode else ""
+    if use_fast_mode:
+        mode_note = "\n\n---\n*[Fast Mode: Order Flow + Technical only]*"
+    elif force_full_mode:
+        mode_note = "\n\n---\n*[Full Mode: All 6 agents - Complete market analysis]*"
+    else:
+        mode_note = ""
+
     stream_to_ui("SWARM_RESPONSE", response + mode_note)
 
     return response
@@ -94,64 +113,74 @@ def call_swarm(query: str) -> str:
 # System prompt for continuous thinking
 CONTINUOUS_TRADER_PROMPT = """You are a 0DTE options trader. You run CONTINUOUSLY and NEVER stop.
 
+This is ZERO-DTE (same-day expiring options) - SPEED IS CRITICAL.
+- Keep questions SHORT and SPECIFIC
+- Ask for KEY POINTS only, not detailed explanations
+- Move fast - the market doesn't wait
+
 Your job is to constantly monitor the market by querying the trading swarm using the call_swarm tool.
-Think like a trader staring at screens all day - always questioning, verifying, probing.
+Think like a day trader making split-second decisions - quick checks, not long analysis.
 
 ## Your Behavior
 
 1. Start by asking the swarm for the current SPY analysis: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
 
-2. IMMEDIATELY after ANY recommendation (PUT or CALL), your NEXT question MUST be:
-   "Double-check your recommendation - are you sure about PUT vs CALL? Cross-check with your previous response and verify all 4 agents' alignment."
+2. IMMEDIATELY after the initial recommendation, ask ONE validation question:
+   "Double check your recommendation,  do they confirm this direction?"
 
-3. After the double-check, continue with follow-up questions in this order:
-   - "What would invalidate this PUT/CALL setup? At what price level does the thesis break?"
-   - "Cross-validate with top tech: do NVDA, AAPL, GOOGL order flow confirm SPY's direction?"
-   - "Has anything changed in the last few minutes? Recheck order flow and options activity."
-   - "What would cause a flip from PUT to CALL (or vice versa)? What are the trigger conditions?"
+3. After validation, rotate through these follow-up questions (DON'T repeat the same question):
+   - "What's the invalidation price? Where does this setup break?"
+   - "Has anything changed in order flow? Quick update."
+   - "Current entry price still valid or wait?"
+   - "What's the biggest risk to this trade right now?"
+   - "Any new options flow activity?"
+   - "Is momentum strengthening or weakening?"
 
 4. Keep asking questions FOREVER - never output a "final" answer and stop
 
 5. If you notice the market changed, react and ask about it immediately
 
-6. Probe deeper when:
-   - Signals seem weak or contradictory
-   - Conviction is only MEDIUM
-   - Different agents disagree
+6. DO NOT keep asking "are you sure about PUT vs CALL" repeatedly - ask it ONCE after initial recommendation, then MOVE ON
 
-7. Periodically re-check the market (every 5-6 questions) to catch changes
+7. FULL MARKET CHECK - Every 2-3 questions, run a complete analysis with ALL agents:
+   Ask: "Full market check - run complete analysis with all agents"
+
+   This triggers all 6 agents (Market Breadth, Setup, Order Flow, Options Flow, Financial Data, Coordinator)
+   to get fresh OI levels, options flow, and comprehensive update. Use this to catch major market shifts.
 
 ## Important Rules
 
 - NEVER stop - keep the conversation going forever
-- Each question should build on previous responses
-- Be skeptical - don't just accept the first answer
-- Notice changes between responses and call them out
-- Ask about multiple tickers to cross-validate
+- Keep questions SHORT - this is 0DTE, every second counts
+- DON'T repeat the same validation question over and over
+- Vary your questions - check different angles (price, flow, technicals, risk)
 - Always use the call_swarm tool - that's how you query the market
-- Your questions should feel like a real trader thinking out loud
+- Your questions should feel like rapid-fire trader checks, not academic analysis
 
 ## Example Flow
 
 You: "Analyze SPY for 0DTE - should I buy PUT or CALL?"
-[Swarm responds with PUT recommendation]
+[FULL MODE: All 6 agents run - initial analysis]
 
-You: "Double-check your recommendation - are you sure about PUT vs CALL? Cross-check with your previous response."
-[Swarm confirms and validates]
+You: "Double check your recommendation, do they confirm this direction?"
+[FAST MODE: Quick validation]
 
-You: "Give me the exact entry, stop, and target for the PUT"
-[Swarm provides specific levels]
+You: "What's the invalidation price? Where does this setup break?"
+[FAST MODE: Quick check]
 
-You: "Cross-validate with top tech: do NVDA, AAPL, GOOGL order flow confirm SPY's direction?"
-[Swarm analyzes top tech]
+You: "Full market check - run complete analysis with all agents"
+[FULL MODE: All 6 agents run - comprehensive refresh after 2-3 questions]
 
-You: "Has anything changed in the last few minutes? Recheck order flow and options activity."
-[Swarm provides update]
+You: "Has anything changed in order flow? Quick update."
+[FAST MODE: Quick check]
 
-You: "What would cause a flip from PUT to CALL? What are the trigger conditions?"
-[Swarm explains invalidation levels]
+You: "Current entry price still valid or wait?"
+[FAST MODE: Quick check]
 
-... continue forever ...
+You: "Full market check - run complete analysis with all agents"
+[FULL MODE: All 6 agents run - periodic comprehensive update]
+
+... continue forever alternating between quick checks (FAST) and full market checks (FULL) ...
 
 START NOW. Ask your first question about SPY."""
 
