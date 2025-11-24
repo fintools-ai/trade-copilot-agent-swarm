@@ -316,6 +316,67 @@
     .signal-value.conviction.high { color: #fbbf24; }
     .signal-value.conviction.med { color: #a3a3a3; }
 
+    /* Inline Signal Banner (in message) */
+    .signal-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .signal-inline.call {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+
+    .signal-inline.put {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .signal-inline.wait {
+      background: rgba(251, 191, 36, 0.15);
+      border: 1px solid rgba(251, 191, 36, 0.4);
+    }
+
+    .signal-inline-direction {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .signal-inline-direction.call { color: #22c55e; }
+    .signal-inline-direction.put { color: #ef4444; }
+    .signal-inline-direction.wait { color: #fbbf24; }
+
+    .signal-inline-conviction {
+      font-size: 12px;
+      font-weight: 600;
+      opacity: 0.8;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .signal-inline-conviction.high {
+      background: rgba(251, 191, 36, 0.3);
+      color: #fbbf24;
+    }
+
+    .signal-inline-conviction.med {
+      background: rgba(163, 163, 163, 0.3);
+      color: #a3a3a3;
+    }
+
+    .signal-inline-conviction.low {
+      background: rgba(107, 114, 128, 0.3);
+      color: #6b7280;
+    }
+
     /* Alert Message */
     .message.alert-flip {
       background: linear-gradient(90deg, rgba(251,191,36,0.1) 0%, transparent 100%);
@@ -558,37 +619,17 @@
 
       if (msg.type === "SWARM_RESPONSE") {
         let signalCard = '';
-        if (msg.signal) {
-          const dir = msg.signal.direction.toLowerCase();
-          const conv = msg.signal.conviction.toLowerCase();
+        if (msg.signal && msg.signal.direction) {
+          const dir = msg.signal.direction.toUpperCase();
+          const conv = msg.signal.conviction ? msg.signal.conviction.toUpperCase() : '';
+          const dirClass = dir.toLowerCase();
+          const convClass = conv.toLowerCase();
+
+          // Simple inline signal banner
           signalCard = `
-            <div class="signal-card ${dir}">
-              <div class="signal-row">
-                <div class="signal-item">
-                  <span class="signal-label">Direction</span>
-                  <span class="signal-value direction ${dir}">${msg.signal.direction}</span>
-                </div>
-                <div class="signal-item">
-                  <span class="signal-label">Conviction</span>
-                  <span class="signal-value conviction ${conv}">${msg.signal.conviction}</span>
-                </div>
-                <div class="signal-item">
-                  <span class="signal-label">Strike</span>
-                  <span class="signal-value">${msg.signal.strike}</span>
-                </div>
-                <div class="signal-item">
-                  <span class="signal-label">Entry</span>
-                  <span class="signal-value">$${msg.signal.entry.toFixed(2)}</span>
-                </div>
-                <div class="signal-item">
-                  <span class="signal-label">Stop</span>
-                  <span class="signal-value">$${msg.signal.stop.toFixed(2)}</span>
-                </div>
-                <div class="signal-item">
-                  <span class="signal-label">Target</span>
-                  <span class="signal-value">$${msg.signal.target.toFixed(2)}</span>
-                </div>
-              </div>
+            <div class="signal-inline ${dirClass}">
+              <span class="signal-inline-direction ${dirClass}">${dir}</span>
+              ${conv ? `<span class="signal-inline-conviction ${convClass}">${conv}</span>` : ''}
             </div>
           `;
         }
