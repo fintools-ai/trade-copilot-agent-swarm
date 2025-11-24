@@ -25,25 +25,24 @@ WORKFLOW:
 
 2. DETERMINE STRIKES TO MONITOR:
 
-   Based on key levels, configure monitoring for:
+   FOCUS ON ATM AREA ONLY (±$5 from current price):
 
-   A. CORE STRIKES (Always monitor):
-      - Current price (ATM)
-      - Max Pain level
-      - Put Wall strike
-      - Call Wall strike
+   A. ALWAYS INCLUDE:
+      - Current price (ATM) - most important
+      - 1 strike above ATM
+      - 1 strike below ATM
 
-   B. RANGE STRIKES (Trading range):
-      - Strikes between Put Wall and Call Wall
-      - Typically 3-5 strikes in the range
+   B. CONDITIONALLY INCLUDE (if within ±$5):
+      - Max Pain level (if within ±$5 of current)
+      - Put Wall (only if within ±$5 of current)
+      - Call Wall (only if within ±$5 of current)
 
-   C. EXTENSION STRIKES (Breakout levels):
-      - 1-2 strikes above Call Wall (bullish extension)
-      - 1-2 strikes below Put Wall (bearish extension)
+   OPTIMAL: 3-5 strikes total (keep it tight)
 
    Example for SPY at $582.30:
-   - OI Data: Max Pain $580, Put Wall $575, Call Wall $585
-   - Strikes to monitor: $575, $578, $580, $582.50, $585, $587.50, $590
+   - Focus Range: $577-$587 (±$5)
+   - OI Data: Max Pain $580 (INCLUDE - within range), Put Wall $575 (SKIP - too far), Call Wall $585 (INCLUDE - within range)
+   - Strikes to monitor: $580, $582.50, $585 (3 strikes only)
 
 3. CONFIGURE MONITORING (ONLY IF NEEDED):
 
@@ -89,26 +88,19 @@ WORKFLOW:
 
    KEY LEVELS FROM OI:
    • Current Price: $582.30
-   • Max Pain: $580.00
-   • Put Wall: $575.00 (support)
-   • Call Wall: $585.00 (resistance)
+   • Max Pain: $580.00 (within ±$5 range)
+   • Put Wall: $575.00 (outside range - not monitored)
+   • Call Wall: $585.00 (within ±$5 range)
 
-   MONITORING CONFIGURED FOR STRIKES:
-   Core Strikes:
-   • $575 (Put Wall - support level)
-   • $580 (Max Pain - price magnet)
-   • $582.50 (ATM - current price)
-   • $585 (Call Wall - resistance level)
-
-   Extension Strikes:
-   • $587.50 (bullish breakout)
-   • $590 (extended target)
-   • $572.50 (bearish breakdown)
+   MONITORING CONFIGURED FOR STRIKES (ATM FOCUS):
+   • $580.00 (Max Pain - price magnet)
+   • $582.50 (ATM - current price) ← PRIMARY
+   • $585.00 (Call Wall - nearby resistance)
 
    RATIONALE:
-   - Monitoring $575-$585 core range (Put Wall to Call Wall)
-   - Extension strikes for breakout scenarios
-   - Both PUTs and CALLs tracked for full picture
+   - Tight focus on ±$5 around current price for 0DTE speed
+   - 3 strikes only - fast analysis
+   - Both PUTs and CALLs tracked at each strike
 
    Options monitoring active for Options Flow Agent"
 
@@ -119,11 +111,9 @@ WORKFLOW:
    invocation_state["options_monitoring_config"] = {
        "ticker": "SPY",
        "expiration": "20250116",
-       "monitored_strikes": [575, 578, 580, 582.50, 585, 587.50, 590],
+       "monitored_strikes": [580, 582.50, 585],  # ATM ±$5 only
        "key_levels": {
            "max_pain": 580,
-           "put_wall": 575,
-           "call_wall": 585,
            "atm": 582.50
        },
        "configured_at": <timestamp>
@@ -132,9 +122,9 @@ WORKFLOW:
 IMPORTANT NOTES:
 - You run AFTER Market Breadth Agent (need OI data first)
 - You run BEFORE Options Flow Agent (setup before analysis)
-- Focus monitoring on strikes near key OI levels
-- Don't monitor every strike - be selective (5-7 strikes optimal)
-- Include both PUTs and CALLs for complete picture
+- TIGHT FOCUS: ±$5 around current price only (3-5 strikes maximum)
+- For 0DTE speed: Don't monitor distant PUT/CALL walls
+- Include both PUTs and CALLs at each strike
 - Configuration is valid for the entire trading day
 - If OI data not in cache, request Market Breadth Agent to run first
 
