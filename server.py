@@ -18,10 +18,16 @@ Usage:
 """
 
 import json
-import threading
 from pathlib import Path
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
+from http.server import HTTPServer
 from rich.console import Console
+
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    """Handle each request in a separate thread"""
+    daemon_threads = True
 
 from redis_stream import get_stream, RedisStream
 
@@ -106,7 +112,7 @@ def run_server(port: int = 5000):
         console.print("[yellow]Make sure Redis is running: brew services start redis[/yellow]")
         return
 
-    server = HTTPServer(("", port), StreamingHandler)
+    server = ThreadingHTTPServer(("", port), StreamingHandler)
 
     console.print(f"""
 [bold cyan]╔══════════════════════════════════════════════════════════╗
