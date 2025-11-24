@@ -13,3 +13,6 @@ asyncio
 
 # Rich console output
 rich
+
+# Redis for real-time pub/sub
+redis

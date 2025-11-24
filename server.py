@@ -1,9 +1,13 @@
 """
-SSE Server for Zero-DTE Agent UI Streaming
+SSE Server for Zero-DTE Agent UI Streaming (Redis-powered)
 
 Serves the UI and streams agent/swarm messages via Server-Sent Events.
+Uses Redis pub/sub for real-time cross-process communication.
 
 Usage:
+    # Start Redis first
+    brew services start redis  # macOS
+
     # Terminal 1: Start the server
     python server.py
 
@@ -15,23 +19,20 @@ Usage:
 
 import json
 import threading
-import time
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from rich.console import Console
 
+from redis_stream import get_stream, RedisStream
+
 console = Console()
 
-# Import the signal queue from the agent
-# This will be populated when zero_dte_agent runs
-signal_queue = None
-
-# Store connected SSE clients
-sse_clients = []
+# Redis stream instance (reset session on server start)
+redis_stream: RedisStream = None
 
 
 class StreamingHandler(SimpleHTTPRequestHandler):
-    """HTTP handler with SSE support"""
+    """HTTP handler with SSE and history support"""
 
     def __init__(self, *args, **kwargs):
         # Serve files from the ui/ directory
@@ -41,14 +42,26 @@ class StreamingHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/stream":
             self.handle_sse()
+        elif self.path == "/history":
+            self.handle_history()
         elif self.path == "/":
             self.path = "/index.html"
             super().do_GET()
         else:
             super().do_GET()
 
+    def handle_history(self):
+        """Return event history as JSON for instant UI loading"""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        history = redis_stream.get_history(limit=100)
+        self.wfile.write(json.dumps(history).encode())
+
     def handle_sse(self):
-        """Handle Server-Sent Events connection"""
+        """Handle Server-Sent Events connection with Redis pub/sub"""
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-cache")
@@ -58,25 +71,21 @@ class StreamingHandler(SimpleHTTPRequestHandler):
 
         console.print("[green]SSE client connected[/green]")
 
-        # Send initial connection message
-        self.wfile.write(b"data: {\"type\": \"CONNECTED\", \"content\": \"Connected to Zero-DTE Agent stream\"}\n\n")
+        # Send connection confirmation
+        connect_event = {
+            "type": "CONNECTED",
+            "content": "Connected to Zero-DTE Agent stream",
+            "session_id": redis_stream.get_session_id()
+        }
+        self.wfile.write(f"data: {json.dumps(connect_event)}\n\n".encode())
         self.wfile.flush()
 
-        # Keep connection open and stream messages
+        # Subscribe to Redis and stream events
         try:
-            while True:
-                if signal_queue and not signal_queue.empty():
-                    try:
-                        event = signal_queue.get_nowait()
-                        data = json.dumps(event)
-                        self.wfile.write(f"data: {data}\n\n".encode())
-                        self.wfile.flush()
-                    except Exception as e:
-                        console.print(f"[red]Error sending SSE: {e}[/red]")
-                        break
-                else:
-                    # Send keepalive every 15 seconds
-                    time.sleep(0.1)
+            for event in redis_stream.subscribe():
+                data = json.dumps(event)
+                self.wfile.write(f"data: {data}\n\n".encode())
+                self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             console.print("[yellow]SSE client disconnected[/yellow]")
 
@@ -85,27 +94,30 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         pass
 
 
-def run_server(port: int = 8080):
-    """Run the HTTP/SSE server"""
-    global signal_queue
+def run_server(port: int = 5000):
+    """Run the HTTP/SSE server with Redis"""
+    global redis_stream
 
-    # Import the queue from the agent module
+    # Initialize Redis and reset session (clears old history)
     try:
-        from zero_dte_agent import get_signal_queue
-        signal_queue = get_signal_queue()
-        console.print("[green]Connected to agent signal queue[/green]")
-    except ImportError:
-        console.print("[yellow]Agent not imported yet - queue will connect when agent starts[/yellow]")
+        redis_stream = get_stream(reset_on_init=True)
+    except Exception as e:
+        console.print(f"[red]Failed to connect to Redis: {e}[/red]")
+        console.print("[yellow]Make sure Redis is running: brew services start redis[/yellow]")
+        return
 
     server = HTTPServer(("", port), StreamingHandler)
 
     console.print(f"""
 [bold cyan]╔══════════════════════════════════════════════════════════╗
-║           Zero-DTE Agent - SSE Server                    ║
+║           Zero-DTE Agent - SSE Server (Redis)            ║
 ╠══════════════════════════════════════════════════════════╣
 ║                                                          ║
-║  UI:     http://localhost:{port}                          ║
-║  SSE:    http://localhost:{port}/stream                   ║
+║  UI:      http://localhost:{port}                          ║
+║  SSE:     http://localhost:{port}/stream                   ║
+║  History: http://localhost:{port}/history                  ║
+║                                                          ║
+║  [green]Session reset - fresh start[/green]                          ║
 ║                                                          ║
 ║  [green]Start the agent in another terminal:[/green]                   ║
 ║  [yellow]python zero_dte_agent.py[/yellow]                              ║
@@ -117,6 +129,7 @@ def run_server(port: int = 8080):
         server.serve_forever()
     except KeyboardInterrupt:
         console.print("\n[bold red]Shutting down server...[/bold red]")
+        redis_stream.close()
         server.shutdown()
 
 

@@ -576,22 +576,54 @@
       stream.innerHTML = statusHtml;
     }
 
+    // Load history from Redis (instant loading)
+    async function loadHistory() {
+      try {
+        const response = await fetch('/history');
+        const history = await response.json();
+        if (history && history.length > 0) {
+          console.log(`Loaded ${history.length} messages from history`);
+          messages.push(...history);
+          render();
+          return true;
+        }
+      } catch (e) {
+        console.error('Failed to load history:', e);
+      }
+      return false;
+    }
+
     // Connect to SSE stream
-    function connectSSE() {
+    async function connectSSE() {
       showConnectionStatus('Connecting to Zero-DTE Agent...');
+
+      // Load history first (instant UI population)
+      const hasHistory = await loadHistory();
+      if (!hasHistory) {
+        showConnectionStatus('Connected. Waiting for agent to start...');
+      }
 
       const eventSource = new EventSource('/stream');
 
       eventSource.onopen = () => {
         console.log('SSE connected');
-        showConnectionStatus('Connected. Waiting for agent to start...');
+        if (messages.length === 0) {
+          showConnectionStatus('Connected. Waiting for agent messages...');
+        }
       };
 
       eventSource.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'CONNECTED') {
-            showConnectionStatus('Connected. Waiting for agent messages...');
+          if (msg.type === 'CONNECTED' || msg.type === 'SESSION_RESET') {
+            // Session reset - clear messages and start fresh
+            if (msg.type === 'SESSION_RESET') {
+              messages.length = 0;
+              render();
+            }
+            if (messages.length === 0) {
+              showConnectionStatus('Connected. Waiting for agent messages...');
+            }
           } else {
             appendMessage(msg);
           }

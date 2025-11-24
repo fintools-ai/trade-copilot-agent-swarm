@@ -10,22 +10,19 @@ Usage:
 The agent will:
 1. Query the swarm about SPY 0DTE
 2. Ask follow-up questions based on responses
-3. Stream every question and answer to the UI
+3. Stream every question and answer to the UI (via Redis)
 4. Never stop - keeps thinking and asking forever
 """
 
-import queue
 from datetime import datetime
 from strands import Agent, tool
 from rich.console import Console
 from rich.panel import Panel
 
 from swarm import TradingSwarm
+from redis_stream import publish_event
 
 console = Console()
-
-# Global queue for SSE streaming - shared with server.py
-signal_queue = queue.Queue()
 
 # Initialize the trading swarm once
 trading_swarm = None
@@ -42,45 +39,25 @@ def get_swarm():
 
 def stream_to_ui(message_type: str, content: str, signal: dict = None):
     """
-    Stream a message to the UI via the queue.
-    The SSE server reads from this queue and sends to connected clients.
+    Stream a message to the UI via Redis pub/sub.
+    Published events go to all connected SSE clients instantly.
     """
-    event = {
-        "type": message_type,
-        "timestamp": datetime.now().strftime("%H:%M:%S"),
-        "content": content
-    }
-
-    if signal:
-        event["signal"] = signal
-
-    # Add to queue for SSE
-    signal_queue.put(event)
+    # Publish to Redis (handles pub/sub + history storage)
+    publish_event(message_type, content, signal)
 
     # Also print to console
     icon = "🤖" if message_type == "AGENT_QUESTION" else "📊"
     color = "blue" if message_type == "AGENT_QUESTION" else "magenta"
 
-    console.print(f"\n[{color}]{icon} {message_type}[/{color}] [{event['timestamp']}]")
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    console.print(f"\n[{color}]{icon} {message_type}[/{color}] [{timestamp}]")
     console.print(content[:500] + "..." if len(content) > 500 else content)
-
-
-# Track previous direction for flip detection
-previous_direction = None
 
 
 @tool
 def call_swarm(query: str) -> str:
     """
     Call the trading swarm with a query about SPY 0DTE trading.
-
-    Use this tool to:
-    - Ask about PUT/CALL recommendations
-    - Get conviction scores and agent alignment
-    - Request entry/exit/stop levels
-    - Ask follow-up questions to verify signals
-    - Check if anything has changed
-    - Cross-validate with other tickers (NVDA, AAPL, etc.)
 
     Every call streams both your question and the swarm's response to the UI.
 
@@ -90,41 +67,12 @@ def call_swarm(query: str) -> str:
     Returns:
         The swarm's full analysis and recommendation
     """
-    global previous_direction
-
-    # Stream the agent's question to UI
+    # Stream the agent's question to UI immediately
     stream_to_ui("AGENT_QUESTION", query)
 
     # Call the actual swarm
     swarm = get_swarm()
     response = swarm.ask(query)
-
-    # Try to detect direction from response for flip detection
-    current_direction = None
-    response_upper = response.upper()
-    if "PUT" in response_upper and "CALL" not in response_upper:
-        current_direction = "PUT"
-    elif "CALL" in response_upper and "PUT" not in response_upper:
-        current_direction = "CALL"
-    elif "PUT RECOMMENDED" in response_upper or "RECOMMEND PUT" in response_upper:
-        current_direction = "PUT"
-    elif "CALL RECOMMENDED" in response_upper or "RECOMMEND CALL" in response_upper:
-        current_direction = "CALL"
-
-    # Check for direction flip
-    if previous_direction and current_direction and previous_direction != current_direction:
-        flip_event = {
-            "type": "SIGNAL_UPDATE",
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
-            "content": f"Direction changed from {previous_direction} to {current_direction}",
-            "previous": previous_direction,
-            "current": current_direction
-        }
-        signal_queue.put(flip_event)
-        console.print(f"\n[yellow]⚡ FLIP: {previous_direction} → {current_direction}[/yellow]")
-
-    if current_direction:
-        previous_direction = current_direction
 
     # Stream the swarm's response to UI
     stream_to_ui("SWARM_RESPONSE", response)
@@ -235,11 +183,6 @@ def run_zero_dte_agent():
         import time
         time.sleep(5)
         run_zero_dte_agent()
-
-
-def get_signal_queue() -> queue.Queue:
-    """Get the signal queue for SSE streaming (used by server.py)"""
-    return signal_queue
 
 
 if __name__ == "__main__":
