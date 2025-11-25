@@ -70,6 +70,8 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     """Internal helper to call swarm and stream to UI."""
     # Check for UI mode override
     mode_override = get_mode_override()
+    agent_requested = "fast" if fast_mode else "full"
+    console.print(f"[dim]Mode check: override={mode_override}, agent_requested={agent_requested}[/dim]")
 
     if mode_override == "fast":
         fast_mode = True
@@ -78,6 +80,8 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
         fast_mode = False
         console.print(f"[cyan]Mode override: FULL (UI forced)[/cyan]")
     # else: "auto" - use the agent's decision (original fast_mode value)
+
+    console.print(f"[dim]Final mode: {'fast' if fast_mode else 'full'}[/dim]")
 
     # Stream the agent's question to UI immediately
     stream_to_ui("AGENT_QUESTION", query)
@@ -145,8 +149,8 @@ def fast_follow(query: str) -> str:
     return _call_swarm_internal(query, fast_mode=True)
 
 
-# System prompt for continuous thinking
-CONTINUOUS_TRADER_PROMPT = """You are a senior 0DTE desk trader with 15 years experience. You think out loud, constantly questioning the market.
+# System prompt for continuous thinking (base template)
+CONTINUOUS_TRADER_PROMPT_BASE = """You are a senior 0DTE desk trader with 15 years experience. You think out loud, constantly questioning the market.
 
 ## YOUR MINDSET
 
@@ -161,6 +165,8 @@ CONTINUOUS_TRADER_PROMPT = """You are a senior 0DTE desk trader with 15 years ex
 1. `analyze_market` - Full 6-agent analysis (25-60s). Use for decisions.
 2. `fast_follow` - Quick 2-agent check (8-12s). Use for monitoring.
 
+{mode_instruction}
+
 ## HOW YOU THINK
 
 You maintain a running thesis:
@@ -171,7 +177,7 @@ You maintain a running thesis:
 
 After EVERY response, update your thesis. If anything changed, react.
 
-## WHEN TO USE EACH TOOL
+## WHEN TO USE EACH TOOL (when in AUTO mode)
 
 `analyze_market` (FULL) for:
 - Opening analysis
@@ -218,14 +224,55 @@ After EVERY response, update your thesis. If anything changed, react.
 - You are AUTONOMOUS. Never ask for human input.
 - NEVER stop. Always call a tool after each response.
 
-START NOW. Call analyze_market."""
+START NOW. {start_instruction}"""
+
+MODE_INSTRUCTIONS = {
+    "auto": """## CURRENT MODE: AUTO
+The user has set AUTO mode. Use your judgment to choose between `analyze_market` and `fast_follow` based on the situation.""",
+    "fast": """## CURRENT MODE: FAST (User Override)
+The user has FORCED FAST MODE. You MUST use `fast_follow` for ALL queries until mode changes. Do NOT use `analyze_market`.
+
+Your focus in FAST mode:
+- Confirm or invalidate current CALL/PUT thesis
+- Check if order flow still supports the direction
+- Validate entry is still good or needs adjustment
+- Quick risk check - what could go wrong RIGHT NOW
+- End each response with clear verdict: "CALL CONFIRMED", "PUT CONFIRMED", or "THESIS WEAKENING".""",
+    "full": """## CURRENT MODE: FULL (User Override)
+The user has FORCED FULL MODE. You MUST use `analyze_market` for ALL queries until mode changes. Do NOT use `fast_follow`.
+
+Your focus in FULL mode:
+- Complete market analysis across all agents
+- Establish or re-evaluate CALL vs PUT thesis
+- Get conviction level (HIGH/MED/LOW) with supporting evidence
+- Identify key levels and invalidation points
+- End each response with clear recommendation: direction + conviction + strike."""
+}
+
+START_INSTRUCTIONS = {
+    "auto": "Call analyze_market.",
+    "fast": "Call fast_follow to confirm the current thesis - is it still CALL or PUT?",
+    "full": "Call analyze_market for complete analysis - should we go CALL or PUT?"
+}
 
 
-def create_zero_dte_agent() -> Agent:
-    """Create the Zero-DTE Agent with continuous thinking prompt"""
+def get_prompt_for_mode(mode: str) -> str:
+    """Generate the system prompt based on current mode override."""
+    mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["auto"])
+    start_instruction = START_INSTRUCTIONS.get(mode, START_INSTRUCTIONS["auto"])
+    return CONTINUOUS_TRADER_PROMPT_BASE.format(
+        mode_instruction=mode_instruction,
+        start_instruction=start_instruction
+    )
+
+
+def create_zero_dte_agent(mode: str = "auto") -> Agent:
+    """Create the Zero-DTE Agent with mode-aware prompt."""
+    prompt = get_prompt_for_mode(mode)
+    console.print(f"[cyan]Creating agent with mode: {mode}[/cyan]")
     return Agent(
         model="us.anthropic.claude-3-5-haiku-20241022-v1:0",
-        system_prompt=CONTINUOUS_TRADER_PROMPT,
+        system_prompt=prompt,
         tools=[analyze_market, fast_follow]
     )
 
@@ -247,19 +294,29 @@ def run_zero_dte_agent():
         border_style="cyan"
     ))
 
-    agent = create_zero_dte_agent()
-    prompt = "Start monitoring SPY for 0DTE trading. Call analyze_market now."
+    # Track current mode to detect changes
+    current_mode = get_mode_override()
+    agent = create_zero_dte_agent(current_mode)
+    prompt = f"Start monitoring SPY for 0DTE trading. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
-    PT = ZoneInfo("America/Los_Angeles")
-    MARKET_CLOSE_HOUR = 13  # 1PM PT
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    market_close_hour = 13  # 1PM PT
 
     try:
         while True:
             # Stop after market close (1PM PT)
-            now_pt = datetime.now(PT)
-            if now_pt.hour >= MARKET_CLOSE_HOUR:
+            now_pt = datetime.now(pt_tz)
+            if now_pt.hour >= market_close_hour:
                 console.print("\n[bold yellow]Market closed (1PM PT) - stopping agent[/bold yellow]")
                 break
+
+            # Check if mode changed - recreate agent with new prompt
+            new_mode = get_mode_override()
+            if new_mode != current_mode:
+                console.print(f"\n[bold yellow]Mode changed: {current_mode} -> {new_mode}[/bold yellow]")
+                current_mode = new_mode
+                agent = create_zero_dte_agent(current_mode)
+                prompt = f"Mode changed to {current_mode}. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
             try:
                 # Agent should run continuously, but if it returns, restart it
@@ -274,7 +331,7 @@ def run_zero_dte_agent():
                 console.print(f"\n[yellow]Agent error: {e}[/yellow]")
                 console.print("[cyan]Restarting in 3 seconds...[/cyan]")
                 time.sleep(3)
-                prompt = "Resume monitoring SPY. Call analyze_market now."
+                prompt = f"Resume monitoring SPY. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
     except KeyboardInterrupt:
         console.print("\n[bold red]Stopping Zero-DTE Agent...[/bold red]")
