@@ -61,27 +61,37 @@ def get_mode_override() -> str:
     """Get the mode override from Redis (auto, fast, or full)."""
     try:
         stream = get_stream()
-        return stream.redis.get("zero_dte:mode_override") or "auto"
-    except Exception:
+        mode = stream.redis.get("zero_dte:mode_override")
+        if mode and mode in ("fast", "full", "auto"):
+            return mode
+        return "auto"
+    except Exception as e:
+        console.print(f"[red]Redis error reading mode: {e}[/red]")
         return "auto"
 
 
 def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     """Internal helper to call swarm and stream to UI."""
-    # Check for UI mode override
+    # Check for UI mode override - ALWAYS check fresh from Redis
     mode_override = get_mode_override()
-    agent_requested = "fast" if fast_mode else "full"
-    console.print(f"[dim]Mode check: override={mode_override}, agent_requested={agent_requested}[/dim]")
+    agent_tool = "fast_follow" if fast_mode else "analyze_market"
 
+    # FORCE the mode based on override - this overrides whatever tool the agent called
     if mode_override == "fast":
+        # User wants FAST mode - force fast_mode=True regardless of tool
+        if not fast_mode:
+            console.print(f"[bold yellow]⚡ OVERRIDE: Agent called {agent_tool}, but forcing FAST mode[/bold yellow]")
         fast_mode = True
-        console.print(f"[cyan]Mode override: FAST (UI forced)[/cyan]")
+        console.print(f"[bold cyan]>>> EXECUTING: FAST MODE (user override) <<<[/bold cyan]")
     elif mode_override == "full":
+        # User wants FULL mode - force fast_mode=False regardless of tool
+        if fast_mode:
+            console.print(f"[bold yellow]⚡ OVERRIDE: Agent called {agent_tool}, but forcing FULL mode[/bold yellow]")
         fast_mode = False
-        console.print(f"[cyan]Mode override: FULL (UI forced)[/cyan]")
-    # else: "auto" - use the agent's decision (original fast_mode value)
-
-    console.print(f"[dim]Final mode: {'fast' if fast_mode else 'full'}[/dim]")
+        console.print(f"[bold cyan]>>> EXECUTING: FULL MODE (user override) <<<[/bold cyan]")
+    else:
+        # Auto mode - use agent's decision
+        console.print(f"[dim]>>> EXECUTING: {'FAST' if fast_mode else 'FULL'} MODE (auto - agent decided) <<<[/dim]")
 
     # Stream the agent's question to UI immediately
     stream_to_ui("AGENT_QUESTION", query)
@@ -294,8 +304,9 @@ def run_zero_dte_agent():
         border_style="cyan"
     ))
 
-    # Track current mode to detect changes
+    # Track current mode to detect changes - loads from Redis (persists across restarts)
     current_mode = get_mode_override()
+    console.print(f"[bold green]Loaded mode from Redis: {current_mode}[/bold green]")
     agent = create_zero_dte_agent(current_mode)
     prompt = f"Start monitoring SPY for 0DTE trading. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 

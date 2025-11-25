@@ -951,6 +951,8 @@
     // Load mode on page load (only in live mode)
     if (window.location.protocol !== 'file:') {
       loadCurrentMode();
+      // Refresh mode display every 5 seconds to stay in sync
+      setInterval(loadCurrentMode, 5000);
     }
   </script>
 </body>
