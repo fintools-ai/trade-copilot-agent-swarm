@@ -50,11 +50,58 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_sse()
         elif self.path == "/history":
             self.handle_history()
+        elif self.path == "/get-mode":
+            self.handle_get_mode()
         elif self.path == "/":
             self.path = "/index.html"
             super().do_GET()
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path == "/set-mode":
+            self.handle_set_mode()
+        else:
+            self.send_error(404, "Not Found")
+
+    def handle_get_mode(self):
+        """Return current mode override setting"""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        mode = redis_stream.redis.get("zero_dte:mode_override") or "auto"
+        self.wfile.write(json.dumps({"mode": mode}).encode())
+
+    def handle_set_mode(self):
+        """Set mode override (auto, fast, or full)"""
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode()
+
+        try:
+            data = json.loads(body)
+            mode = data.get('mode', 'auto')
+
+            # Validate mode
+            if mode not in ('auto', 'fast', 'full'):
+                mode = 'auto'
+
+            # Store in Redis
+            redis_stream.redis.set("zero_dte:mode_override", mode)
+            console.print(f"[cyan]Mode override set to: {mode}[/cyan]")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"status": "ok", "mode": mode}).encode())
+
+        except (json.JSONDecodeError, ValueError) as e:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
 
     def handle_history(self):
         """Return event history as JSON for instant UI loading"""

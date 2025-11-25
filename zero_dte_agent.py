@@ -23,7 +23,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from swarm import TradingSwarm
-from redis_stream import publish_event
+from redis_stream import publish_event, get_stream
 
 console = Console()
 
@@ -57,8 +57,28 @@ def stream_to_ui(message_type: str, content: str, signal: dict = None):
     console.print(content[:500] + "..." if len(content) > 500 else content)
 
 
+def get_mode_override() -> str:
+    """Get the mode override from Redis (auto, fast, or full)."""
+    try:
+        stream = get_stream()
+        return stream.redis.get("zero_dte:mode_override") or "auto"
+    except Exception:
+        return "auto"
+
+
 def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     """Internal helper to call swarm and stream to UI."""
+    # Check for UI mode override
+    mode_override = get_mode_override()
+
+    if mode_override == "fast":
+        fast_mode = True
+        console.print(f"[cyan]Mode override: FAST (UI forced)[/cyan]")
+    elif mode_override == "full":
+        fast_mode = False
+        console.print(f"[cyan]Mode override: FULL (UI forced)[/cyan]")
+    # else: "auto" - use the agent's decision (original fast_mode value)
+
     # Stream the agent's question to UI immediately
     stream_to_ui("AGENT_QUESTION", query)
 
@@ -79,7 +99,9 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
             pass
 
     # Stream the swarm's response to UI with mode indicator and signal
-    mode_note = "\n\n---\n*[Fast Mode]*" if fast_mode else "\n\n---\n*[Full Mode]*"
+    mode_label = "Fast" if fast_mode else "Full"
+    override_note = " (forced)" if mode_override != "auto" else ""
+    mode_note = f"\n\n---\n*[{mode_label} Mode{override_note}]*"
     stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
 
     # Pause before next tool call

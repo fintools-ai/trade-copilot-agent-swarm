@@ -122,6 +122,64 @@
       font-weight: 500;
     }
 
+    /* Mode Toggle */
+    .mode-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mode-label {
+      font-size: 11px;
+      color: #525252;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .mode-button {
+      padding: 6px 12px;
+      background: #1a1a1a;
+      border: 1px solid #525252;
+      color: #a3a3a3;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .mode-button:hover {
+      border-color: #737373;
+      color: #d4d4d4;
+    }
+
+    .mode-button[data-mode="auto"] {
+      background: rgba(163, 163, 163, 0.1);
+      border-color: #525252;
+      color: #a3a3a3;
+    }
+
+    .mode-button[data-mode="fast"] {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: #3b82f6;
+      color: #3b82f6;
+    }
+
+    .mode-button[data-mode="full"] {
+      background: rgba(34, 197, 94, 0.2);
+      border-color: #22c55e;
+      color: #22c55e;
+    }
+
+    .mode-indicator {
+      font-size: 10px;
+      color: #525252;
+      margin-left: 4px;
+    }
+
     /* Stream Container */
     .stream-container {
       flex: 1;
@@ -484,6 +542,10 @@
         <span id="signal-direction">WAIT</span>
         <span id="signal-conviction" class="conviction"></span>
       </div>
+      <div class="mode-toggle">
+        <span class="mode-label">Next Run:</span>
+        <button id="mode-btn" class="mode-button" data-mode="auto">Auto</button>
+      </div>
       <div class="timestamp" id="current-time">10:47 AM</div>
     </div>
 
@@ -842,6 +904,54 @@
       document.getElementById('current-time').textContent =
         now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     }, 1000);
+
+    // Mode Toggle functionality
+    const modeBtn = document.getElementById('mode-btn');
+    const modes = ['auto', 'fast', 'full'];
+    const modeLabels = { auto: 'Auto', fast: 'Fast', full: 'Full' };
+
+    // Load current mode from server
+    async function loadCurrentMode() {
+      try {
+        const response = await fetch('/get-mode');
+        const data = await response.json();
+        const mode = data.mode || 'auto';
+        updateModeButton(mode);
+      } catch (e) {
+        console.error('Failed to load mode:', e);
+      }
+    }
+
+    function updateModeButton(mode) {
+      modeBtn.textContent = modeLabels[mode];
+      modeBtn.setAttribute('data-mode', mode);
+    }
+
+    async function setMode(mode) {
+      try {
+        await fetch('/set-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: mode })
+        });
+        updateModeButton(mode);
+        console.log('Mode set to:', mode);
+      } catch (e) {
+        console.error('Failed to set mode:', e);
+      }
+    }
+
+    modeBtn.addEventListener('click', function() {
+      const current = this.getAttribute('data-mode') || 'auto';
+      const currentIndex = modes.indexOf(current);
+      const nextMode = modes[(currentIndex + 1) % modes.length];
+      setMode(nextMode);
+    });
+
+    // Load mode on page load (only in live mode)
+    if (window.location.protocol !== 'file:') {
+      loadCurrentMode();
+    }
   </script>
 </body>
 </html>
