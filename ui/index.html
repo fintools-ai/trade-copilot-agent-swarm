@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>0DTE Live Thinking Stream</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     * {
       margin: 0;
@@ -510,6 +511,58 @@
       40% { transform: scale(1); opacity: 1; }
     }
 
+    /* Signal History Chart */
+    .chart-section {
+      background: #141414;
+      border-bottom: 1px solid #262626;
+      padding: 12px 24px;
+      flex-shrink: 0;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .chart-title {
+      font-size: 11px;
+      color: #525252;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .chart-legend {
+      display: flex;
+      gap: 16px;
+      font-size: 10px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .legend-dot.call { background: #22c55e; }
+    .legend-dot.put { background: #ef4444; }
+
+    .legend-label {
+      color: #737373;
+    }
+
+    .chart-container {
+      height: 80px;
+      position: relative;
+    }
+
     /* Responsive */
     @media (max-width: 600px) {
       .header {
@@ -522,6 +575,10 @@
 
       .signal-row {
         gap: 16px;
+      }
+
+      .chart-section {
+        padding: 12px 16px;
       }
     }
   </style>
@@ -547,6 +604,26 @@
         <button id="mode-btn" class="mode-button" data-mode="auto">Auto</button>
       </div>
       <div class="timestamp" id="current-time">10:47 AM</div>
+    </div>
+
+    <!-- Signal History Chart -->
+    <div class="chart-section">
+      <div class="chart-header">
+        <span class="chart-title">Signal History</span>
+        <div class="chart-legend">
+          <div class="legend-item">
+            <div class="legend-dot call"></div>
+            <span class="legend-label">CALL</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot put"></div>
+            <span class="legend-label">PUT</span>
+          </div>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="signalChart"></canvas>
+      </div>
     </div>
 
     <!-- Stream -->
@@ -953,6 +1030,154 @@
       loadCurrentMode();
       // Refresh mode display every 5 seconds to stay in sync
       setInterval(loadCurrentMode, 5000);
+    }
+
+    // Signal History Chart
+    let signalChart = null;
+    const signalHistory = [];
+
+    function extractSignalsFromMessages() {
+      signalHistory.length = 0;
+      messages.forEach(msg => {
+        if (msg.signal && msg.signal.direction) {
+          const convictionValue = {
+            'HIGH': 3,
+            'MED': 2,
+            'MEDIUM': 2,
+            'LOW': 1
+          };
+          signalHistory.push({
+            time: msg.timestamp,
+            direction: msg.signal.direction.toUpperCase(),
+            conviction: msg.signal.conviction ? msg.signal.conviction.toUpperCase() : 'MED',
+            value: msg.signal.direction.toUpperCase() === 'CALL' ? 1 : -1,
+            convictionLevel: convictionValue[msg.signal.conviction?.toUpperCase()] || 2
+          });
+        }
+      });
+    }
+
+    function initSignalChart() {
+      const ctx = document.getElementById('signalChart').getContext('2d');
+
+      signalChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            data: [],
+            borderColor: [],
+            backgroundColor: [],
+            borderWidth: 2,
+            pointRadius: 6,
+            pointHoverRadius: 8,
+            fill: false,
+            tension: 0.1,
+            segment: {
+              borderColor: ctx => {
+                const idx = ctx.p0DataIndex;
+                if (signalHistory[idx]) {
+                  return signalHistory[idx].direction === 'CALL' ? '#22c55e' : '#ef4444';
+                }
+                return '#525252';
+              }
+            }
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const idx = context.dataIndex;
+                  if (signalHistory[idx]) {
+                    return `${signalHistory[idx].direction} (${signalHistory[idx].conviction})`;
+                  }
+                  return '';
+                }
+              },
+              backgroundColor: '#1a1a1a',
+              borderColor: '#262626',
+              borderWidth: 1,
+              titleColor: '#e5e5e5',
+              bodyColor: '#a3a3a3'
+            }
+          },
+          scales: {
+            x: {
+              display: true,
+              grid: { color: '#1a1a1a' },
+              ticks: {
+                color: '#525252',
+                font: { size: 10 },
+                maxRotation: 0
+              }
+            },
+            y: {
+              display: true,
+              min: -1.5,
+              max: 1.5,
+              grid: { color: '#1a1a1a' },
+              ticks: {
+                color: '#525252',
+                font: { size: 10 },
+                callback: function(value) {
+                  if (value === 1) return 'CALL';
+                  if (value === -1) return 'PUT';
+                  return '';
+                },
+                stepSize: 1
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function updateSignalChart() {
+      if (!signalChart) return;
+
+      extractSignalsFromMessages();
+
+      const labels = signalHistory.map(s => s.time);
+      const data = signalHistory.map(s => s.value);
+      const pointColors = signalHistory.map(s => s.direction === 'CALL' ? '#22c55e' : '#ef4444');
+      const pointSizes = signalHistory.map(s => s.convictionLevel * 3 + 4);
+
+      signalChart.data.labels = labels;
+      signalChart.data.datasets[0].data = data;
+      signalChart.data.datasets[0].pointBackgroundColor = pointColors;
+      signalChart.data.datasets[0].pointBorderColor = pointColors;
+      signalChart.data.datasets[0].pointRadius = pointSizes;
+
+      signalChart.update('none');
+    }
+
+    // Initialize chart on load
+    initSignalChart();
+
+    // Override appendMessage to update chart
+    const originalAppendMessage = appendMessage;
+    appendMessage = function(msg) {
+      originalAppendMessage(msg);
+      if (msg.signal) {
+        updateSignalChart();
+      }
+    };
+
+    // Override render to update chart after loading history
+    const originalRender = render;
+    render = function() {
+      originalRender();
+      updateSignalChart();
+    };
+
+    // Initial chart update if we have mock data
+    if (window.location.protocol === 'file:') {
+      updateSignalChart();
     }
   </script>
 </body>
