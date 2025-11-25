@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>0DTE Live Thinking Stream</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     * {
       margin: 0;
@@ -21,11 +20,121 @@
     }
 
     .container {
-      max-width: 900px;
+      max-width: 1200px;
       margin: 0 auto;
       height: 100vh;
       display: flex;
       flex-direction: column;
+    }
+
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .main-left {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Signal History Side Panel */
+    .signal-panel {
+      width: 180px;
+      background: #141414;
+      border-left: 1px solid #262626;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .signal-panel-header {
+      padding: 12px;
+      border-bottom: 1px solid #262626;
+      font-size: 11px;
+      color: #525252;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .signal-panel-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .signal-panel-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .signal-panel-list::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 2px;
+    }
+
+    .signal-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: #1a1a1a;
+    }
+
+    .signal-item.call {
+      border-left: 3px solid #22c55e;
+    }
+
+    .signal-item.put {
+      border-left: 3px solid #ef4444;
+    }
+
+    .signal-item.wait {
+      border-left: 3px solid #fbbf24;
+    }
+
+    .signal-item-dir {
+      font-size: 11px;
+      font-weight: 700;
+      min-width: 36px;
+    }
+
+    .signal-item.call .signal-item-dir { color: #22c55e; }
+    .signal-item.put .signal-item-dir { color: #ef4444; }
+    .signal-item.wait .signal-item-dir { color: #fbbf24; }
+
+    .signal-item-meta {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .signal-item-conv {
+      font-size: 9px;
+      color: #737373;
+    }
+
+    .signal-item-time {
+      font-size: 9px;
+      color: #525252;
+    }
+
+    .signal-panel-empty {
+      color: #525252;
+      font-size: 11px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    @media (max-width: 800px) {
+      .signal-panel {
+        display: none;
+      }
     }
 
     /* Header */
@@ -511,58 +620,6 @@
       40% { transform: scale(1); opacity: 1; }
     }
 
-    /* Signal History Chart */
-    .chart-section {
-      background: #141414;
-      border-bottom: 1px solid #262626;
-      padding: 12px 24px;
-      flex-shrink: 0;
-    }
-
-    .chart-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-
-    .chart-title {
-      font-size: 11px;
-      color: #525252;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .chart-legend {
-      display: flex;
-      gap: 16px;
-      font-size: 10px;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .legend-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-
-    .legend-dot.call { background: #22c55e; }
-    .legend-dot.put { background: #ef4444; }
-
-    .legend-label {
-      color: #737373;
-    }
-
-    .chart-container {
-      height: 80px;
-      position: relative;
-    }
-
     /* Responsive */
     @media (max-width: 600px) {
       .header {
@@ -575,10 +632,6 @@
 
       .signal-row {
         gap: 16px;
-      }
-
-      .chart-section {
-        padding: 12px 16px;
       }
     }
   </style>
@@ -606,29 +659,22 @@
       <div class="timestamp" id="current-time">10:47 AM</div>
     </div>
 
-    <!-- Signal History Chart -->
-    <div class="chart-section">
-      <div class="chart-header">
-        <span class="chart-title">Signal History</span>
-        <div class="chart-legend">
-          <div class="legend-item">
-            <div class="legend-dot call"></div>
-            <span class="legend-label">CALL</span>
-          </div>
-          <div class="legend-item">
-            <div class="legend-dot put"></div>
-            <span class="legend-label">PUT</span>
-          </div>
+    <!-- Main Content Area -->
+    <div class="main-content">
+      <div class="main-left">
+        <!-- Stream -->
+        <div class="stream-container" id="stream">
+          <!-- Messages will be injected here -->
         </div>
       </div>
-      <div class="chart-container">
-        <canvas id="signalChart"></canvas>
-      </div>
-    </div>
 
-    <!-- Stream -->
-    <div class="stream-container" id="stream">
-      <!-- Messages will be injected here -->
+      <!-- Signal History Side Panel -->
+      <div class="signal-panel">
+        <div class="signal-panel-header">Signal History</div>
+        <div class="signal-panel-list" id="signal-panel-list">
+          <div class="signal-panel-empty">No signals yet</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1032,152 +1078,62 @@
       setInterval(loadCurrentMode, 5000);
     }
 
-    // Signal History Chart
-    let signalChart = null;
-    const signalHistory = [];
+    // Signal History Side Panel
+    function updateSignalPanel() {
+      const panelList = document.getElementById('signal-panel-list');
+      const signals = [];
 
-    function extractSignalsFromMessages() {
-      signalHistory.length = 0;
-      messages.forEach(msg => {
+      // Extract signals from messages (newest first)
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
         if (msg.signal && msg.signal.direction) {
-          const convictionValue = {
-            'HIGH': 3,
-            'MED': 2,
-            'MEDIUM': 2,
-            'LOW': 1
-          };
-          signalHistory.push({
+          const dir = msg.signal.direction.toUpperCase();
+          const conv = msg.signal.conviction ? msg.signal.conviction.toUpperCase() : '';
+          signals.push({
             time: msg.timestamp,
-            direction: msg.signal.direction.toUpperCase(),
-            conviction: msg.signal.conviction ? msg.signal.conviction.toUpperCase() : 'MED',
-            value: msg.signal.direction.toUpperCase() === 'CALL' ? 1 : -1,
-            convictionLevel: convictionValue[msg.signal.conviction?.toUpperCase()] || 2
+            direction: dir,
+            conviction: conv,
+            dirClass: dir.toLowerCase()
           });
         }
-      });
+      }
+
+      if (signals.length === 0) {
+        panelList.innerHTML = '<div class="signal-panel-empty">No signals yet</div>';
+        return;
+      }
+
+      // Render signals (newest at top)
+      panelList.innerHTML = signals.map(s => `
+        <div class="signal-item ${s.dirClass}">
+          <span class="signal-item-dir">${s.direction}</span>
+          <div class="signal-item-meta">
+            ${s.conviction ? `<span class="signal-item-conv">${s.conviction}</span>` : ''}
+            <span class="signal-item-time">${s.time}</span>
+          </div>
+        </div>
+      `).join('');
     }
 
-    function initSignalChart() {
-      const ctx = document.getElementById('signalChart').getContext('2d');
-
-      signalChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: [],
-          datasets: [{
-            data: [],
-            borderColor: [],
-            backgroundColor: [],
-            borderWidth: 2,
-            pointRadius: 6,
-            pointHoverRadius: 8,
-            fill: false,
-            tension: 0.1,
-            segment: {
-              borderColor: ctx => {
-                const idx = ctx.p0DataIndex;
-                if (signalHistory[idx]) {
-                  return signalHistory[idx].direction === 'CALL' ? '#22c55e' : '#ef4444';
-                }
-                return '#525252';
-              }
-            }
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const idx = context.dataIndex;
-                  if (signalHistory[idx]) {
-                    return `${signalHistory[idx].direction} (${signalHistory[idx].conviction})`;
-                  }
-                  return '';
-                }
-              },
-              backgroundColor: '#1a1a1a',
-              borderColor: '#262626',
-              borderWidth: 1,
-              titleColor: '#e5e5e5',
-              bodyColor: '#a3a3a3'
-            }
-          },
-          scales: {
-            x: {
-              display: true,
-              grid: { color: '#1a1a1a' },
-              ticks: {
-                color: '#525252',
-                font: { size: 10 },
-                maxRotation: 0
-              }
-            },
-            y: {
-              display: true,
-              min: -1.5,
-              max: 1.5,
-              grid: { color: '#1a1a1a' },
-              ticks: {
-                color: '#525252',
-                font: { size: 10 },
-                callback: function(value) {
-                  if (value === 1) return 'CALL';
-                  if (value === -1) return 'PUT';
-                  return '';
-                },
-                stepSize: 1
-              }
-            }
-          }
-        }
-      });
-    }
-
-    function updateSignalChart() {
-      if (!signalChart) return;
-
-      extractSignalsFromMessages();
-
-      const labels = signalHistory.map(s => s.time);
-      const data = signalHistory.map(s => s.value);
-      const pointColors = signalHistory.map(s => s.direction === 'CALL' ? '#22c55e' : '#ef4444');
-      const pointSizes = signalHistory.map(s => s.convictionLevel * 3 + 4);
-
-      signalChart.data.labels = labels;
-      signalChart.data.datasets[0].data = data;
-      signalChart.data.datasets[0].pointBackgroundColor = pointColors;
-      signalChart.data.datasets[0].pointBorderColor = pointColors;
-      signalChart.data.datasets[0].pointRadius = pointSizes;
-
-      signalChart.update('none');
-    }
-
-    // Initialize chart on load
-    initSignalChart();
-
-    // Override appendMessage to update chart
+    // Override appendMessage to update panel
     const originalAppendMessage = appendMessage;
     appendMessage = function(msg) {
       originalAppendMessage(msg);
       if (msg.signal) {
-        updateSignalChart();
+        updateSignalPanel();
       }
     };
 
-    // Override render to update chart after loading history
+    // Override render to update panel after loading history
     const originalRender = render;
     render = function() {
       originalRender();
-      updateSignalChart();
+      updateSignalPanel();
     };
 
-    // Initial chart update if we have mock data
+    // Initial panel update if we have mock data
     if (window.location.protocol === 'file:') {
-      updateSignalChart();
+      updateSignalPanel();
     }
   </script>
 </body>
