@@ -36,6 +36,9 @@ console = Console()
 # Redis stream instance (reset session on server start)
 redis_stream: RedisStream = None
 
+# Default mode when not set in Redis (must match zero_dte_agent.py)
+DEFAULT_MODE = "fast"
+
 
 class StreamingHandler(SimpleHTTPRequestHandler):
     """HTTP handler with SSE and history support"""
@@ -71,7 +74,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
 
-        mode = redis_stream.redis.get("zero_dte:mode_override") or "auto"
+        mode = redis_stream.redis.get("zero_dte:mode_override") or DEFAULT_MODE
         self.wfile.write(json.dumps({"mode": mode}).encode())
 
     def handle_set_mode(self):

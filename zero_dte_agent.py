@@ -57,6 +57,9 @@ def stream_to_ui(message_type: str, content: str, signal: dict = None):
     console.print(content[:500] + "..." if len(content) > 500 else content)
 
 
+DEFAULT_MODE = "fast"  # Default mode when not set in Redis
+
+
 def get_mode_override() -> str:
     """Get the mode override from Redis (auto, fast, or full)."""
     try:
@@ -64,10 +67,10 @@ def get_mode_override() -> str:
         mode = stream.redis.get("zero_dte:mode_override")
         if mode and mode in ("fast", "full", "auto"):
             return mode
-        return "auto"
+        return DEFAULT_MODE
     except Exception as e:
         console.print(f"[red]Redis error reading mode: {e}[/red]")
-        return "auto"
+        return DEFAULT_MODE
 
 
 def _call_swarm_internal(query: str, fast_mode: bool) -> str:
