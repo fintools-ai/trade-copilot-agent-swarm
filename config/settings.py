@@ -14,8 +14,6 @@ GREEKS_SERVER_V2_URL = os.getenv('GREEKS_SERVER_V2_URL', 'http://localhost:8005'
 DEFAULT_TIMEOUT = int(os.getenv('DEFAULT_TIMEOUT', '10'))
 GREEKS_TIMEOUT = int(os.getenv('GREEKS_TIMEOUT', '15'))
 
-# AWS Configuration
-AWS_REGION = os.getenv('AWS_REGION', 'us-west-2')
 
 MCP_OI_EXECUTABLE = "../mcp-openinterest-server"
 MCP_MARKET_DATA_EXECUTABLE = "../mcp-market-data-server"
