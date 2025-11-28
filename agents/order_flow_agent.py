@@ -151,7 +151,7 @@ def create_order_flow_agent() -> Agent:
 
     agent = Agent(
         name="Order Flow Analyst",
-        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=ORDER_FLOW_INSTRUCTIONS,
         #session_manager=session_manager,
         tools=[equity_order_flow_tool]

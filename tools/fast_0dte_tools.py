@@ -16,11 +16,12 @@ from typing import Dict, Optional
 from strands import tool
 from mcp import StdioServerParameters, stdio_client
 from strands.tools.mcp import MCPClient
+from config.settings import TWELVE_DATA_API_KEY
 
 logger = logging.getLogger(__name__)
 
 # Twelve Data API key from environment
-TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY", "")
+TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY", TWELVE_DATA_API_KEY)
 
 
 def create_twelvedata_mcp():

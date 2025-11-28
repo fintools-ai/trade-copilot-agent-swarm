@@ -19,3 +19,14 @@ MCP_OI_EXECUTABLE = "../mcp-openinterest-server"
 MCP_MARKET_DATA_EXECUTABLE = "../mcp-market-data-server"
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+
+# === Securely Load Twelve Data API Key ===
+try:
+    with open("/etc/twelve_data_api_key.txt", "r") as f:
+        TWELVE_DATA_API_KEY: str = f.read().strip()
+except FileNotFoundError:
+    TWELVE_DATA_API_KEY: str = ""
+    print("Warning: API key file not found at /etc/twelve_data_api_key.txt")
+except Exception as e:
+    TWELVE_DATA_API_KEY: str = ""
+    print(f"Warning: Failed to read API key: {e}")

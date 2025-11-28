@@ -5,10 +5,6 @@ Analyzes open interest for 1DTE/same-day options to determine intraday key level
 
 from strands import Agent
 from tools.open_interest_tools import analyze_open_interest_tool, analyze_multi_ticker_oi_breadth
-from config.settings import AWS_REGION
-
-from strands.session.file_session_manager import FileSessionManager
-from datetime import datetime
 
 # Top tech tickers for market breadth analysis (SPY + top 3 tech)
 TOP_TICKERS = ["SPY", "NVDA", "AAPL", "GOOGL"]
@@ -199,16 +195,10 @@ def create_market_breadth_agent(session_manager=None) -> Agent:
     Returns:
         Configured Strands Agent for intraday market breadth analysis
     """
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    session_manager = FileSessionManager(session_id=f"market-breath-{current_time}")
     agent = Agent(
         name="Market Breadth Analyst",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        #model="deepseek.v3-v1:0",
         system_prompt=MARKET_BREADTH_INSTRUCTIONS,
-        #region=AWS_REGION,
-        #session_manager=session_manager,
         tools=[
             analyze_open_interest_tool,
             analyze_multi_ticker_oi_breadth

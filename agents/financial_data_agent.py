@@ -160,7 +160,7 @@ def create_financial_data_agent() -> Agent:
 
     agent = Agent(
         name="Financial Data Analyst",
-        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=FINANCIAL_DATA_INSTRUCTIONS,
         #session_manager=session_manager,
         tools=[

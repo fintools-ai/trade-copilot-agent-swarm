@@ -90,7 +90,7 @@ def create_fast_financial_agent() -> Agent:
     """
     agent = Agent(
         name="Financial Data Analyst (Fast Mode)",
-        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
+        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=FAST_FINANCIAL_DATA_INSTRUCTIONS,
         tools=[
             fast_spy_check,

@@ -237,6 +237,10 @@ After EVERY response, update your thesis. If anything changed, react.
 - You are AUTONOMOUS. Never ask for human input.
 - NEVER stop. Always call a tool after each response.
 
+## CRITICAL
+- Based on the data, tell me what future conviction do you have for next 10 mins 
+- All questions or follow-up questions should be used to validate PUT or CALL entry for SPY
+
 START NOW. {start_instruction}"""
 
 MODE_INSTRUCTIONS = {
@@ -284,7 +288,7 @@ def create_zero_dte_agent(mode: str = "auto") -> Agent:
     prompt = get_prompt_for_mode(mode)
     console.print(f"[cyan]Creating agent with mode: {mode}[/cyan]")
     return Agent(
-        model="us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=prompt,
         tools=[analyze_market, fast_follow]
     )
