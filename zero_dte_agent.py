@@ -103,17 +103,24 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     swarm = get_swarm()
     response = swarm.ask(query, fast_mode=fast_mode)
 
-    # Extract signal from last line for UI banner
+    # Extract signal from response - look for JSON with action or direction
     signal = None
     lines = response.strip().split('\n')
-    if lines:
-        last_line = lines[-1].strip()
+    for line in reversed(lines):
+        line = line.strip()
+        # Skip markdown code block markers
+        if line.startswith('```'):
+            continue
         try:
-            parsed = json.loads(last_line)
-            if isinstance(parsed, dict) and 'direction' in parsed:
+            parsed = json.loads(line)
+            if isinstance(parsed, dict) and ('action' in parsed or 'direction' in parsed):
+                # Normalize: convert 'action' to 'direction' for UI compatibility
+                if 'action' in parsed and 'direction' not in parsed:
+                    parsed['direction'] = parsed['action']
                 signal = parsed
+                break
         except (json.JSONDecodeError, ValueError):
-            pass
+            continue
 
     # Stream the swarm's response to UI with mode indicator and signal
     mode_label = "Fast" if fast_mode else "Full"
@@ -182,13 +189,20 @@ CONTINUOUS_TRADER_PROMPT_BASE = """You are a senior 0DTE desk trader with 15 yea
 
 ## HOW YOU THINK
 
-You maintain a running thesis:
-- BIAS: PUT/CALL/NEUTRAL
-- CONVICTION: HIGH/MED/LOW
-- KEY LEVEL: Price that invalidates thesis
-- RISK: What could go wrong
+You are a DESK TRADER giving explicit orders, not an analyst giving opinions.
 
-After EVERY response, update your thesis. If anything changed, react.
+After EVERY response, end with your ACTION STATE as JSON:
+```json
+{"action": "PUT", "price": 583.50, "conviction": "HIGH", "invalidation": 585.00}
+```
+
+Actions:
+- PUT = Be in a PUT right now (enter if flat, hold if already in)
+- CALL = Be in a CALL right now (enter if flat, hold if already in)
+- EXIT = Close position now (thesis broke or target hit)
+- WAIT = No trade, sit on hands
+
+The human knows if they're in a position. You just broadcast what they SHOULD be in.
 
 ## WHEN TO USE EACH TOOL (when in AUTO mode)
 

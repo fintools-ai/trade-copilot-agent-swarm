@@ -131,6 +131,58 @@
       text-align: center;
     }
 
+    /* Current Action Display */
+    .current-action {
+      padding: 16px 12px;
+      border-bottom: 1px solid #262626;
+      text-align: center;
+      background: #1a1a1a;
+    }
+
+    .current-action-label {
+      font-size: 9px;
+      color: #525252;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .current-action-dir {
+      font-size: 24px;
+      font-weight: 800;
+      color: #fbbf24;
+      margin-bottom: 4px;
+    }
+
+    .current-action.put .current-action-dir { color: #ef4444; }
+    .current-action.call .current-action-dir { color: #22c55e; }
+    .current-action.exit .current-action-dir { color: #f97316; }
+    .current-action.wait .current-action-dir { color: #fbbf24; }
+
+    .current-action-price {
+      font-size: 14px;
+      font-weight: 600;
+      color: #a3a3a3;
+      margin-bottom: 4px;
+    }
+
+    .current-action-conv {
+      font-size: 10px;
+      color: #737373;
+      text-transform: uppercase;
+    }
+
+    .current-action-conv.high { color: #fbbf24; }
+    .current-action-conv.med { color: #a3a3a3; }
+    .current-action-conv.low { color: #6b7280; }
+
+    /* Signal item with price */
+    .signal-item-price {
+      font-size: 10px;
+      color: #a3a3a3;
+      font-weight: 500;
+    }
+
     @media (max-width: 800px) {
       .signal-panel {
         display: none;
@@ -670,6 +722,13 @@
 
       <!-- Signal History Side Panel -->
       <div class="signal-panel">
+        <!-- Current Action Display -->
+        <div class="current-action" id="current-action">
+          <div class="current-action-label">CURRENT</div>
+          <div class="current-action-dir" id="current-action-dir">WAIT</div>
+          <div class="current-action-price" id="current-action-price">--</div>
+          <div class="current-action-conv" id="current-action-conv"></div>
+        </div>
         <div class="signal-panel-header">Signal History</div>
         <div class="signal-panel-list" id="signal-panel-list">
           <div class="signal-panel-empty">No signals yet</div>
@@ -1078,6 +1137,29 @@
       setInterval(loadCurrentMode, 5000);
     }
 
+    // Update current action display
+    function updateCurrentAction(signal) {
+      if (!signal || !signal.direction) return;
+
+      const container = document.getElementById('current-action');
+      const dirEl = document.getElementById('current-action-dir');
+      const priceEl = document.getElementById('current-action-price');
+      const convEl = document.getElementById('current-action-conv');
+
+      const dir = signal.direction.toUpperCase();
+      const price = signal.price ? `$${signal.price.toFixed(2)}` : '--';
+      const conv = signal.conviction ? signal.conviction.toUpperCase() : '';
+
+      // Update content
+      dirEl.textContent = dir;
+      priceEl.textContent = price;
+      convEl.textContent = conv;
+
+      // Update classes
+      container.className = 'current-action ' + dir.toLowerCase();
+      convEl.className = 'current-action-conv ' + conv.toLowerCase();
+    }
+
     // Signal History Side Panel
     function updateSignalPanel() {
       const panelList = document.getElementById('signal-panel-list');
@@ -1089,13 +1171,25 @@
         if (msg.signal && msg.signal.direction) {
           const dir = msg.signal.direction.toUpperCase();
           const conv = msg.signal.conviction ? msg.signal.conviction.toUpperCase() : '';
+          const price = msg.signal.price ? `$${msg.signal.price.toFixed(2)}` : '';
           signals.push({
             time: msg.timestamp,
             direction: dir,
             conviction: conv,
+            price: price,
             dirClass: dir.toLowerCase()
           });
         }
+      }
+
+      // Update current action with latest signal
+      if (signals.length > 0) {
+        const latest = signals[0];
+        updateCurrentAction({
+          direction: latest.direction,
+          price: signals[0].price ? parseFloat(signals[0].price.replace('$', '')) : null,
+          conviction: latest.conviction
+        });
       }
 
       if (signals.length === 0) {
@@ -1108,6 +1202,7 @@
         <div class="signal-item ${s.dirClass}">
           <span class="signal-item-dir">${s.direction}</span>
           <div class="signal-item-meta">
+            ${s.price ? `<span class="signal-item-price">${s.price}</span>` : ''}
             ${s.conviction ? `<span class="signal-item-conv">${s.conviction}</span>` : ''}
             <span class="signal-item-time">${s.time}</span>
           </div>
