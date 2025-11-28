@@ -281,17 +281,19 @@ IMPORTANT RULES:
 
    End EVERY response with this JSON on its own line:
 
-   {"direction": "CALL", "conviction": "HIGH"}
+   {"action": "CALL", "price": 582.30, "conviction": "HIGH", "invalidation": 580.00}
 
-   Direction: "CALL", "PUT", or "WAIT"
+   Action: "CALL", "PUT", "EXIT", or "WAIT"
+   Price: Current SPY price at time of recommendation
    Conviction: "HIGH", "MED", or "LOW"
+   Invalidation: Price level that would invalidate this recommendation
 
    Examples:
-   {"direction": "CALL", "conviction": "HIGH"}
-   {"direction": "PUT", "conviction": "MED"}
-   {"direction": "WAIT", "conviction": "LOW"}
+   {"action": "CALL", "price": 582.30, "conviction": "HIGH", "invalidation": 580.00}
+   {"action": "PUT", "price": 585.50, "conviction": "MED", "invalidation": 587.00}
+   {"action": "WAIT", "price": 583.00, "conviction": "LOW", "invalidation": null}
 
-   This MUST be the last line. The UI parses it to show the signal at a glance.
+   This MUST be the last line. The UI parses it to show the action and price.
 """
 
 def create_coordinator_agent() -> Agent:
