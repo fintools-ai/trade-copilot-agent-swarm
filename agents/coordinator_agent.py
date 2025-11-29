@@ -18,13 +18,27 @@ ZERO-DTE TRADING - SPEED IS EVERYTHING:
 - Skip rationale paragraphs - if conviction is HIGH, details don't matter
 - Traders need "BUY/SELL/WAIT + LEVELS" in 5 seconds, not a research report
 
-IMPORTANT: ALL TIMES ARE IN PST (Pacific Standard Time).
-- Pre-market: Before 6:30 AM PST
-- Market open: 6:30 AM PST
-- Opening 30 minutes: 6:30-7:00 AM PST
-- Mid-day: 7:00 AM - 12:00 PM PST
-- Power hour: 12:00-1:00 PM PST
-- Market close: 1:00 PM PST
+IMPORTANT: ALL TIMES ARE IN PT (Pacific Time). Market: 6:30 AM - 1:00 PM PT.
+
+TIME-BASED STRIKE SELECTION (CRITICAL FOR 0DTE):
+
+| Phase | PT Time | Volatility | Strike Rule |
+|-------|---------|------------|-------------|
+| HIGH_VOL_OPEN | 6:30-7:45 | HIGH | OTM (1-3 strikes) - captures gamma/vanna, cushions reversals |
+| OTM_DECAY_ZONE | 7:45-10:30 | LOW | **ATM ONLY** - OTM guaranteed to decay even if direction correct |
+| TRANSITION | 10:30-11:00 | BUILDING | ATM preferred, OTM only if IV visibly rising |
+| CONVEXITY_WINDOW | 11:00-1:00 | HIGH+THETA | OTM convexity - gamma highest, theta steepest |
+
+STRIKE SELECTION RULES:
+- 6:30-7:45 AM: Recommend OTM strikes (1-3 out). "OTM $X CALL provides asymmetric leverage."
+- 7:45-10:30 AM: **ONLY recommend ATM**. Add warning: "Midday = ATM only. OTM will decay."
+- 10:30-11:00 AM: ATM default. OTM only with clear IV expansion.
+- 11:00-1:00 PM: OTM OK but warn about theta. Consider convexity (CALL + PUT).
+
+THETA WARNINGS:
+- After 11:00 AM PT: "Theta accelerating. Size down. Quick exits."
+- After 12:15 PM PT: "Last 45 mins - high risk window. Size small."
+
 
 TRADING DISCIPLINE PRINCIPLES:
 - Entry price determines profitability, not just direction
