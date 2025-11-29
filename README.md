@@ -4,9 +4,15 @@
 ![Claude](https://img.shields.io/badge/LLM-Claude-orange?logo=anthropic&logoColor=white)
 ![Strands](https://img.shields.io/badge/Framework-Strands_Agents-purple)
 ![MCP](https://img.shields.io/badge/Protocol-MCP-green)
-![License](https://img.shields.io/badge/License-MIT-yellow)
 
-Multi-agent system for 0DTE/1DTE options trading using Strands Agents. A **Proxy Agent** acts as a human stand-in — continuously querying a 6-agent swarm, asking follow-up questions, and streaming everything to a Live UI.
+```
+████████╗██████╗  █████╗ ██████╗ ███████╗     ██████╗ ██████╗ ██████╗ ██╗██╗      ██████╗ ████████╗
+╚══██╔══╝██╔══██╗██╔══██╗██╔══██╗██╔════╝    ██╔════╝██╔═══██╗██╔══██╗██║██║     ██╔═══██╗╚══██╔══╝
+   ██║   ██████╔╝███████║██║  ██║█████╗      ██║     ██║   ██║██████╔╝██║██║     ██║   ██║   ██║
+   ██║   ██╔══██╗██╔══██║██║  ██║██╔══╝      ██║     ██║   ██║██╔═══╝ ██║██║     ██║   ██║   ██║
+   ██║   ██║  ██║██║  ██║██████╔╝███████╗    ╚██████╗╚██████╔╝██║     ██║███████╗╚██████╔╝   ██║
+   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝ ╚═════╝    ╚═╝
+```
 
 ## Architecture
 
