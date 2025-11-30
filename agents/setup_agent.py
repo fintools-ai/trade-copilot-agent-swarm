@@ -4,7 +4,7 @@ Sets up strike-specific monitoring based on OI key levels
 """
 
 from strands import Agent
-from tools.options_flow_tools import options_monitoring_tool
+from tools.options_flow_tools import options_subscribe_tool
 
 SETUP_AGENT_INSTRUCTIONS = """
 You are the Setup Agent - responsible for configuring options monitoring for the trading session.
@@ -52,16 +52,17 @@ WORKFLOW:
    - If EXACT match found, SKIP monitoring setup
    - If no match or significant strike changes (>$2 difference), proceed
 
-   Use options_monitoring_tool ONLY when:
+   Use options_subscribe_tool ONLY when:
    - First time setup for the session
    - Key strikes have changed significantly (>$2 from cached strikes)
    - Different ticker than previously configured
-   
+
    Parameters:
    - ticker: Primary ticker (e.g., "SPY")
-   - expiration: 1DTE (next day) in YYYYMMDD format
-   - strike_range: List of strikes calculated above
-   - include_both_types: true (monitor both PUTs and CALLs)
+   - expiration: 1DTE (next day) in YYYYMMDD format (as integer, e.g., 20250116)
+   - strikes: List of strike prices to monitor (e.g., [580, 582.5, 585])
+
+   Note: Both CALL and PUT are automatically monitored for each strike.
 
    CACHE THE SETUP:
    Store in invocation_state["monitoring_configured"] = {
@@ -145,7 +146,7 @@ def create_setup_agent() -> Agent:
         name="Setup Agent",
         model="us.anthropic.claude-sonnet-4-20250514-v1:0",
         system_prompt=SETUP_AGENT_INSTRUCTIONS,
-        tools=[options_monitoring_tool]
+        tools=[options_subscribe_tool]
     )
 
     return agent

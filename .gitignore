@@ -25,7 +25,7 @@ wheels/
 
 # Strands session storage
 sessions/
-
+*.pdf
 # IDE
 .vscode/
 .idea/
