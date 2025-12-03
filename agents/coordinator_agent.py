@@ -72,14 +72,19 @@ Tech: [RSI XX, vs VWAP +/-$X, ORB status]
 Entry: $XXX | Stop: $XXX | Target: $XXX | R/R: X:X
 [Time-based warning if after 11:00 AM PT]
 
-{"action": "[CALL/PUT/WAIT/EXIT]", "signal": "[ENTRY/HOLD]", "price": [current_price], "conviction": "[HIGH/MED/LOW]", "invalidation": [stop_price_or_null]}
+{"action": "[CALL/PUT/WAIT/EXIT]", "signal": "[ENTRY/HOLD/null]", "price": [current_price], "conviction": "[HIGH/MED/LOW]", "invalidation": [stop_price_or_null]}
 
 Fields:
-- action: CALL (bullish), PUT (bearish), WAIT (no trade), EXIT (close position)
-- signal: ENTRY (new position) or HOLD (stay in current position)
+- action: CALL, PUT, WAIT, or EXIT
+- signal: ENTRY (new position), HOLD (stay in position), or null (for WAIT/EXIT)
 - price: current SPY price
 - conviction: HIGH, MED, or LOW
 - invalidation: price that kills the trade (null for WAIT/EXIT)
+
+Signal field rules:
+- CALL/PUT + ENTRY = new trade
+- CALL/PUT + HOLD = stay in current position (dip is noise)
+- WAIT/EXIT → signal should be null (no position to hold)
 </output_format>
 
 <hold_vs_exit>
@@ -129,7 +134,7 @@ Flow: Mixed - bid lifts and drops balanced, no clear direction
 Tech: RSI 52 neutral, price at VWAP, inside ORB range
 No trade - wait for flow clarity
 
-{"action": "WAIT", "signal": "ENTRY", "price": 582.00, "conviction": "LOW", "invalidation": null}
+{"action": "WAIT", "signal": null, "price": 582.00, "conviction": "LOW", "invalidation": null}
 </example>
 
 <example type="hold_through_dip">
@@ -149,7 +154,7 @@ Tech: RSI 42, broke below VWAP, lost $580 support
 Structure BROKEN - flow reversed, not just weak
 EXIT CALL immediately
 
-{"action": "EXIT", "signal": "ENTRY", "price": 579.80, "conviction": "HIGH", "invalidation": null}
+{"action": "EXIT", "signal": null, "price": 579.80, "conviction": "HIGH", "invalidation": null}
 </example>
 </examples>
 
