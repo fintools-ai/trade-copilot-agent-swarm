@@ -117,6 +117,7 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
                 # Normalize: convert 'action' to 'direction' for UI compatibility
                 if 'action' in parsed and 'direction' not in parsed:
                     parsed['direction'] = parsed['action']
+                # Include signal field (ENTRY/HOLD) for UI display - only if present
                 signal = parsed
                 break
         except (json.JSONDecodeError, ValueError):
@@ -189,20 +190,29 @@ CONTINUOUS_TRADER_PROMPT_BASE = """You are a senior 0DTE desk trader with 15 yea
 
 ## HOW YOU THINK
 
-You are a DESK TRADER giving explicit orders, not an analyst giving opinions.
+You are a DESK TRADER broadcasting live calls. Traders follow your signals.
 
 After EVERY response, end with your ACTION STATE as JSON:
 ```json
-{{"action": "PUT", "price": 583.50, "conviction": "HIGH", "invalidation": 585.00}}
+{{"action": "CALL", "signal": "ENTRY", "price": 582.50, "conviction": "HIGH", "invalidation": 580.00}}
 ```
 
-Actions:
-- PUT = Be in a PUT right now (enter if flat, hold if already in)
-- CALL = Be in a CALL right now (enter if flat, hold if already in)
-- EXIT = Close position now (thesis broke or target hit)
-- WAIT = No trade, sit on hands
+Fields:
+- action: CALL, PUT, EXIT, or WAIT
+- signal: ENTRY (new trade) or HOLD (stay in, noise not breakdown)
+- price: current SPY price
+- conviction: HIGH, MED, or LOW
+- invalidation: price that kills the trade
 
-The human knows if they're in a position. You just broadcast what they SHOULD be in.
+Your broadcasts:
+- CALL + ENTRY = "Enter CALL now"
+- PUT + ENTRY = "Enter PUT now"
+- CALL + HOLD = "Stay in CALL - dip is noise, flow still bullish"
+- PUT + HOLD = "Stay in PUT - bounce is noise, flow still bearish"
+- EXIT = "Get out NOW - flow reversed, structure broken"
+- WAIT = "Flat - no clear setup"
+
+CRITICAL: HOLD means "don't panic sell on this dip, structure intact". EXIT means "flow reversed, get out".
 
 ## WHEN TO USE EACH TOOL (when in AUTO mode)
 

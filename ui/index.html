@@ -941,9 +941,14 @@
 
       const dir = signal.direction.toUpperCase();
       const conv = signal.conviction ? signal.conviction.toUpperCase() : '';
+      const sig = signal.signal ? signal.signal.toUpperCase() : '';
 
-      // Update text
-      directionEl.textContent = dir;
+      // Update text - show signal prefix if HOLD
+      if (sig === 'HOLD') {
+        directionEl.textContent = `HOLD ${dir}`;
+      } else {
+        directionEl.textContent = dir;
+      }
       convictionEl.textContent = conv ? `(${conv})` : '';
 
       // Update classes
@@ -1154,9 +1159,14 @@
       const dir = signal.direction.toUpperCase();
       const price = signal.price ? `$${signal.price.toFixed(2)}` : '--';
       const conv = signal.conviction ? signal.conviction.toUpperCase() : '';
+      const sig = signal.signal ? signal.signal.toUpperCase() : '';
 
-      // Update content
-      dirEl.textContent = dir;
+      // Update content - show HOLD prefix if holding
+      if (sig === 'HOLD') {
+        dirEl.textContent = `HOLD ${dir}`;
+      } else {
+        dirEl.textContent = dir;
+      }
       priceEl.textContent = price;
       convEl.textContent = conv;
 
@@ -1177,23 +1187,26 @@
           const dir = msg.signal.direction.toUpperCase();
           const conv = msg.signal.conviction ? msg.signal.conviction.toUpperCase() : '';
           const price = msg.signal.price ? `$${msg.signal.price.toFixed(2)}` : '';
+          const sig = msg.signal.signal ? msg.signal.signal.toUpperCase() : '';
           signals.push({
             time: msg.timestamp,
             direction: dir,
             conviction: conv,
             price: price,
+            signal: sig,
             dirClass: dir.toLowerCase()
           });
         }
       }
 
-      // Update current action with latest signal
+      // Update current action with latest signal (including signal field)
       if (signals.length > 0) {
         const latest = signals[0];
         updateCurrentAction({
           direction: latest.direction,
-          price: signals[0].price ? parseFloat(signals[0].price.replace('$', '')) : null,
-          conviction: latest.conviction
+          price: latest.price ? parseFloat(latest.price.replace('$', '')) : null,
+          conviction: latest.conviction,
+          signal: latest.signal
         });
       }
 
@@ -1202,10 +1215,10 @@
         return;
       }
 
-      // Render signals (newest at top)
+      // Render signals (newest at top) - show HOLD prefix if applicable
       panelList.innerHTML = signals.map(s => `
         <div class="signal-item ${s.dirClass}">
-          <span class="signal-item-dir">${s.direction}</span>
+          <span class="signal-item-dir">${s.signal === 'HOLD' ? 'HOLD' : s.direction}</span>
           <div class="signal-item-meta">
             ${s.price ? `<span class="signal-item-price">${s.price}</span>` : ''}
             ${s.conviction ? `<span class="signal-item-conv">${s.conviction}</span>` : ''}

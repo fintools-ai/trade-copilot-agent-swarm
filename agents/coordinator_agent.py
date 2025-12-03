@@ -66,33 +66,61 @@ LOW: Order Flow unclear or mixed → Output WAIT
 <output_format>
 Respond in EXACTLY this format (10 lines max):
 
-SPY $[price] | [CALL/PUT/WAIT] | [HIGH/MED]
+SPY $[price] | [CALL/PUT/WAIT/EXIT/HOLD] | [HIGH/MED]
 Flow: [describe order flow - buying/selling/mixed]
 Tech: [RSI XX, vs VWAP +/-$X, ORB status]
 Entry: $XXX | Stop: $XXX | Target: $XXX | R/R: X:X
 [Time-based warning if after 11:00 AM PT]
 
-{"action": "[CALL/PUT/WAIT]", "price": [current_price], "conviction": "[HIGH/MED/LOW]", "invalidation": [stop_price_or_null]}
+{"action": "[CALL/PUT/WAIT/EXIT]", "signal": "[ENTRY/HOLD]", "price": [current_price], "conviction": "[HIGH/MED/LOW]", "invalidation": [stop_price_or_null]}
+
+Fields:
+- action: CALL (bullish), PUT (bearish), WAIT (no trade), EXIT (close position)
+- signal: ENTRY (new position) or HOLD (stay in current position)
+- price: current SPY price
+- conviction: HIGH, MED, or LOW
+- invalidation: price that kills the trade (null for WAIT/EXIT)
 </output_format>
 
+<hold_vs_exit>
+CRITICAL: Distinguish NOISE from BREAKDOWN. Desk traders hold through noise.
+
+HOLD (stay in trade):
+- Price dipped but ABOVE invalidation level
+- Order Flow still directional (buying > selling for CALL position)
+- Minor pullback, structure intact
+- Normal profit-taking, not distribution
+- "Shakeout" - price dips to stop hunt then recovers
+
+EXIT (get out):
+- Price BELOW invalidation level (structure broken)
+- Order Flow REVERSED (not just weakened - actually flipped direction)
+- After 12:45 PM PT (exit before expiry regardless)
+- Flow that supported entry is GONE (not weak, GONE)
+
+KEY INSIGHT: A dip with intact flow = HOLD. A dip with reversed flow = EXIT.
+If flow is still buying but price pulled back = normal, hold.
+If flow flipped to selling = real reversal, exit.
+</hold_vs_exit>
+
 <examples>
-<example type="clear_bullish">
+<example type="clear_bullish_entry">
 SPY $582.30 | CALL | HIGH
 Flow: Strong buying pressure, consistent bid lifts
 Tech: RSI 58, +$0.80 vs VWAP, ORB breakout confirmed
 Entry: $582.50 | Stop: $580.00 | Target: $585.00 | R/R: 2.5:1
 
-{"action": "CALL", "price": 582.30, "conviction": "HIGH", "invalidation": 580.00}
+{"action": "CALL", "signal": "ENTRY", "price": 582.30, "conviction": "HIGH", "invalidation": 580.00}
 </example>
 
-<example type="clear_bearish">
+<example type="clear_bearish_entry">
 SPY $583.50 | PUT | HIGH
 Flow: Heavy selling, ask drops dominating
 Tech: RSI 38, -$1.20 vs VWAP, ORB breakdown
 Entry: $583.00 | Stop: $585.00 | Target: $580.00 | R/R: 1.5:1
 ⚠️ After 11 AM - theta accelerating, quick exit
 
-{"action": "PUT", "price": 583.50, "conviction": "HIGH", "invalidation": 585.00}
+{"action": "PUT", "signal": "ENTRY", "price": 583.50, "conviction": "HIGH", "invalidation": 585.00}
 </example>
 
 <example type="mixed_signals">
@@ -101,17 +129,27 @@ Flow: Mixed - bid lifts and drops balanced, no clear direction
 Tech: RSI 52 neutral, price at VWAP, inside ORB range
 No trade - wait for flow clarity
 
-{"action": "WAIT", "price": 582.00, "conviction": "LOW", "invalidation": null}
+{"action": "WAIT", "signal": "ENTRY", "price": 582.00, "conviction": "LOW", "invalidation": null}
 </example>
 
-<example type="flow_vs_tech_conflict">
-SPY $581.50 | CALL | MED
-Flow: Moderate buying pressure (flow wins)
-Tech: RSI 62 elevated, slightly above VWAP (minor concern)
-Entry: $581.50 | Stop: $580.00 | Target: $584.00 | R/R: 1.7:1
-Reduced conviction due to tech divergence
+<example type="hold_through_dip">
+SPY $580.50 | HOLD | MED
+Flow: Still buying pressure, bid lifts continue despite dip
+Tech: RSI 48 (pulled back), price dipped but ABOVE $580 stop
+Structure intact - normal pullback, flow still bullish
+HOLD - not a breakdown, just noise
 
-{"action": "CALL", "price": 581.50, "conviction": "MED", "invalidation": 580.00}
+{"action": "CALL", "signal": "HOLD", "price": 580.50, "conviction": "MED", "invalidation": 580.00}
+</example>
+
+<example type="exit_signal">
+SPY $579.80 | EXIT | HIGH
+Flow: Buying pressure GONE, flow flipped to selling
+Tech: RSI 42, broke below VWAP, lost $580 support
+Structure BROKEN - flow reversed, not just weak
+EXIT CALL immediately
+
+{"action": "EXIT", "signal": "ENTRY", "price": 579.80, "conviction": "HIGH", "invalidation": null}
 </example>
 </examples>
 
