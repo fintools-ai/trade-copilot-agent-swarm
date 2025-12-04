@@ -254,8 +254,12 @@
     .qa-sender.flow { color: #00ccff; }
     .qa-sender.tech { color: #cc99ff; }
     .qa-sender.coord { color: #ff9900; }
+    .qa-sender.error { color: #ff0000; }
 
     .qa-time { color: #444; font-size: 9px; }
+
+    .qa-item.error { background: #220000; border-left: 2px solid #ff0000; }
+    .qa-item.error .qa-body { color: #ff6666; }
 
     .qa-body {
       color: #bbb;
@@ -716,7 +720,8 @@
         AGENT_QUESTION: { sender: 'AGENT', cls: 'agent' },
         FLOW_RESPONSE: { sender: 'FLOW', cls: 'flow' },
         TECH_RESPONSE: { sender: 'TECH', cls: 'tech' },
-        SWARM_RESPONSE: { sender: 'COORD', cls: 'coord' }  // Coordinator's final output
+        SWARM_RESPONSE: { sender: 'COORD', cls: 'coord' },
+        SWARM_ERROR: { sender: 'ERROR', cls: 'error' }
       };
 
       let html = messages.map(m => {
@@ -729,7 +734,8 @@
           const label = m.signal.signal === 'HOLD' ? 'HOLD' : sigAction;
           signalHtml = `<span class="qa-signal ${dir}">${label} ${m.signal.conviction || ''}</span>`;
         }
-        return `<div class="qa-item ${isAgent ? 'agent' : ''}">
+        const isError = m.type === 'SWARM_ERROR';
+        return `<div class="qa-item ${isAgent ? 'agent' : ''} ${isError ? 'error' : ''}">
           <div class="qa-header">
             <span class="qa-sender ${cfg.cls}">${cfg.sender}</span>
             <span class="qa-time">${m.timestamp}</span>
@@ -870,6 +876,11 @@
         renderHistory();
         // Clear stale warning
         document.getElementById('warning').textContent = '';
+      } else if (msg.type === 'SWARM_ERROR') {
+        // Show error in warning bar
+        const errMsg = msg.signal && msg.signal.error ? msg.signal.error : msg.content;
+        document.getElementById('warning').textContent = '⚠️ ERROR: ' + (errMsg || 'Unknown error').substring(0, 80);
+        document.getElementById('warning').style.color = '#ff0000';
       } else if (msg.type === 'SWARM_RESPONSE') {
         // CRITICAL: Coordinator response without parsed signal - show warning
         document.getElementById('warning').textContent = '⚠️ SIGNAL PARSE FAILED - READ TEXT';

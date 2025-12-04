@@ -154,7 +154,15 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
 
     # Call the swarm with context
     swarm = get_swarm()
-    response = swarm.ask(query_with_context, fast_mode=fast_mode)
+    try:
+        response = swarm.ask(query_with_context, fast_mode=fast_mode)
+    except Exception as e:
+        error_msg = str(e)
+        # Publish error to UI
+        error_signal = {"action": "ERROR", "conviction": "HIGH", "error": error_msg[:200]}
+        stream_to_ui("SWARM_ERROR", f"⚠️ SWARM ERROR: {error_msg}", error_signal)
+        console.print(f"[bold red]Swarm error: {error_msg}[/bold red]")
+        raise  # Re-raise so the outer loop can handle restart
 
     # Extract signal from response - look for JSON with action or direction
     signal = None
