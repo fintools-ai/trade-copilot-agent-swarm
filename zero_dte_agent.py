@@ -150,7 +150,9 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
         query_with_context = query
 
     # Stream the agent's question to UI immediately (without context noise)
-    stream_to_ui("AGENT_QUESTION", query)
+    # Include query_start_ts for latency calculation
+    query_start_ts = time.time()
+    stream_to_ui("AGENT_QUESTION", query, {"query_start_ts": query_start_ts})
 
     # Call the swarm with context
     swarm = get_swarm()
@@ -159,7 +161,7 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     except Exception as e:
         error_msg = str(e)
         # Publish error to UI
-        error_signal = {"action": "ERROR", "conviction": "HIGH", "error": error_msg[:200]}
+        error_signal = {"action": "ERROR", "conviction": "HIGH", "error": error_msg[:200], "query_start_ts": query_start_ts}
         stream_to_ui("SWARM_ERROR", f"⚠️ SWARM ERROR: {error_msg}", error_signal)
         console.print(f"[bold red]Swarm error: {error_msg}[/bold red]")
         raise  # Re-raise so the outer loop can handle restart

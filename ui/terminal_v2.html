@@ -580,7 +580,7 @@
         <span style="color:#444">| 0DTE Desk v2</span>
       </span>
       <span class="warning" id="warning"></span>
-      <span id="status">Connected</span>
+      <span><span id="latency-display" style="color:#888;">--</span> | <span id="status">Connected</span></span>
     </div>
   </div>
 
@@ -589,6 +589,8 @@
     const signalHistory = [];
     const marketDataHistory = [];
     let lastDataFetchTs = 0;  // Track when data was fetched
+    let lastQueryStartTs = 0;  // Track when query started for latency
+    let lastLatency = 0;  // Last measured latency in seconds
 
     // Escape HTML to prevent XSS
     function escapeHtml(text) {
@@ -864,6 +866,29 @@
           document.getElementById('spy-price').textContent = '$' + d.price.toFixed(2);
         }
         return; // Don't add to messages array (not a Q&A message)
+      }
+
+      // Track query start time for latency calculation
+      if (msg.type === 'AGENT_QUESTION' && msg.signal && msg.signal.query_start_ts) {
+        lastQueryStartTs = msg.signal.query_start_ts;
+      }
+
+      // Calculate and display latency when response arrives
+      if ((msg.type === 'SWARM_RESPONSE' || msg.type === 'SWARM_ERROR') && lastQueryStartTs > 0) {
+        const now = Date.now() / 1000;
+        lastLatency = now - lastQueryStartTs;
+        const latencyEl = document.getElementById('latency-display');
+        if (lastLatency < 15) {
+          latencyEl.textContent = `${lastLatency.toFixed(1)}s`;
+          latencyEl.style.color = '#00ff00';  // Green - fast
+        } else if (lastLatency < 30) {
+          latencyEl.textContent = `${lastLatency.toFixed(1)}s`;
+          latencyEl.style.color = '#ff9900';  // Orange - moderate
+        } else {
+          latencyEl.textContent = `${lastLatency.toFixed(1)}s`;
+          latencyEl.style.color = '#ff0000';  // Red - slow
+        }
+        lastQueryStartTs = 0;  // Reset for next query
       }
 
       messages.push(msg);
