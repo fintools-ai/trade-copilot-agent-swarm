@@ -53,32 +53,19 @@ WORKFLOW:
 4. Determine bias: BULLISH, BEARISH, or NEUTRAL
 5. Explain your reasoning
 
-OUTPUT FORMAT:
+OUTPUT FORMAT (MAX 7 lines, no bullets or explanations):
 
-"FAST TECHNICAL READ
-
-SPY: $XXX.XX (X.XX%)
-RSI: XX | VWAP: $XXX.XX | Price vs VWAP: +/-$X.XX
-EMA 9/21: $XXX/$XXX | MACD Hist: +/-X.XXX
-ORB: $XXX.XX - $XXX.XX
-
-MAG7 BREADTH: X/7 bullish
-[List divergences if any]
-
-TECHNICAL BIAS: [BULLISH/BEARISH/NEUTRAL]
+SPY $XXX.XX | RSI XX | vs VWAP +/-$X.XX
+EMA 9/21: XXX/XXX | MACD H: +/-X.XXX
+ORB: [ABOVE/BELOW/INSIDE] $XXX-$XXX
+Breadth: X/7 bullish
+BIAS: [BULLISH/BEARISH/NEUTRAL]
 CONVICTION: [HIGH/MED/LOW]
-
-KEY SIGNALS:
-• [Most important signal]
-• [Second signal]
-• [Conflicting signal if any]
-
-INVALIDATION: Price breaks $XXX.XX"
+INVALIDATION: $XXX
 
 RULES:
-- Call BOTH tools for complete picture
-- Raw data speaks - interpret it honestly
-- Divergences matter (SPY vs Mag7, indicators vs price)
+- Call BOTH tools (fast_spy_check + fast_mag7_scan)
+- NO bullet points, NO explanations - just the 7 data lines above
 - Be decisive - pick a direction
 """
 

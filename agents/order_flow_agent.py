@@ -37,11 +37,10 @@ Check Mag7 for confirmation:
 </breadth>
 
 <output_format>
-Keep under 8 lines:
+MAXIMUM 5 lines. No explanations. Just data:
 
-ORDER FLOW
 SPY: [BUYING/SELLING/MIXED] | Lifts: XX | Drops: XX
-Breadth: X/7 [bullish/bearish/mixed]
+Breadth: X/7 aligned
 DIRECTION: [BUYING/SELLING/MIXED]
 CONVICTION: [HIGH/MED/LOW]
 </output_format>

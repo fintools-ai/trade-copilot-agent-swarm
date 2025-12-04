@@ -84,6 +84,39 @@ def get_position_context() -> str:
         return ""
 
 
+def get_last_recommendation() -> dict:
+    """
+    Get the last recommendation from Redis history for continuity.
+    Returns the most recent signal with action, conviction, price, etc.
+    """
+    try:
+        stream = get_stream()
+        # Get last few events (newest first)
+        events = stream.redis.lrange("zero_dte:history", 0, 10)
+
+        for event_json in events:
+            try:
+                event = json.loads(event_json)
+                if event.get("signal") and event.get("type") == "SWARM_RESPONSE":
+                    sig = event["signal"]
+                    return {
+                        "action": sig.get("action") or sig.get("direction"),
+                        "signal": sig.get("signal"),
+                        "conviction": sig.get("conviction"),
+                        "price": sig.get("price"),
+                        "entry": sig.get("entry"),
+                        "stop": sig.get("stop"),
+                        "target": sig.get("target"),
+                        "time": event.get("timestamp")
+                    }
+            except (json.JSONDecodeError, KeyError):
+                continue
+        return {}
+    except Exception as e:
+        console.print(f"[red]Redis error reading last recommendation: {e}[/red]")
+        return {}
+
+
 def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     """Internal helper to call swarm and stream to UI."""
     # Check for UI mode override - ALWAYS check fresh from Redis
@@ -107,12 +140,21 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
         # Auto mode - use agent's decision
         console.print(f"[dim]>>> EXECUTING: {'FAST' if fast_mode else 'FULL'} MODE (auto - agent decided) <<<[/dim]")
 
-    # Stream the agent's question to UI immediately
+    # Get previous recommendation for continuity
+    last_rec = get_last_recommendation()
+    if last_rec and last_rec.get("action"):
+        prev_context = f"\n\n[PREVIOUS: {last_rec['action']} {last_rec.get('signal', '')} @ {last_rec.get('time', '')} | Conv: {last_rec.get('conviction', '')} | Entry: {last_rec.get('entry', '')} | Stop: {last_rec.get('stop', '')}]"
+        query_with_context = query + prev_context
+        console.print(f"[dim]Previous: {last_rec['action']} {last_rec.get('conviction', '')}[/dim]")
+    else:
+        query_with_context = query
+
+    # Stream the agent's question to UI immediately (without context noise)
     stream_to_ui("AGENT_QUESTION", query)
 
-    # Call the swarm
+    # Call the swarm with context
     swarm = get_swarm()
-    response = swarm.ask(query, fast_mode=fast_mode)
+    response = swarm.ask(query_with_context, fast_mode=fast_mode)
 
     # Extract signal from response - look for JSON with action or direction
     signal = None
