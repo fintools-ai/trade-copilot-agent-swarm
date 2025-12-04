@@ -73,6 +73,17 @@ def get_mode_override() -> str:
         return DEFAULT_MODE
 
 
+def get_position_context() -> str:
+    """Get the custom position/question from Redis (if set by user)."""
+    try:
+        stream = get_stream()
+        position = stream.redis.get("zero_dte:position")
+        return position.strip() if position else ""
+    except Exception as e:
+        console.print(f"[red]Redis error reading position: {e}[/red]")
+        return ""
+
+
 def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     """Internal helper to call swarm and stream to UI."""
     # Check for UI mode override - ALWAYS check fresh from Redis
@@ -130,7 +141,7 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
 
     # Pause before next tool call
-    time.sleep(5)
+    time.sleep(1)
 
     return response
 
@@ -296,21 +307,113 @@ START_INSTRUCTIONS = {
     "full": "Call analyze_market for complete analysis - should we go CALL or PUT?"
 }
 
+# Position validation prompt - used when user sets a custom question
+POSITION_VALIDATION_PROMPT = """You are a senior 0DTE desk trader helping validate a specific position/question.
+
+## USER'S QUESTION/POSITION
+{position}
+
+## YOUR MISSION
+The user has a specific question or position they need validated. Your ONLY job is to continuously monitor and answer THIS question.
+
+## YOUR TOOLS
+1. `analyze_market` - Full 6-agent analysis (25-60s). Use for deep validation.
+2. `fast_follow` - Quick 2-agent check (8-12s). Use for monitoring.
+
+{mode_instruction}
+
+## HOW TO RESPOND
+
+Every response must directly address the user's question. Structure:
+
+1. CURRENT STATE: What's the market doing RIGHT NOW?
+2. VALIDATION: Does current flow/technicals support their position?
+3. VERDICT: Clear answer - HOLD, CUT, or ADJUST
+4. RISK: What could invalidate this in next 5-10 mins?
+
+After EVERY response, end with your ACTION STATE as JSON:
+```json
+{{"action": "HOLD", "signal": "HOLD", "price": 582.50, "conviction": "HIGH", "verdict": "Hold position - flow still supports"}}
+```
+
+Fields:
+- action: HOLD (stay in), EXIT (cut now), or ADJUST (modify position)
+- signal: HOLD (position still valid) or EXIT (position invalidated)
+- price: current SPY price
+- conviction: HIGH, MED, or LOW
+- verdict: 1-sentence answer to user's question
+
+## YOUR WORKFLOW
+
+1. FIRST: Full analysis to understand their position context
+2. THEN: Quick checks every 30-60s to validate
+3. REACT: If thesis breaks, tell them IMMEDIATELY to cut
+
+## RULES
+
+- EVERY response must answer their question
+- Be DIRECT: "HOLD - flow supports" or "CUT NOW - flow reversed"
+- You are validating THEIR position, not finding new trades
+- NEVER stop monitoring until user clears the position
+- Always call a tool after each response
+
+START NOW. Analyze the market and answer their question."""
+
+
+def get_prompt_for_position(position: str, mode: str) -> str:
+    """Generate the system prompt for position validation mode."""
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(pt_tz)
+    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
+
+    timestamp_header = f"""<current_time>
+Current Time: {current_time_full}
+Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
+</current_time>
+
+"""
+
+    mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["auto"])
+    prompt = POSITION_VALIDATION_PROMPT.format(
+        position=position,
+        mode_instruction=mode_instruction
+    )
+    return timestamp_header + prompt
+
 
 def get_prompt_for_mode(mode: str) -> str:
     """Generate the system prompt based on current mode override."""
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(pt_tz)
+    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
+
+    # Inject timestamp into system prompt
+    timestamp_header = f"""<current_time>
+Current Time: {current_time_full}
+Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
+</current_time>
+
+"""
+
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["auto"])
     start_instruction = START_INSTRUCTIONS.get(mode, START_INSTRUCTIONS["auto"])
-    return CONTINUOUS_TRADER_PROMPT_BASE.format(
+    base_prompt = CONTINUOUS_TRADER_PROMPT_BASE.format(
         mode_instruction=mode_instruction,
         start_instruction=start_instruction
     )
+    return timestamp_header + base_prompt
 
 
-def create_zero_dte_agent(mode: str = "auto") -> Agent:
-    """Create the Zero-DTE Agent with mode-aware prompt."""
-    prompt = get_prompt_for_mode(mode)
-    console.print(f"[cyan]Creating agent with mode: {mode}[/cyan]")
+def create_zero_dte_agent(mode: str = "auto", position: str = "") -> Agent:
+    """Create the Zero-DTE Agent with mode-aware or position-aware prompt."""
+    if position:
+        prompt = get_prompt_for_position(position, mode)
+        console.print(f"[cyan]Creating agent in VALIDATION mode: {mode}[/cyan]")
+        console.print(f"[green]Position: {position[:60]}...[/green]" if len(position) > 60 else f"[green]Position: {position}[/green]")
+    else:
+        prompt = get_prompt_for_mode(mode)
+        console.print(f"[cyan]Creating agent in SCANNING mode: {mode}[/cyan]")
+
     return Agent(
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=prompt,
@@ -324,22 +427,38 @@ def run_zero_dte_agent():
 
     The agent calls call_swarm() repeatedly, and each call
     streams both the question and response to the UI.
+
+    Modes:
+    - SCANNING: Looking for new 0DTE setups (default)
+    - VALIDATING: Monitoring a specific position/question set by user
     """
     console.print(Panel.fit(
         "[bold cyan]Zero-DTE Agent - Continuous Thinking Mode[/bold cyan]\n\n"
         "[green]Mode:[/green] Runs forever, never stops\n"
         "[yellow]Behavior:[/yellow] Queries swarm, asks follow-ups, streams everything\n"
         "[blue]Output:[/blue] Every exchange streams to UI via SSE\n\n"
+        "[magenta]Position Mode:[/magenta] Set a custom question in the UI to switch from\n"
+        "                scanning to validating your specific position.\n\n"
         "[dim]Press Ctrl+C to stop[/dim]",
         title="[bold]Starting Agent[/bold]",
         border_style="cyan"
     ))
 
-    # Track current mode to detect changes - loads from Redis (persists across restarts)
+    # Track current state - loads from Redis (persists across restarts)
     current_mode = get_mode_override()
+    current_position = get_position_context()
+
     console.print(f"[bold green]Loaded mode from Redis: {current_mode}[/bold green]")
-    agent = create_zero_dte_agent(current_mode)
-    prompt = f"Start monitoring SPY for 0DTE trading. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
+    if current_position:
+        console.print(f"[bold green]Loaded position from Redis: {current_position[:50]}...[/bold green]")
+
+    agent = create_zero_dte_agent(current_mode, current_position)
+
+    # Set initial prompt based on whether we have a position
+    if current_position:
+        prompt = f"User has a position/question: '{current_position}'. Analyze the market and validate their position now."
+    else:
+        prompt = f"Start monitoring SPY for 0DTE trading. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
     pt_tz = ZoneInfo("America/Los_Angeles")
     market_close_hour = 13  # 1PM PT
@@ -352,13 +471,37 @@ def run_zero_dte_agent():
                 console.print("\n[bold yellow]Market closed (1PM PT) - stopping agent[/bold yellow]")
                 break
 
-            # Check if mode changed - recreate agent with new prompt
+            # Check for changes in mode or position
             new_mode = get_mode_override()
-            if new_mode != current_mode:
+            new_position = get_position_context()
+
+            # Detect if we need to recreate the agent
+            need_recreate = False
+            mode_changed = new_mode != current_mode
+            position_changed = new_position != current_position
+
+            if mode_changed:
                 console.print(f"\n[bold yellow]Mode changed: {current_mode} -> {new_mode}[/bold yellow]")
                 current_mode = new_mode
-                agent = create_zero_dte_agent(current_mode)
-                prompt = f"Mode changed to {current_mode}. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
+                need_recreate = True
+
+            if position_changed:
+                if new_position and not current_position:
+                    console.print(f"\n[bold green]>>> POSITION SET - Switching to VALIDATION mode <<<[/bold green]")
+                    console.print(f"[green]Question: {new_position}[/green]")
+                elif not new_position and current_position:
+                    console.print(f"\n[bold yellow]>>> POSITION CLEARED - Returning to SCANNING mode <<<[/bold yellow]")
+                else:
+                    console.print(f"\n[bold yellow]Position updated[/bold yellow]")
+                current_position = new_position
+                need_recreate = True
+
+            if need_recreate:
+                agent = create_zero_dte_agent(current_mode, current_position)
+                if current_position:
+                    prompt = f"User updated their position/question: '{current_position}'. Analyze and validate now."
+                else:
+                    prompt = f"Returned to scanning mode. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
             try:
                 # Agent should run continuously, but if it returns, restart it
@@ -366,14 +509,20 @@ def run_zero_dte_agent():
 
                 # If agent returns without error, it stopped - restart it
                 console.print("\n[yellow]Agent stopped - restarting...[/yellow]")
-                prompt = "Continue monitoring. Call your next tool now."
+                if current_position:
+                    prompt = f"Continue validating the user's position: '{current_position}'. Call your next tool now."
+                else:
+                    prompt = "Continue monitoring. Call your next tool now."
                 time.sleep(2)
 
             except Exception as e:
                 console.print(f"\n[yellow]Agent error: {e}[/yellow]")
                 console.print("[cyan]Restarting in 3 seconds...[/cyan]")
                 time.sleep(3)
-                prompt = f"Resume monitoring SPY. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
+                if current_position:
+                    prompt = f"Resume validating position: '{current_position}'. Call your tool now."
+                else:
+                    prompt = f"Resume monitoring SPY. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
     except KeyboardInterrupt:
         console.print("\n[bold red]Stopping Zero-DTE Agent...[/bold red]")

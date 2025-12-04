@@ -28,6 +28,7 @@ from agents.options_flow_agent import create_options_flow_agent
 from agents.financial_data_agent import create_financial_data_agent
 from agents.financial_data_agent_fast import create_fast_financial_agent
 from agents.coordinator_agent import create_coordinator_agent
+from redis_stream import publish_event
 
 console = Console()
 
@@ -283,6 +284,10 @@ Cross-validate signals across all 4 agents, identify the best setup, and provide
 
             progress.update(task, description="[green]Analysis Complete!")
 
+        # Publish individual agent responses to Redis for terminal_v2
+        if hasattr(result, 'results') and result.results:
+            self._publish_agent_results(result.results, fast_mode)
+
         # Extract coordinator's final recommendation - check NodeResult structure
         if hasattr(result, 'results') and result.results:
             coordinator_response = result.results.get("coordinator")
@@ -336,6 +341,49 @@ Cross-validate signals across all 4 agents, identify the best setup, and provide
         ))
 
         return final_recommendation
+
+    def _extract_node_text(self, node_result) -> str:
+        """Extract text content from a graph node result."""
+        for attr in ['content', 'message', 'output', 'result', 'data', 'response']:
+            if hasattr(node_result, attr):
+                value = getattr(node_result, attr)
+                if value:
+                    if isinstance(value, list) and len(value) > 0:
+                        if hasattr(value[0], 'text'):
+                            return value[0].text
+                        return str(value[0])
+                    elif isinstance(value, dict):
+                        if 'content' in value:
+                            return value['content'][0]['text'] if isinstance(value['content'], list) else value['content']
+                        elif 'text' in value:
+                            return value['text']
+                    elif isinstance(value, str):
+                        return value
+                    else:
+                        return str(value)
+        return ""
+
+    def _publish_agent_results(self, results: dict, fast_mode: bool) -> None:
+        """
+        Publish individual agent results to Redis for terminal_v2.
+
+        Args:
+            results: Dict of node_name -> NodeResult from graph execution
+            fast_mode: Whether running in fast mode
+        """
+        # Map node names to event types for terminal_v2
+        node_to_event = {
+            "order_flow": "FLOW_RESPONSE",
+            "financial_data": "TECH_RESPONSE",
+            "financial_data_fast": "TECH_RESPONSE",
+            "coordinator": "COORD_RESPONSE",
+        }
+
+        for node_name, event_type in node_to_event.items():
+            if node_name in results:
+                text = self._extract_node_text(results[node_name])
+                if text:
+                    publish_event(event_type, text)
 
     def _extract_ticker(self, query: str) -> str:
         """

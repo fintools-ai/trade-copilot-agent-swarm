@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0DTE DESK</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      background: #000;
+      color: #ff9900;
+      font-size: 11px;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .terminal {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+    }
+
+    /* TOP BAR */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 8px;
+      background: #0a0a0a;
+      border-bottom: 1px solid #333;
+    }
+
+    .top-bar span { color: #666; }
+    .top-bar .brand { color: #ff9900; font-weight: bold; }
+    .top-bar .price { color: #fff; font-weight: bold; font-size: 13px; }
+    .top-bar .up { color: #00ff00; }
+    .top-bar .down { color: #ff0000; }
+    .live-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: #ff0000;
+      border-radius: 50%;
+      margin-right: 4px;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* MAIN */
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #000;
+    }
+
+    .resizer {
+      width: 3px;
+      background: #222;
+      cursor: col-resize;
+      flex-shrink: 0;
+    }
+    .resizer:hover { background: #ff9900; }
+
+    .panel-header {
+      padding: 4px 6px;
+      background: #0a0a0a;
+      border-bottom: 1px solid #333;
+      color: #ff9900;
+      font-weight: bold;
+      font-size: 10px;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
+    }
+    .panel-body::-webkit-scrollbar { width: 4px; }
+    .panel-body::-webkit-scrollbar-thumb { background: #333; }
+
+    /* LEFT PANEL - AGENT HISTORIES */
+    .left-panel {
+      width: 300px;
+      min-width: 200px;
+      max-width: 450px;
+      border-right: 1px solid #222;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .agent-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      border-bottom: 1px solid #222;
+    }
+
+    .agent-header {
+      padding: 4px 6px;
+      background: #0a0a0a;
+      border-bottom: 1px solid #222;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .agent-title { font-size: 10px; font-weight: bold; text-transform: uppercase; }
+    .agent-title.flow { color: #00ccff; }
+    .agent-title.tech { color: #cc99ff; }
+    .agent-title.coord { color: #ff9900; }
+
+    .agent-badge {
+      font-size: 9px;
+      padding: 1px 6px;
+      font-weight: bold;
+    }
+    .agent-badge.bullish { background: #003300; color: #00ff00; }
+    .agent-badge.bearish { background: #330000; color: #ff0000; }
+    .agent-badge.neutral { background: #222; color: #888; }
+
+    .agent-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
+    }
+
+    .agent-entry {
+      padding: 4px 6px;
+      margin-bottom: 4px;
+      background: #0a0a0a;
+      border-left: 2px solid #333;
+    }
+    .agent-entry.latest { border-left-color: #ff9900; background: #111; }
+    .agent-entry.bullish { border-left-color: #00ff00; }
+    .agent-entry.bearish { border-left-color: #ff0000; }
+
+    .agent-entry-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 2px;
+    }
+
+    .agent-entry-time { font-size: 9px; color: #555; }
+    .agent-entry-badge {
+      font-size: 8px;
+      padding: 1px 4px;
+      font-weight: bold;
+    }
+    .agent-entry-badge.bullish { background: #002200; color: #00ff00; }
+    .agent-entry-badge.bearish { background: #220000; color: #ff0000; }
+    .agent-entry-badge.neutral { background: #111; color: #666; }
+
+    .agent-entry-body {
+      font-size: 10px;
+      color: #aaa;
+      white-space: pre-wrap;
+      line-height: 1.4;
+    }
+
+    /* CENTER PANEL - SIGNAL + Q&A */
+    .center-panel {
+      flex: 1;
+      min-width: 350px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* BIG SIGNAL */
+    .signal-box {
+      padding: 8px 12px;
+      background: #0a0a0a;
+      border-bottom: 1px solid #333;
+    }
+
+    .signal-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .signal-dir {
+      font-size: 32px;
+      font-weight: bold;
+      letter-spacing: 3px;
+    }
+    .signal-dir.call { color: #00ff00; }
+    .signal-dir.put { color: #ff0000; }
+    .signal-dir.wait { color: #666; }
+    .signal-dir.hold { color: #ff9900; }
+    .signal-dir.exit { color: #ff6600; }
+
+    .signal-meta {
+      text-align: right;
+    }
+
+    .signal-conv {
+      font-size: 12px;
+      font-weight: bold;
+      padding: 2px 8px;
+    }
+    .signal-conv.high { background: #332200; color: #ff9900; }
+    .signal-conv.med { background: #222; color: #888; }
+    .signal-conv.low { background: #111; color: #555; }
+
+    .signal-type { font-size: 10px; color: #666; margin-top: 2px; }
+
+    .levels-row {
+      display: flex;
+      gap: 16px;
+      margin-top: 8px;
+      font-size: 10px;
+    }
+
+    .level-item .label { color: #666; }
+    .level-item .entry { color: #3399ff; }
+    .level-item .stop { color: #ff0000; }
+    .level-item .target { color: #00ff00; }
+    .level-item .rr { color: #ff9900; }
+
+    /* Q&A STREAM */
+    .qa-stream {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+    }
+
+    .qa-item {
+      padding: 6px;
+      border-bottom: 1px solid #111;
+      margin-bottom: 4px;
+    }
+
+    .qa-header {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+
+    .qa-sender { font-weight: bold; font-size: 10px; }
+    .qa-sender.agent { color: #3399ff; }
+    .qa-sender.flow { color: #00ccff; }
+    .qa-sender.tech { color: #cc99ff; }
+    .qa-sender.coord { color: #ff9900; }
+
+    .qa-time { color: #444; font-size: 9px; }
+
+    .qa-body {
+      color: #bbb;
+      white-space: pre-wrap;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+
+    .qa-item.agent .qa-body {
+      color: #6699cc;
+      font-style: italic;
+    }
+
+    .qa-signal {
+      display: inline-block;
+      margin-top: 4px;
+      padding: 2px 8px;
+      font-weight: bold;
+      font-size: 10px;
+    }
+    .qa-signal.call { background: #002200; color: #00ff00; border: 1px solid #00ff00; }
+    .qa-signal.put { background: #220000; color: #ff0000; border: 1px solid #ff0000; }
+    .qa-signal.wait { background: #111; color: #666; border: 1px solid #666; }
+    .qa-signal.hold { background: #221100; color: #ff9900; border: 1px solid #ff9900; }
+    .qa-signal.exit { background: #221100; color: #ff6600; border: 1px solid #ff6600; }
+
+    /* RIGHT PANEL - DATA + HISTORY */
+    .right-panel {
+      width: 280px;
+      min-width: 200px;
+      max-width: 400px;
+      border-left: 1px solid #222;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* DATA ROWS */
+    .row {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px;
+      border-bottom: 1px dotted #1a1a1a;
+    }
+    .row .label { color: #666; }
+    .row .value { color: #ccc; }
+    .row .up { color: #00ff00; }
+    .row .down { color: #ff0000; }
+    .row .highlight { color: #ff9900; }
+
+    /* MARKET DATA HISTORY */
+    .market-entry {
+      padding: 4px 6px;
+      margin-bottom: 4px;
+      background: #0a0a0a;
+      border-left: 2px solid #333;
+    }
+    .market-entry.latest { border-left-color: #ff9900; background: #111; }
+
+    .market-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      font-size: 9px;
+    }
+
+    /* SIGNAL HISTORY TABLE */
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+    }
+
+    .history-table th {
+      background: #0a0a0a;
+      color: #ff9900;
+      padding: 3px 4px;
+      text-align: left;
+      border-bottom: 1px solid #333;
+      font-weight: normal;
+      text-transform: uppercase;
+      font-size: 9px;
+    }
+
+    .history-table td {
+      padding: 3px 4px;
+      border-bottom: 1px dotted #1a1a1a;
+      color: #aaa;
+    }
+
+    .history-table tr:hover { background: #0a0a0a; }
+
+    .history-table .dir { font-weight: bold; }
+    .history-table .call { color: #00ff00; }
+    .history-table .put { color: #ff0000; }
+    .history-table .wait { color: #666; }
+    .history-table .hold { color: #ff9900; }
+    .history-table .exit { color: #ff6600; }
+
+    .history-table .conv-high { color: #ff9900; }
+    .history-table .conv-med { color: #888; }
+    .history-table .conv-low { color: #555; }
+
+    /* BOTTOM BAR */
+    .bottom-bar {
+      padding: 3px 8px;
+      background: #0a0a0a;
+      border-top: 1px solid #333;
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: #444;
+    }
+    .bottom-bar .warning { color: #ff9900; }
+
+    /* Mode Button */
+    .mode-btn {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 10px;
+      border: 1px solid #333;
+      background: #111;
+      color: #888;
+      cursor: pointer;
+      text-transform: uppercase;
+    }
+    .mode-btn:hover { border-color: #ff9900; }
+    .mode-btn[data-mode="auto"] { color: #888; border-color: #444; }
+    .mode-btn[data-mode="fast"] { color: #3399ff; border-color: #3399ff; }
+    .mode-btn[data-mode="full"] { color: #ff9900; border-color: #ff9900; }
+
+    /* Position Input */
+    .position-box {
+      padding: 6px 8px;
+      background: #0a0a0a;
+      border-top: 1px solid #333;
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .position-box input {
+      flex: 1;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 10px;
+      padding: 4px 8px;
+      background: #111;
+      border: 1px solid #333;
+      color: #ccc;
+      outline: none;
+    }
+    .position-box input:focus { border-color: #ff9900; }
+    .position-box input::placeholder { color: #444; }
+    .pos-btn {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 9px;
+      font-weight: bold;
+      padding: 4px 10px;
+      border: 1px solid #333;
+      background: #111;
+      cursor: pointer;
+    }
+    .pos-btn.set { color: #00ff00; border-color: #00ff00; }
+    .pos-btn.set:hover { background: #002200; }
+    .pos-btn.clear { color: #ff6600; border-color: #ff6600; }
+    .pos-btn.clear:hover { background: #221100; }
+    .position-active {
+      font-size: 9px;
+      color: #00ff00;
+      background: #002200;
+      padding: 2px 6px;
+      border: 1px solid #00ff00;
+    }
+
+    /* THINKING */
+    .thinking {
+      padding: 8px;
+      color: #444;
+    }
+    .thinking::after {
+      content: '...';
+      animation: dots 1s infinite;
+    }
+    @keyframes dots {
+      0%, 33% { content: '.'; }
+      34%, 66% { content: '..'; }
+      67%, 100% { content: '...'; }
+    }
+
+    .section-split {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="terminal">
+    <!-- TOP BAR -->
+    <div class="top-bar">
+      <span><span class="live-dot"></span><span class="brand">0DTE DESK</span> | SPY <span class="price" id="spy-price">--</span> <span id="spy-change">--</span></span>
+      <span id="market-status">--</span>
+      <span id="current-time">--</span>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+      <!-- LEFT: AGENT HISTORIES -->
+      <div class="left-panel panel" id="left-panel">
+        <!-- Order Flow History -->
+        <div class="agent-section">
+          <div class="agent-header">
+            <span class="agent-title flow">ORDER FLOW</span>
+            <span class="agent-badge neutral" id="flow-badge">--</span>
+          </div>
+          <div class="agent-content" id="flow-history"></div>
+        </div>
+
+        <!-- Tech History -->
+        <div class="agent-section">
+          <div class="agent-header">
+            <span class="agent-title tech">TECHNICALS</span>
+            <span class="agent-badge neutral" id="tech-badge">--</span>
+          </div>
+          <div class="agent-content" id="tech-history"></div>
+        </div>
+
+        <!-- Coord History -->
+        <div class="agent-section">
+          <div class="agent-header">
+            <span class="agent-title coord">COORDINATOR</span>
+            <span class="agent-badge neutral" id="coord-badge">--</span>
+          </div>
+          <div class="agent-content" id="coord-history"></div>
+        </div>
+      </div>
+
+      <div class="resizer" id="left-resizer"></div>
+
+      <!-- CENTER: SIGNAL + Q&A -->
+      <div class="center-panel panel">
+        <div class="signal-box">
+          <div class="signal-main">
+            <div class="signal-dir wait" id="signal-dir">WAIT</div>
+            <div class="signal-meta">
+              <div class="signal-conv low" id="signal-conv">--</div>
+              <div class="signal-type" id="signal-type">--</div>
+            </div>
+          </div>
+          <div class="levels-row">
+            <div class="level-item"><span class="label">Entry:</span> <span class="entry" id="entry">--</span></div>
+            <div class="level-item"><span class="label">Stop:</span> <span class="stop" id="stop">--</span></div>
+            <div class="level-item"><span class="label">Target:</span> <span class="target" id="target">--</span></div>
+            <div class="level-item"><span class="label">R:R</span> <span class="rr" id="rr">--</span></div>
+          </div>
+        </div>
+
+        <div class="panel-header">
+          <span>Q&A STREAM</span>
+          <span id="position-status" style="font-weight:normal;color:#555;">SCANNING</span>
+        </div>
+        <div class="qa-stream" id="qa-stream"></div>
+
+        <!-- Position/Custom Question Input -->
+        <div class="position-box">
+          <input type="text" id="position-input" placeholder="Custom question: e.g. I'm in CALL at 582, down $50 - hold or cut?" />
+          <button id="set-position-btn" class="pos-btn set">SET</button>
+          <button id="clear-position-btn" class="pos-btn clear">CLEAR</button>
+        </div>
+      </div>
+
+      <div class="resizer" id="right-resizer"></div>
+
+      <!-- RIGHT: MARKET DATA + SIGNAL HISTORY -->
+      <div class="right-panel panel" id="right-panel">
+        <!-- Market Data History -->
+        <div class="section-split" style="flex: 1;">
+          <div class="panel-header">MARKET DATA HISTORY</div>
+          <div class="panel-body" id="market-history"></div>
+        </div>
+
+        <!-- Signal History -->
+        <div class="section-split" style="flex: 1;">
+          <div class="panel-header">SIGNAL HISTORY <span id="signal-count">0</span></div>
+          <div class="panel-body">
+            <table class="history-table">
+              <thead>
+                <tr><th>Time</th><th>Signal</th><th>Type</th><th>Price</th><th>Conv</th></tr>
+              </thead>
+              <tbody id="history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM BAR -->
+    <div class="bottom-bar">
+      <span>
+        <button class="mode-btn" id="mode-btn" data-mode="fast">FAST</button>
+        <span style="color:#444">| 0DTE Desk v2</span>
+      </span>
+      <span class="warning" id="warning"></span>
+      <span id="status">Connected</span>
+    </div>
+  </div>
+
+  <script>
+    const messages = [];
+    const signalHistory = [];
+    const marketDataHistory = [];
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Parse direction from content
+    function parseDir(content) {
+      if (content.includes('BUYING') || content.includes('bullish') || content.includes('BULLISH')) return 'bullish';
+      if (content.includes('SELLING') || content.includes('bearish') || content.includes('BEARISH')) return 'bearish';
+      return 'neutral';
+    }
+
+    function parseBadge(content, type) {
+      if (type === 'flow') {
+        if (content.includes('BUYING')) return 'BUYING';
+        if (content.includes('SELLING')) return 'SELLING';
+        return 'MIXED';
+      }
+      if (type === 'tech') {
+        if (content.toLowerCase().includes('bullish')) return 'BULLISH';
+        if (content.toLowerCase().includes('bearish')) return 'BEARISH';
+        return 'NEUTRAL';
+      }
+      if (type === 'coord') {
+        if (content.includes('CALL')) return 'CALL';
+        if (content.includes('PUT')) return 'PUT';
+        if (content.includes('EXIT')) return 'EXIT';
+        if (content.includes('HOLD')) return 'HOLD';
+        if (content.includes('WAIT')) return 'WAIT';
+        return '--';
+      }
+      return '--';
+    }
+
+    // Render agent histories
+    function renderAgentHistories() {
+      const flowMsgs = messages.filter(m => m.type === 'FLOW_RESPONSE').reverse();
+      const techMsgs = messages.filter(m => m.type === 'TECH_RESPONSE').reverse();
+      const coordMsgs = messages.filter(m => m.type === 'COORD_RESPONSE' || m.type === 'SWARM_RESPONSE').reverse();
+
+      // Flow
+      document.getElementById('flow-history').innerHTML = flowMsgs.map((m, i) => {
+        const dir = parseDir(m.content);
+        const badge = parseBadge(m.content, 'flow');
+        return `<div class="agent-entry ${i === 0 ? 'latest ' + dir : dir}">
+          <div class="agent-entry-header">
+            <span class="agent-entry-time">${m.timestamp}</span>
+            <span class="agent-entry-badge ${dir}">${badge}</span>
+          </div>
+          <div class="agent-entry-body">${escapeHtml(m.content)}</div>
+        </div>`;
+      }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
+
+      if (flowMsgs.length > 0) {
+        const dir = parseDir(flowMsgs[0].content);
+        const badge = parseBadge(flowMsgs[0].content, 'flow');
+        const el = document.getElementById('flow-badge');
+        el.textContent = badge;
+        el.className = 'agent-badge ' + dir;
+      }
+
+      // Tech
+      document.getElementById('tech-history').innerHTML = techMsgs.map((m, i) => {
+        const dir = parseDir(m.content);
+        const badge = parseBadge(m.content, 'tech');
+        return `<div class="agent-entry ${i === 0 ? 'latest ' + dir : dir}">
+          <div class="agent-entry-header">
+            <span class="agent-entry-time">${m.timestamp}</span>
+            <span class="agent-entry-badge ${dir}">${badge}</span>
+          </div>
+          <div class="agent-entry-body">${escapeHtml(m.content)}</div>
+        </div>`;
+      }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
+
+      if (techMsgs.length > 0) {
+        const dir = parseDir(techMsgs[0].content);
+        const badge = parseBadge(techMsgs[0].content, 'tech');
+        const el = document.getElementById('tech-badge');
+        el.textContent = badge;
+        el.className = 'agent-badge ' + dir;
+      }
+
+      // Coord
+      document.getElementById('coord-history').innerHTML = coordMsgs.map((m, i) => {
+        const badge = parseBadge(m.content, 'coord');
+        const dir = badge === 'CALL' ? 'bullish' : badge === 'PUT' || badge === 'EXIT' ? 'bearish' : 'neutral';
+        return `<div class="agent-entry ${i === 0 ? 'latest ' + dir : dir}">
+          <div class="agent-entry-header">
+            <span class="agent-entry-time">${m.timestamp}</span>
+            <span class="agent-entry-badge ${dir}">${badge}</span>
+          </div>
+          <div class="agent-entry-body">${escapeHtml(m.content)}</div>
+        </div>`;
+      }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
+
+      if (coordMsgs.length > 0) {
+        const badge = parseBadge(coordMsgs[0].content, 'coord');
+        const dir = badge === 'CALL' ? 'bullish' : badge === 'PUT' || badge === 'EXIT' ? 'bearish' : 'neutral';
+        const el = document.getElementById('coord-badge');
+        el.textContent = badge;
+        el.className = 'agent-badge ' + dir;
+      }
+    }
+
+    // Render Q&A stream
+    function renderQA() {
+      const container = document.getElementById('qa-stream');
+      const senderMap = {
+        AGENT_QUESTION: { sender: 'AGENT', cls: 'agent' },
+        FLOW_RESPONSE: { sender: 'FLOW', cls: 'flow' },
+        TECH_RESPONSE: { sender: 'TECH', cls: 'tech' },
+        COORD_RESPONSE: { sender: 'COORD', cls: 'coord' },
+        SWARM_RESPONSE: { sender: 'SWARM', cls: 'coord' }
+      };
+
+      let html = messages.map(m => {
+        const cfg = senderMap[m.type] || { sender: 'SYS', cls: '' };
+        const isAgent = m.type === 'AGENT_QUESTION';
+        let signalHtml = '';
+        if (m.signal && m.signal.action) {
+          const dir = m.signal.signal === 'HOLD' ? 'hold' : m.signal.action.toLowerCase();
+          const label = m.signal.signal === 'HOLD' ? 'HOLD' : m.signal.action;
+          signalHtml = `<span class="qa-signal ${dir}">${label} ${m.signal.conviction || ''}</span>`;
+        }
+        return `<div class="qa-item ${isAgent ? 'agent' : ''}">
+          <div class="qa-header">
+            <span class="qa-sender ${cfg.cls}">${cfg.sender}</span>
+            <span class="qa-time">${m.timestamp}</span>
+          </div>
+          <div class="qa-body">${isAgent ? '"' + escapeHtml(m.content) + '"' : escapeHtml(m.content)}</div>
+          ${signalHtml}
+        </div>`;
+      }).join('');
+
+      html += '<div class="thinking">Agent thinking</div>';
+      container.innerHTML = html;
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Render market data history
+    function renderMarketHistory() {
+      const container = document.getElementById('market-history');
+      container.innerHTML = marketDataHistory.map((d, i) => {
+        const vwapDiff = d.price - d.vwap;
+        const dir = vwapDiff >= 0 ? 'bullish' : 'bearish';
+        return `<div class="market-entry ${i === 0 ? 'latest' : ''}">
+          <div class="agent-entry-header">
+            <span class="agent-entry-time">${d.timestamp}</span>
+            <span class="agent-entry-badge ${dir}">$${d.price.toFixed(2)}</span>
+          </div>
+          <div class="market-grid">
+            <div class="row"><span class="label">VWAP</span><span class="value">$${d.vwap.toFixed(2)}</span></div>
+            <div class="row"><span class="label">vs VWAP</span><span class="value ${vwapDiff >= 0 ? 'up' : 'down'}">${vwapDiff >= 0 ? '+' : ''}$${vwapDiff.toFixed(2)}</span></div>
+            <div class="row"><span class="label">RSI</span><span class="value">${d.rsi}</span></div>
+            <div class="row"><span class="label">Breadth</span><span class="value">${d.breadth}</span></div>
+            <div class="row"><span class="label">ORB Hi</span><span class="value">$${d.orbHigh.toFixed(2)}</span></div>
+            <div class="row"><span class="label">ORB Lo</span><span class="value">$${d.orbLow.toFixed(2)}</span></div>
+          </div>
+        </div>`;
+      }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
+    }
+
+    // Render signal history
+    function renderHistory() {
+      const tbody = document.getElementById('history-tbody');
+      document.getElementById('signal-count').textContent = signalHistory.length;
+      tbody.innerHTML = signalHistory.map(s => {
+        let dir = s.signal === 'HOLD' ? 'hold' : s.action.toLowerCase();
+        let label = s.signal === 'HOLD' ? 'HOLD' : s.action;
+        let convCls = 'conv-' + (s.conviction || 'low').toLowerCase();
+        return `<tr>
+          <td>${s.time}</td>
+          <td class="dir ${dir}">${label}</td>
+          <td>${s.signal || '-'}</td>
+          <td>${s.price.toFixed(2)}</td>
+          <td class="${convCls}">${s.conviction || '-'}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    // Update main signal
+    function updateSignal(sig) {
+      const dirEl = document.getElementById('signal-dir');
+      let dir = sig.signal === 'HOLD' ? 'hold' : sig.action.toLowerCase();
+      let label = sig.signal === 'HOLD' ? 'HOLD' : sig.action;
+
+      dirEl.textContent = label;
+      dirEl.className = 'signal-dir ' + dir;
+
+      document.getElementById('signal-conv').textContent = sig.conviction || '-';
+      document.getElementById('signal-conv').className = 'signal-conv ' + (sig.conviction || 'low').toLowerCase();
+      document.getElementById('signal-type').textContent = sig.signal || '-';
+
+      if (sig.entry) {
+        document.getElementById('entry').textContent = sig.entry.toFixed(2);
+        document.getElementById('stop').textContent = sig.stop.toFixed(2);
+        document.getElementById('target').textContent = sig.target.toFixed(2);
+        const rr = ((sig.target - sig.entry) / (sig.entry - sig.stop)).toFixed(1);
+        document.getElementById('rr').textContent = rr + ':1';
+      }
+    }
+
+    // Add message
+    function addMessage(msg) {
+      messages.push(msg);
+      if (messages.length > 100) messages.shift();
+
+      if (msg.signal) {
+        updateSignal(msg.signal);
+        signalHistory.unshift({
+          time: msg.timestamp,
+          action: msg.signal.action || msg.signal.direction,
+          signal: msg.signal.signal,
+          price: msg.signal.price || 0,
+          conviction: msg.signal.conviction
+        });
+        if (signalHistory.length > 50) signalHistory.pop();
+        renderHistory();
+      }
+
+      renderQA();
+      renderAgentHistories();
+    }
+
+    // Update time
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('current-time').textContent =
+        now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) + ' PT';
+
+      const h = now.getHours();
+      const warn = document.getElementById('warning');
+      if (h >= 12) warn.textContent = 'AFTER 12PM - HIGH RISK';
+      else if (h >= 11) warn.textContent = 'AFTER 11AM - THETA ACCELERATING';
+      else warn.textContent = '';
+    }
+
+    // Resizable panels
+    function initResizers() {
+      const leftResizer = document.getElementById('left-resizer');
+      const rightResizer = document.getElementById('right-resizer');
+      const leftPanel = document.getElementById('left-panel');
+      const rightPanel = document.getElementById('right-panel');
+
+      let isResizing = false;
+      let currentResizer = null;
+
+      function startResize(e, resizer) {
+        isResizing = true;
+        currentResizer = resizer;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+      }
+
+      function resize(e) {
+        if (!isResizing) return;
+        if (currentResizer === leftResizer) {
+          const w = e.clientX;
+          if (w >= 200 && w <= 450) leftPanel.style.width = w + 'px';
+        } else if (currentResizer === rightResizer) {
+          const w = window.innerWidth - e.clientX;
+          if (w >= 200 && w <= 400) rightPanel.style.width = w + 'px';
+        }
+      }
+
+      function stopResize() {
+        isResizing = false;
+        currentResizer = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+
+      leftResizer.addEventListener('mousedown', (e) => startResize(e, leftResizer));
+      rightResizer.addEventListener('mousedown', (e) => startResize(e, rightResizer));
+      document.addEventListener('mousemove', resize);
+      document.addEventListener('mouseup', stopResize);
+    }
+
+    // Load history
+    async function loadHistory() {
+      try {
+        const res = await fetch('/history');
+        const data = await res.json();
+        if (data && data.length) {
+          data.forEach(m => {
+            messages.push(m);
+            if (m.signal) {
+              signalHistory.unshift({
+                time: m.timestamp,
+                action: m.signal.action || m.signal.direction,
+                signal: m.signal.signal,
+                price: m.signal.price || 0,
+                conviction: m.signal.conviction
+              });
+            }
+          });
+          const lastSig = data.find(m => m.signal);
+          if (lastSig) updateSignal(lastSig.signal);
+          renderQA();
+          renderHistory();
+          renderAgentHistories();
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    // SSE
+    function connectSSE() {
+      const es = new EventSource('/stream');
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type !== 'CONNECTED' && msg.type !== 'SESSION_RESET') {
+            addMessage(msg);
+          }
+        } catch (err) {}
+      };
+      es.onerror = () => {
+        es.close();
+        document.getElementById('status').textContent = 'Reconnecting...';
+        setTimeout(connectSSE, 3000);
+      };
+    }
+
+    // Mode switching
+    const modeBtn = document.getElementById('mode-btn');
+    const modes = ['auto', 'fast', 'full'];
+    const modeLabels = { auto: 'AUTO', fast: 'FAST', full: 'FULL' };
+
+    function updateModeButton(mode) {
+      modeBtn.textContent = modeLabels[mode] || mode.toUpperCase();
+      modeBtn.setAttribute('data-mode', mode);
+    }
+
+    async function loadMode() {
+      try {
+        const res = await fetch('/get-mode');
+        const data = await res.json();
+        updateModeButton(data.mode || 'fast');
+      } catch (e) {
+        console.error('Failed to load mode:', e);
+      }
+    }
+
+    async function setMode(mode) {
+      try {
+        await fetch('/set-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: mode })
+        });
+        updateModeButton(mode);
+        console.log('Mode set to:', mode);
+      } catch (e) {
+        console.error('Failed to set mode:', e);
+      }
+    }
+
+    modeBtn.addEventListener('click', function() {
+      const current = this.getAttribute('data-mode') || 'fast';
+      const currentIndex = modes.indexOf(current);
+      const nextMode = modes[(currentIndex + 1) % modes.length];
+      setMode(nextMode);
+    });
+
+    // Position/Custom Question handling
+    const positionInput = document.getElementById('position-input');
+    const setPositionBtn = document.getElementById('set-position-btn');
+    const clearPositionBtn = document.getElementById('clear-position-btn');
+    const positionStatus = document.getElementById('position-status');
+
+    function updatePositionStatus(question) {
+      if (question && question.trim()) {
+        positionStatus.textContent = 'VALIDATING';
+        positionStatus.style.color = '#00ff00';
+        positionInput.value = question;
+        positionInput.disabled = true;
+        setPositionBtn.style.display = 'none';
+        clearPositionBtn.style.display = 'inline-block';
+      } else {
+        positionStatus.textContent = 'SCANNING';
+        positionStatus.style.color = '#555';
+        positionInput.value = '';
+        positionInput.disabled = false;
+        setPositionBtn.style.display = 'inline-block';
+        clearPositionBtn.style.display = 'inline-block';
+      }
+    }
+
+    async function loadPosition() {
+      try {
+        const res = await fetch('/get-position');
+        const data = await res.json();
+        updatePositionStatus(data.position || '');
+      } catch (e) {
+        console.error('Failed to load position:', e);
+      }
+    }
+
+    async function setPosition() {
+      const question = positionInput.value.trim();
+      if (!question) {
+        positionInput.style.borderColor = '#ff0000';
+        setTimeout(() => { positionInput.style.borderColor = '#333'; }, 1000);
+        return;
+      }
+      try {
+        await fetch('/set-position', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ position: question })
+        });
+        updatePositionStatus(question);
+        console.log('Position set:', question);
+      } catch (e) {
+        console.error('Failed to set position:', e);
+      }
+    }
+
+    async function clearPosition() {
+      try {
+        await fetch('/clear-position', { method: 'POST' });
+        updatePositionStatus('');
+        console.log('Position cleared');
+      } catch (e) {
+        console.error('Failed to clear position:', e);
+      }
+    }
+
+    setPositionBtn.addEventListener('click', setPosition);
+    clearPositionBtn.addEventListener('click', clearPosition);
+
+    // Enter key to set position
+    positionInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') setPosition();
+    });
+
+    // Init
+    async function init() {
+      initResizers();
+      updateTime();
+      setInterval(updateTime, 1000);
+
+      // Load mode from server
+      await loadMode();
+
+      // Load position from server
+      await loadPosition();
+
+      // Refresh mode and position every 5 seconds to stay in sync
+      setInterval(loadMode, 5000);
+      setInterval(loadPosition, 5000);
+
+      // Load history from Redis and connect to live stream
+      await loadHistory();
+      connectSSE();
+
+      // Show waiting state if no data yet
+      if (messages.length === 0) {
+        document.getElementById('qa-stream').innerHTML = '<div class="thinking">Waiting for agent</div>';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

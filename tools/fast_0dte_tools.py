@@ -52,6 +52,10 @@ async def fast_spy_check() -> str:
     - ema_21: slow EMA for trend
     - macd: macd line, signal line, histogram
     - orb: opening range high/low/range (first 30min)
+    - trama: Trend Regularity Adaptive MA (LLM interprets)
+      - value: current TRAMA level
+      - price_vs_trama: positive = above TRAMA, negative = below
+      - trend_strength: 0-1, higher = more new HH/LL = stronger trend
 
     Use for: Quick market read, trend confirmation, entry validation.
     """
@@ -156,7 +160,7 @@ async def fast_spy_check() -> str:
                         "histogram": round(float(mv.get("macd_hist", 0)), 3),
                     }
 
-            # 7. Time series for ORB calculation
+            # 7. Time series for ORB and TRAMA calculation
             ts = await mcp.call_tool_async(
                 tool_use_id=f"ts_{symbol}",
                 name="GetTimeSeries",
@@ -165,9 +169,15 @@ async def fast_spy_check() -> str:
             if ts and ts.get("status") == "success":
                 t = _parse(ts)
                 if t and "values" in t:
+                    # ORB calculation
                     orb = _calc_orb(t["values"])
                     if orb:
                         data["orb"] = orb
+
+                    # TRAMA calculation (Trend Regularity Adaptive MA)
+                    trama = _calc_trama(t["values"])
+                    if trama:
+                        data["trama"] = trama
 
         return json.dumps(data, indent=2)
 
@@ -272,4 +282,87 @@ def _calc_orb(values: list) -> Optional[Dict]:
             "range": round(orb_high - orb_low, 2),
         }
     except:
+        return None
+
+
+def _calc_trama(values: list, length: int = 14) -> Optional[Dict]:
+    """
+    Calculate Trend Regularity Adaptive Moving Average (TRAMA).
+
+    TRAMA adapts based on how many new highs/lows are being made:
+    - More new HH/LL = tighter (closer to price) = trend is strong
+    - Fewer new HH/LL = looser (smoother) = trend exhausting or chop
+
+    Args:
+        values: List of candle dicts with 'high', 'low', 'close', 'datetime'
+        length: Lookback period (default 14)
+
+    Returns:
+        Dict with trama value and trend_strength (0-1)
+    """
+    try:
+        # Sort by datetime (oldest first for calculation)
+        sorted_values = sorted(values, key=lambda x: x.get("datetime", ""))
+
+        if len(sorted_values) < length + 5:
+            return None
+
+        # Extract prices
+        closes = [float(v.get("close", 0)) for v in sorted_values]
+        highs = [float(v.get("high", 0)) for v in sorted_values]
+        lows = [float(v.get("low", 0)) for v in sorted_values]
+
+        n = len(closes)
+
+        # Track new highest highs and lowest lows
+        hh = [0] * n  # 1 if new highest high
+        ll = [0] * n  # 1 if new lowest low
+
+        for i in range(length, n):
+            # Current rolling high/low
+            current_high = max(highs[i-length+1:i+1])
+            current_low = min(lows[i-length+1:i+1])
+
+            # Previous rolling high/low
+            prev_high = max(highs[i-length:i])
+            prev_low = min(lows[i-length:i])
+
+            # New highest high?
+            if current_high > prev_high:
+                hh[i] = 1
+            # New lowest low?
+            if current_low < prev_low:
+                ll[i] = 1
+
+        # Trend regularity: 1 if new high OR new low
+        tr = [max(hh[i], ll[i]) for i in range(n)]
+
+        # Calculate trend coefficient: SMA of tr, then squared
+        tc = [0.0] * n
+        for i in range(length, n):
+            tr_sum = sum(tr[i-length+1:i+1])
+            tr_avg = tr_sum / length
+            tc[i] = tr_avg ** 2  # Squared for smoothing
+
+        # Adaptive moving average
+        trama = [0.0] * n
+        trama[0] = closes[0]
+        for i in range(1, n):
+            trama[i] = trama[i-1] + tc[i] * (closes[i] - trama[i-1])
+
+        # Get current values
+        current_trama = trama[-1]
+        current_price = closes[-1]
+        current_tc = tc[-1]  # Trend coefficient (0-1, higher = stronger trend)
+
+        # Price vs TRAMA
+        price_vs_trama = current_price - current_trama
+
+        return {
+            "value": round(current_trama, 2),
+            "price_vs_trama": round(price_vs_trama, 2),
+            "trend_strength": round(current_tc, 3),  # 0-1, higher = more new HH/LL being made
+        }
+    except Exception as e:
+        logger.error(f"TRAMA calculation error: {e}")
         return None

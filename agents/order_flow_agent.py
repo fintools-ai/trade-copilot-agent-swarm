@@ -87,10 +87,24 @@ def create_order_flow_agent() -> Agent:
     Returns:
         Configured Strands Agent for order flow analysis
     """
+    from zoneinfo import ZoneInfo
+
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(pt_tz)
+    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
+
+    # Inject timestamp into system prompt
+    timestamp_header = f"""<current_time>
+Current Time: {current_time_full}
+Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
+</current_time>
+
+"""
+
     agent = Agent(
         name="Order Flow Analyst",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        system_prompt=ORDER_FLOW_INSTRUCTIONS,
+        system_prompt=timestamp_header + ORDER_FLOW_INSTRUCTIONS,
         tools=[equity_order_flow_tool]
     )
 
