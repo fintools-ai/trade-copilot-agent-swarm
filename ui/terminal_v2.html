@@ -554,7 +554,7 @@
       <div class="right-panel panel" id="right-panel">
         <!-- Market Data History -->
         <div class="section-split" style="flex: 1;">
-          <div class="panel-header">MARKET DATA HISTORY</div>
+          <div class="panel-header">MARKET DATA <span id="data-age" style="color:#888;font-weight:normal;">--</span></div>
           <div class="panel-body" id="market-history"></div>
         </div>
 
@@ -588,6 +588,7 @@
     const messages = [];
     const signalHistory = [];
     const marketDataHistory = [];
+    let lastDataFetchTs = 0;  // Track when data was fetched
 
     // Escape HTML to prevent XSS
     function escapeHtml(text) {
@@ -853,6 +854,11 @@
         if (marketDataHistory.length > 20) marketDataHistory.pop();
         renderMarketHistory();
 
+        // Track when this data was fetched for age display
+        if (d.fetch_ts) {
+          lastDataFetchTs = d.fetch_ts;
+        }
+
         // Update top bar SPY price
         if (d.price) {
           document.getElementById('spy-price').textContent = '$' + d.price.toFixed(2);
@@ -919,6 +925,23 @@
         if (h >= 12) warn.textContent = 'AFTER 12PM - HIGH RISK';
         else if (h >= 11) warn.textContent = 'AFTER 11AM - THETA ACCELERATING';
         else warn.textContent = '';
+      }
+
+      // Update data age indicator
+      const dataAgeEl = document.getElementById('data-age');
+      if (lastDataFetchTs > 0) {
+        const ageSeconds = Math.floor((Date.now() / 1000) - lastDataFetchTs);
+        if (ageSeconds >= 60) {
+          const ageMinutes = Math.floor(ageSeconds / 60);
+          dataAgeEl.textContent = `(${ageMinutes}m old)`;
+          dataAgeEl.style.color = '#ff0000';  // Red if > 1 min old
+        } else if (ageSeconds >= 30) {
+          dataAgeEl.textContent = `(${ageSeconds}s old)`;
+          dataAgeEl.style.color = '#ff9900';  // Orange warning
+        } else {
+          dataAgeEl.textContent = `(${ageSeconds}s ago)`;
+          dataAgeEl.style.color = '#00ff00';  // Green if fresh
+        }
       }
     }
 

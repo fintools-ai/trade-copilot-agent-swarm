@@ -63,9 +63,11 @@ async def fast_spy_check() -> str:
     symbol = "SPY"
 
     try:
+        fetch_time = datetime.now()
         data = {
             "symbol": symbol,
-            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "timestamp": fetch_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "fetch_ts": fetch_time.timestamp(),  # Unix timestamp for age calculation
         }
 
         with create_twelvedata_mcp() as mcp:
@@ -384,6 +386,7 @@ def _publish_market_data(data: Dict) -> None:
 
         market_data = {
             "time": data.get("timestamp", ""),
+            "fetch_ts": data.get("fetch_ts", 0),  # Unix timestamp for UI age calculation
             "price": price_data.get("current", 0),
             "vwap": data.get("vwap", 0),
             "rsi": data.get("rsi", 0),

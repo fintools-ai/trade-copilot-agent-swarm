@@ -29,6 +29,16 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle each request in a separate thread"""
     daemon_threads = True
 
+    def handle_error(self, request, client_address):
+        """Suppress noisy disconnect errors from SSE clients"""
+        import sys
+        exc_type = sys.exc_info()[0]
+        # Ignore normal disconnect errors
+        if exc_type in (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            return
+        # Log other errors normally
+        super().handle_error(request, client_address)
+
 from redis_stream import get_stream, RedisStream
 
 console = Console()
@@ -202,8 +212,9 @@ class StreamingHandler(SimpleHTTPRequestHandler):
                 data = json.dumps(event)
                 self.wfile.write(f"data: {data}\n\n".encode())
                 self.wfile.flush()
-        except (BrokenPipeError, ConnectionResetError):
-            console.print("[yellow]SSE client disconnected[/yellow]")
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            # Normal disconnect - client closed tab or refreshed
+            pass
 
     def log_message(self, format, *args):
         # Suppress default logging for cleaner output
