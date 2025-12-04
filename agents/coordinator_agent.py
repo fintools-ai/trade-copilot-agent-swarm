@@ -86,14 +86,16 @@ Tech: [RSI XX, vs VWAP +/-$X, ORB status]
 Entry: $XXX | Stop: $XXX | Target: $XXX | R/R: X:X
 [Time-based warning if after 11:00 AM PT]
 
-{"action": "[CALL/PUT/WAIT/EXIT]", "signal": "[ENTRY/HOLD/null]", "price": [current_price], "conviction": "[HIGH/MED/LOW]", "invalidation": [stop_price_or_null]}
+{"action": "[CALL/PUT/WAIT/EXIT]", "signal": "[ENTRY/HOLD/null]", "price": [current_price], "entry": [entry_price], "stop": [stop_price], "target": [target_price], "conviction": "[HIGH/MED/LOW]"}
 
 Fields:
 - action: CALL, PUT, WAIT, or EXIT
 - signal: ENTRY (new position), HOLD (stay in position), or null (for WAIT/EXIT)
 - price: current SPY price
+- entry: entry price level (same as price for new entries, null for WAIT/EXIT)
+- stop: stop loss level (null for WAIT/EXIT)
+- target: profit target level (null for WAIT/EXIT)
 - conviction: HIGH, MED, or LOW
-- invalidation: price that kills the trade (null for WAIT/EXIT)
 
 Signal field rules:
 - CALL/PUT + ENTRY = new trade
@@ -129,7 +131,7 @@ Flow: Strong buying pressure, consistent bid lifts
 Tech: RSI 58, +$0.80 vs VWAP, ORB breakout confirmed
 Entry: $582.50 | Stop: $580.00 | Target: $585.00 | R/R: 2.5:1
 
-{"action": "CALL", "signal": "ENTRY", "price": 582.30, "conviction": "HIGH", "invalidation": 580.00}
+{"action": "CALL", "signal": "ENTRY", "price": 582.30, "entry": 582.50, "stop": 580.00, "target": 585.00, "conviction": "HIGH"}
 </example>
 
 <example type="clear_bearish_entry">
@@ -139,7 +141,7 @@ Tech: RSI 38, -$1.20 vs VWAP, ORB breakdown
 Entry: $583.00 | Stop: $585.00 | Target: $580.00 | R/R: 1.5:1
 ⚠️ After 11 AM - theta accelerating, quick exit
 
-{"action": "PUT", "signal": "ENTRY", "price": 583.50, "conviction": "HIGH", "invalidation": 585.00}
+{"action": "PUT", "signal": "ENTRY", "price": 583.50, "entry": 583.00, "stop": 585.00, "target": 580.00, "conviction": "HIGH"}
 </example>
 
 <example type="mixed_signals">
@@ -148,7 +150,7 @@ Flow: Mixed - bid lifts and drops balanced, no clear direction
 Tech: RSI 52 neutral, price at VWAP, inside ORB range
 No trade - wait for flow clarity
 
-{"action": "WAIT", "signal": null, "price": 582.00, "conviction": "LOW", "invalidation": null}
+{"action": "WAIT", "signal": null, "price": 582.00, "entry": null, "stop": null, "target": null, "conviction": "LOW"}
 </example>
 
 <example type="hold_through_dip">
@@ -158,7 +160,7 @@ Tech: RSI 48 (pulled back), price dipped but ABOVE $580 stop
 Structure intact - normal pullback, flow still bullish
 HOLD - not a breakdown, just noise
 
-{"action": "CALL", "signal": "HOLD", "price": 580.50, "conviction": "MED", "invalidation": 580.00}
+{"action": "CALL", "signal": "HOLD", "price": 580.50, "entry": 582.50, "stop": 580.00, "target": 585.00, "conviction": "MED"}
 </example>
 
 <example type="exit_signal">
@@ -168,7 +170,7 @@ Tech: RSI 42, broke below VWAP, lost $580 support
 Structure BROKEN - flow reversed, not just weak
 EXIT CALL immediately
 
-{"action": "EXIT", "signal": null, "price": 579.80, "conviction": "HIGH", "invalidation": null}
+{"action": "EXIT", "signal": null, "price": 579.80, "entry": null, "stop": null, "target": null, "conviction": "HIGH"}
 </example>
 </examples>
 

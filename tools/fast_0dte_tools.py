@@ -17,6 +17,7 @@ from strands import tool
 from mcp import StdioServerParameters, stdio_client
 from strands.tools.mcp import MCPClient
 from config.settings import TWELVE_DATA_API_KEY
+from redis_stream import publish_event
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +179,9 @@ async def fast_spy_check() -> str:
                     trama = _calc_trama(t["values"])
                     if trama:
                         data["trama"] = trama
+
+        # Publish structured market data to UI (no parsing needed)
+        _publish_market_data(data)
 
         return json.dumps(data, indent=2)
 
@@ -366,3 +370,34 @@ def _calc_trama(values: list, length: int = 14) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"TRAMA calculation error: {e}")
         return None
+
+
+def _publish_market_data(data: Dict) -> None:
+    """
+    Publish structured market data to UI via Redis.
+    UI receives this directly - no text parsing needed.
+    """
+    try:
+        # Extract fields for UI market data history
+        price_data = data.get("price", {})
+        orb_data = data.get("orb", {})
+
+        market_data = {
+            "time": data.get("timestamp", ""),
+            "price": price_data.get("current", 0),
+            "vwap": data.get("vwap", 0),
+            "rsi": data.get("rsi", 0),
+            "orb": f"{orb_data.get('low', 0):.2f}-{orb_data.get('high', 0):.2f}" if orb_data else "--",
+            "ema_9": data.get("ema_9", 0),
+            "ema_21": data.get("ema_21", 0),
+            "macd_hist": data.get("macd", {}).get("histogram", 0),
+            "price_vs_vwap": data.get("price_vs_vwap", 0),
+            "trama": data.get("trama", {}).get("value", 0),
+            "trend_strength": data.get("trama", {}).get("trend_strength", 0),
+        }
+
+        # Publish as MARKET_DATA event type
+        publish_event("MARKET_DATA", "", market_data)
+        logger.debug(f"Published market data: SPY ${market_data['price']:.2f}")
+    except Exception as e:
+        logger.error(f"Failed to publish market data: {e}")

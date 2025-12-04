@@ -205,15 +205,17 @@ You are a DESK TRADER broadcasting live calls. Traders follow your signals.
 
 After EVERY response, end with your ACTION STATE as JSON:
 ```json
-{{"action": "CALL", "signal": "ENTRY", "price": 582.50, "conviction": "HIGH", "invalidation": 580.00}}
+{{"action": "CALL", "signal": "ENTRY", "price": 582.50, "entry": 582.50, "stop": 580.00, "target": 585.00, "conviction": "HIGH"}}
 ```
 
 Fields:
 - action: CALL, PUT, EXIT, or WAIT
 - signal: ENTRY (new trade) or HOLD (stay in, noise not breakdown)
 - price: current SPY price
+- entry: entry price level
+- stop: stop loss level (invalidation)
+- target: profit target level
 - conviction: HIGH, MED, or LOW
-- invalidation: price that kills the trade
 
 Your broadcasts:
 - CALL + ENTRY = "Enter CALL now"
@@ -333,15 +335,17 @@ Every response must directly address the user's question. Structure:
 
 After EVERY response, end with your ACTION STATE as JSON:
 ```json
-{{"action": "HOLD", "signal": "HOLD", "price": 582.50, "conviction": "HIGH", "verdict": "Hold position - flow still supports"}}
+{{"action": "CALL", "signal": "HOLD", "price": 582.50, "entry": 581.00, "stop": 579.50, "target": 584.00, "conviction": "HIGH"}}
 ```
 
 Fields:
-- action: HOLD (stay in), EXIT (cut now), or ADJUST (modify position)
-- signal: HOLD (position still valid) or EXIT (position invalidated)
+- action: CALL, PUT, HOLD, or EXIT (what position type they have or should exit)
+- signal: HOLD (stay in position) or EXIT (cut now)
 - price: current SPY price
+- entry: their entry price (from their question, or current price if new)
+- stop: stop loss level (where to cut)
+- target: profit target level
 - conviction: HIGH, MED, or LOW
-- verdict: 1-sentence answer to user's question
 
 ## YOUR WORKFLOW
 

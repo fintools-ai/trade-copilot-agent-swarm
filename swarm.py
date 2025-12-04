@@ -372,11 +372,12 @@ Cross-validate signals across all 4 agents, identify the best setup, and provide
             fast_mode: Whether running in fast mode
         """
         # Map node names to event types for terminal_v2
+        # Note: coordinator is NOT included here - it's published via SWARM_RESPONSE
+        # in zero_dte_agent._call_swarm_internal() with signal attached
         node_to_event = {
             "order_flow": "FLOW_RESPONSE",
             "financial_data": "TECH_RESPONSE",
             "financial_data_fast": "TECH_RESPONSE",
-            "coordinator": "COORD_RESPONSE",
         }
 
         for node_name, event_type in node_to_event.items():

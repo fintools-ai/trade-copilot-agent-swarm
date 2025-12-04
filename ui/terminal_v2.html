@@ -608,7 +608,7 @@
     function renderAgentHistories() {
       const flowMsgs = messages.filter(m => m.type === 'FLOW_RESPONSE').reverse();
       const techMsgs = messages.filter(m => m.type === 'TECH_RESPONSE').reverse();
-      const coordMsgs = messages.filter(m => m.type === 'COORD_RESPONSE' || m.type === 'SWARM_RESPONSE').reverse();
+      const coordMsgs = messages.filter(m => m.type === 'SWARM_RESPONSE').reverse();
 
       // Flow
       document.getElementById('flow-history').innerHTML = flowMsgs.map((m, i) => {
@@ -681,17 +681,17 @@
         AGENT_QUESTION: { sender: 'AGENT', cls: 'agent' },
         FLOW_RESPONSE: { sender: 'FLOW', cls: 'flow' },
         TECH_RESPONSE: { sender: 'TECH', cls: 'tech' },
-        COORD_RESPONSE: { sender: 'COORD', cls: 'coord' },
-        SWARM_RESPONSE: { sender: 'SWARM', cls: 'coord' }
+        SWARM_RESPONSE: { sender: 'COORD', cls: 'coord' }  // Coordinator's final output
       };
 
       let html = messages.map(m => {
         const cfg = senderMap[m.type] || { sender: 'SYS', cls: '' };
         const isAgent = m.type === 'AGENT_QUESTION';
         let signalHtml = '';
-        if (m.signal && m.signal.action) {
-          const dir = m.signal.signal === 'HOLD' ? 'hold' : m.signal.action.toLowerCase();
-          const label = m.signal.signal === 'HOLD' ? 'HOLD' : m.signal.action;
+        const sigAction = m.signal && (m.signal.action || m.signal.direction);
+        if (sigAction) {
+          const dir = m.signal.signal === 'HOLD' ? 'hold' : sigAction.toLowerCase();
+          const label = m.signal.signal === 'HOLD' ? 'HOLD' : sigAction;
           signalHtml = `<span class="qa-signal ${dir}">${label} ${m.signal.conviction || ''}</span>`;
         }
         return `<div class="qa-item ${isAgent ? 'agent' : ''}">
@@ -713,20 +713,22 @@
     function renderMarketHistory() {
       const container = document.getElementById('market-history');
       container.innerHTML = marketDataHistory.map((d, i) => {
-        const vwapDiff = d.price - d.vwap;
+        const vwapDiff = d.price_vs_vwap || (d.price - d.vwap);
         const dir = vwapDiff >= 0 ? 'bullish' : 'bearish';
+        const rsiColor = d.rsi > 70 ? 'down' : d.rsi < 30 ? 'up' : '';
+        const emaTrend = d.ema_9 > d.ema_21 ? 'up' : d.ema_9 < d.ema_21 ? 'down' : '';
         return `<div class="market-entry ${i === 0 ? 'latest' : ''}">
           <div class="agent-entry-header">
-            <span class="agent-entry-time">${d.timestamp}</span>
+            <span class="agent-entry-time">${d.time}</span>
             <span class="agent-entry-badge ${dir}">$${d.price.toFixed(2)}</span>
           </div>
           <div class="market-grid">
             <div class="row"><span class="label">VWAP</span><span class="value">$${d.vwap.toFixed(2)}</span></div>
             <div class="row"><span class="label">vs VWAP</span><span class="value ${vwapDiff >= 0 ? 'up' : 'down'}">${vwapDiff >= 0 ? '+' : ''}$${vwapDiff.toFixed(2)}</span></div>
-            <div class="row"><span class="label">RSI</span><span class="value">${d.rsi}</span></div>
-            <div class="row"><span class="label">Breadth</span><span class="value">${d.breadth}</span></div>
-            <div class="row"><span class="label">ORB Hi</span><span class="value">$${d.orbHigh.toFixed(2)}</span></div>
-            <div class="row"><span class="label">ORB Lo</span><span class="value">$${d.orbLow.toFixed(2)}</span></div>
+            <div class="row"><span class="label">RSI</span><span class="value ${rsiColor}">${d.rsi}</span></div>
+            <div class="row"><span class="label">ORB</span><span class="value">${d.orb}</span></div>
+            <div class="row"><span class="label">EMA 9/21</span><span class="value ${emaTrend}">${d.ema_9.toFixed(2)}/${d.ema_21.toFixed(2)}</span></div>
+            <div class="row"><span class="label">MACD H</span><span class="value ${d.macd_hist >= 0 ? 'up' : 'down'}">${d.macd_hist.toFixed(3)}</span></div>
           </div>
         </div>`;
       }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
@@ -737,8 +739,9 @@
       const tbody = document.getElementById('history-tbody');
       document.getElementById('signal-count').textContent = signalHistory.length;
       tbody.innerHTML = signalHistory.map(s => {
-        let dir = s.signal === 'HOLD' ? 'hold' : s.action.toLowerCase();
-        let label = s.signal === 'HOLD' ? 'HOLD' : s.action;
+        const action = s.action || 'WAIT';
+        let dir = s.signal === 'HOLD' ? 'hold' : action.toLowerCase();
+        let label = s.signal === 'HOLD' ? 'HOLD' : action;
         let convCls = 'conv-' + (s.conviction || 'low').toLowerCase();
         return `<tr>
           <td>${s.time}</td>
@@ -753,8 +756,10 @@
     // Update main signal
     function updateSignal(sig) {
       const dirEl = document.getElementById('signal-dir');
-      let dir = sig.signal === 'HOLD' ? 'hold' : sig.action.toLowerCase();
-      let label = sig.signal === 'HOLD' ? 'HOLD' : sig.action;
+      // Fallback: use action or direction (backwards compatibility)
+      const action = sig.action || sig.direction || 'WAIT';
+      let dir = sig.signal === 'HOLD' ? 'hold' : action.toLowerCase();
+      let label = sig.signal === 'HOLD' ? 'HOLD' : action;
 
       dirEl.textContent = label;
       dirEl.className = 'signal-dir ' + dir;
@@ -763,17 +768,57 @@
       document.getElementById('signal-conv').className = 'signal-conv ' + (sig.conviction || 'low').toLowerCase();
       document.getElementById('signal-type').textContent = sig.signal || '-';
 
-      if (sig.entry) {
+      if (sig.entry && sig.stop && sig.target) {
         document.getElementById('entry').textContent = sig.entry.toFixed(2);
         document.getElementById('stop').textContent = sig.stop.toFixed(2);
         document.getElementById('target').textContent = sig.target.toFixed(2);
-        const rr = ((sig.target - sig.entry) / (sig.entry - sig.stop)).toFixed(1);
-        document.getElementById('rr').textContent = rr + ':1';
+        // Prevent division by zero
+        if (sig.entry !== sig.stop) {
+          const rr = Math.abs((sig.target - sig.entry) / (sig.entry - sig.stop)).toFixed(1);
+          document.getElementById('rr').textContent = rr + ':1';
+        } else {
+          document.getElementById('rr').textContent = '--';
+        }
+      } else {
+        // Clear levels when not available (WAIT/EXIT signals)
+        document.getElementById('entry').textContent = '--';
+        document.getElementById('stop').textContent = '--';
+        document.getElementById('target').textContent = '--';
+        document.getElementById('rr').textContent = '--';
+      }
+
+      // Update top bar SPY price from signal
+      if (sig.price) {
+        document.getElementById('spy-price').textContent = '$' + sig.price.toFixed(2);
       }
     }
 
     // Add message
     function addMessage(msg) {
+      // Handle MARKET_DATA events separately (structured data from fast_spy_check)
+      if (msg.type === 'MARKET_DATA' && msg.signal) {
+        const d = msg.signal;
+        marketDataHistory.unshift({
+          time: msg.timestamp,
+          price: d.price || 0,
+          vwap: d.vwap || 0,
+          rsi: d.rsi || 0,
+          orb: d.orb || '--',
+          ema_9: d.ema_9 || 0,
+          ema_21: d.ema_21 || 0,
+          macd_hist: d.macd_hist || 0,
+          price_vs_vwap: d.price_vs_vwap || 0
+        });
+        if (marketDataHistory.length > 20) marketDataHistory.pop();
+        renderMarketHistory();
+
+        // Update top bar SPY price
+        if (d.price) {
+          document.getElementById('spy-price').textContent = '$' + d.price.toFixed(2);
+        }
+        return; // Don't add to messages array (not a Q&A message)
+      }
+
       messages.push(msg);
       if (messages.length > 100) messages.shift();
 
@@ -794,14 +839,30 @@
       renderAgentHistories();
     }
 
-    // Update time
+    // Update time and market status
     function updateTime() {
       const now = new Date();
       document.getElementById('current-time').textContent =
         now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) + ' PT';
 
       const h = now.getHours();
+      const m = now.getMinutes();
       const warn = document.getElementById('warning');
+      const status = document.getElementById('market-status');
+
+      // Market hours: 6:30 AM - 1:00 PM PT
+      if (h < 6 || (h === 6 && m < 30)) {
+        status.textContent = 'PRE-MARKET';
+        status.style.color = '#666';
+      } else if (h >= 13) {
+        status.textContent = 'CLOSED';
+        status.style.color = '#ff0000';
+      } else {
+        status.textContent = 'MARKET OPEN';
+        status.style.color = '#00ff00';
+      }
+
+      // Time-based warnings
       if (h >= 12) warn.textContent = 'AFTER 12PM - HIGH RISK';
       else if (h >= 11) warn.textContent = 'AFTER 11AM - THETA ACCELERATING';
       else warn.textContent = '';
@@ -855,6 +916,23 @@
         const data = await res.json();
         if (data && data.length) {
           data.forEach(m => {
+            // Handle MARKET_DATA events from history
+            if (m.type === 'MARKET_DATA' && m.signal) {
+              const d = m.signal;
+              marketDataHistory.push({
+                time: m.timestamp,
+                price: d.price || 0,
+                vwap: d.vwap || 0,
+                rsi: d.rsi || 0,
+                orb: d.orb || '--',
+                ema_9: d.ema_9 || 0,
+                ema_21: d.ema_21 || 0,
+                macd_hist: d.macd_hist || 0,
+                price_vs_vwap: d.price_vs_vwap || 0
+              });
+              return; // Don't add to messages
+            }
+
             messages.push(m);
             if (m.signal) {
               signalHistory.unshift({
@@ -866,11 +944,17 @@
               });
             }
           });
-          const lastSig = data.find(m => m.signal);
+
+          // Reverse market data so newest is first
+          marketDataHistory.reverse();
+          if (marketDataHistory.length > 20) marketDataHistory.length = 20;
+
+          const lastSig = data.find(m => m.signal && m.type !== 'MARKET_DATA');
           if (lastSig) updateSignal(lastSig.signal);
           renderQA();
           renderHistory();
           renderAgentHistories();
+          renderMarketHistory();
           return true;
         }
       } catch (e) {}
