@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>0DTE DESK</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -317,14 +318,14 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 2px;
-      font-size: 9px;
+      font-size: 11px;
     }
 
     /* SIGNAL HISTORY TABLE */
     .history-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 10px;
+      font-size: 11px;
     }
 
     .history-table th {
@@ -335,7 +336,7 @@
       border-bottom: 1px solid #333;
       font-weight: normal;
       text-transform: uppercase;
-      font-size: 9px;
+      font-size: 10px;
     }
 
     .history-table td {
@@ -449,6 +450,23 @@
       flex: 1;
       min-height: 0;
     }
+
+    /* Markdown styles */
+    .md-content { white-space: normal; }
+    .md-content p { margin: 0 0 4px 0; }
+    .md-content strong { color: #fff; }
+    .md-content em { color: #cc99ff; }
+    .md-content code { background: #1a1a1a; padding: 1px 4px; color: #ff9900; font-size: 9px; }
+    .md-content pre { background: #0a0a0a; padding: 4px; margin: 4px 0; overflow-x: auto; }
+    .md-content pre code { background: none; padding: 0; }
+    .md-content ul, .md-content ol { margin: 4px 0; padding-left: 16px; }
+    .md-content li { margin: 2px 0; }
+    .md-content h1, .md-content h2, .md-content h3 { color: #ff9900; margin: 6px 0 4px 0; font-size: 11px; }
+    .md-content a { color: #3399ff; text-decoration: none; }
+    .md-content blockquote { border-left: 2px solid #444; padding-left: 8px; color: #888; margin: 4px 0; }
+    .md-content table { border-collapse: collapse; width: 100%; margin: 4px 0; }
+    .md-content th, .md-content td { border: 1px solid #333; padding: 2px 4px; text-align: left; }
+    .md-content th { background: #1a1a1a; color: #ff9900; }
   </style>
 </head>
 <body>
@@ -575,6 +593,23 @@
       return div.innerHTML;
     }
 
+    // Render markdown with sanitization
+    function renderMd(text) {
+      if (!text) return '';
+      try {
+        // Configure marked for safety
+        marked.setOptions({
+          breaks: true,  // Convert \n to <br>
+          gfm: true,     // GitHub Flavored Markdown
+          sanitize: false // We'll trust agent output
+        });
+        return '<div class="md-content">' + marked.parse(text) + '</div>';
+      } catch (e) {
+        // Fallback to escaped text if markdown fails
+        return escapeHtml(text);
+      }
+    }
+
     // Parse direction from content
     function parseDir(content) {
       if (content.includes('BUYING') || content.includes('bullish') || content.includes('BULLISH')) return 'bullish';
@@ -619,7 +654,7 @@
             <span class="agent-entry-time">${m.timestamp}</span>
             <span class="agent-entry-badge ${dir}">${badge}</span>
           </div>
-          <div class="agent-entry-body">${escapeHtml(m.content)}</div>
+          <div class="agent-entry-body">${renderMd(m.content)}</div>
         </div>`;
       }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
 
@@ -640,7 +675,7 @@
             <span class="agent-entry-time">${m.timestamp}</span>
             <span class="agent-entry-badge ${dir}">${badge}</span>
           </div>
-          <div class="agent-entry-body">${escapeHtml(m.content)}</div>
+          <div class="agent-entry-body">${renderMd(m.content)}</div>
         </div>`;
       }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
 
@@ -661,7 +696,7 @@
             <span class="agent-entry-time">${m.timestamp}</span>
             <span class="agent-entry-badge ${dir}">${badge}</span>
           </div>
-          <div class="agent-entry-body">${escapeHtml(m.content)}</div>
+          <div class="agent-entry-body">${renderMd(m.content)}</div>
         </div>`;
       }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
 
@@ -699,7 +734,7 @@
             <span class="qa-sender ${cfg.cls}">${cfg.sender}</span>
             <span class="qa-time">${m.timestamp}</span>
           </div>
-          <div class="qa-body">${isAgent ? '"' + escapeHtml(m.content) + '"' : escapeHtml(m.content)}</div>
+          <div class="qa-body">${isAgent ? '"' + escapeHtml(m.content) + '"' : renderMd(m.content)}</div>
           ${signalHtml}
         </div>`;
       }).join('');
@@ -1034,7 +1069,7 @@
     const clearPositionBtn = document.getElementById('clear-position-btn');
     const positionStatus = document.getElementById('position-status');
 
-    function updatePositionStatus(question) {
+    function updatePositionStatus(question, forceUpdate = false) {
       if (question && question.trim()) {
         positionStatus.textContent = 'VALIDATING';
         positionStatus.style.color = '#00ff00';
@@ -1045,7 +1080,10 @@
       } else {
         positionStatus.textContent = 'SCANNING';
         positionStatus.style.color = '#555';
-        positionInput.value = '';
+        // Don't clear input if user is typing (input is focused)
+        if (forceUpdate || document.activeElement !== positionInput) {
+          positionInput.value = '';
+        }
         positionInput.disabled = false;
         setPositionBtn.style.display = 'inline-block';
         clearPositionBtn.style.display = 'inline-block';
