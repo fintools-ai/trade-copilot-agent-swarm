@@ -833,6 +833,12 @@
         });
         if (signalHistory.length > 50) signalHistory.pop();
         renderHistory();
+        // Clear stale warning
+        document.getElementById('warning').textContent = '';
+      } else if (msg.type === 'SWARM_RESPONSE') {
+        // CRITICAL: Coordinator response without parsed signal - show warning
+        document.getElementById('warning').textContent = '⚠️ SIGNAL PARSE FAILED - READ TEXT';
+        document.getElementById('warning').style.color = '#ff0000';
       }
 
       renderQA();
@@ -862,10 +868,12 @@
         status.style.color = '#00ff00';
       }
 
-      // Time-based warnings
-      if (h >= 12) warn.textContent = 'AFTER 12PM - HIGH RISK';
-      else if (h >= 11) warn.textContent = 'AFTER 11AM - THETA ACCELERATING';
-      else warn.textContent = '';
+      // Time-based warnings (don't overwrite critical signal parse failure)
+      if (!warn.textContent.includes('SIGNAL PARSE FAILED')) {
+        if (h >= 12) warn.textContent = 'AFTER 12PM - HIGH RISK';
+        else if (h >= 11) warn.textContent = 'AFTER 11AM - THETA ACCELERATING';
+        else warn.textContent = '';
+      }
     }
 
     // Resizable panels
