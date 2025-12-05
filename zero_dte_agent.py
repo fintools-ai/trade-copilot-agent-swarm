@@ -166,6 +166,10 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
         console.print(f"[bold red]Swarm error: {error_msg}[/bold red]")
         raise  # Re-raise so the outer loop can handle restart
 
+    # Calculate latency
+    response_end_ts = time.time()
+    latency = response_end_ts - query_start_ts
+
     # Extract signal from response - look for JSON with action or direction
     signal = None
     lines = response.strip().split('\n')
@@ -181,16 +185,24 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
                 if 'action' in parsed and 'direction' not in parsed:
                     parsed['direction'] = parsed['action']
                 # Include signal field (ENTRY/HOLD) for UI display - only if present
+                # Add latency for UI display
+                parsed['latency'] = round(latency, 1)
                 signal = parsed
                 break
         except (json.JSONDecodeError, ValueError):
             continue
+
+    # If no signal parsed, create minimal one with latency
+    if signal is None:
+        signal = {"latency": round(latency, 1)}
 
     # Stream the swarm's response to UI with mode indicator and signal
     mode_label = "Fast" if fast_mode else "Full"
     override_note = " (forced)" if mode_override != "auto" else ""
     mode_note = f"\n\n---\n*[{mode_label} Mode{override_note}]*"
     stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
+
+    console.print(f"[dim]Latency: {latency:.1f}s[/dim]")
 
     # Pause before next tool call
     time.sleep(1)
@@ -572,8 +584,14 @@ def run_zero_dte_agent():
                 time.sleep(2)
 
             except Exception as e:
-                console.print(f"\n[yellow]Agent error: {e}[/yellow]")
+                error_msg = str(e)
+                console.print(f"\n[yellow]Agent error: {error_msg}[/yellow]")
                 console.print("[cyan]Restarting in 3 seconds...[/cyan]")
+
+                # Publish error to UI so user sees it
+                error_signal = {"action": "ERROR", "conviction": "HIGH", "error": error_msg[:200]}
+                stream_to_ui("SWARM_ERROR", f"⚠️ ERROR: {error_msg[:300]}", error_signal)
+
                 time.sleep(3)
                 if current_position:
                     prompt = f"Resume validating position: '{current_position}'. Call your tool now."

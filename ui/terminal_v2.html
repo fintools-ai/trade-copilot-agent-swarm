@@ -868,27 +868,18 @@
         return; // Don't add to messages array (not a Q&A message)
       }
 
-      // Track query start time for latency calculation
-      if (msg.type === 'AGENT_QUESTION' && msg.signal && msg.signal.query_start_ts) {
-        lastQueryStartTs = msg.signal.query_start_ts;
-      }
-
-      // Calculate and display latency when response arrives
-      if ((msg.type === 'SWARM_RESPONSE' || msg.type === 'SWARM_ERROR') && lastQueryStartTs > 0) {
-        const now = Date.now() / 1000;
-        lastLatency = now - lastQueryStartTs;
+      // Display latency from signal (calculated server-side for accuracy)
+      if ((msg.type === 'SWARM_RESPONSE' || msg.type === 'SWARM_ERROR') && msg.signal && msg.signal.latency !== undefined) {
+        lastLatency = msg.signal.latency;
         const latencyEl = document.getElementById('latency-display');
+        latencyEl.textContent = `${lastLatency}s`;
         if (lastLatency < 15) {
-          latencyEl.textContent = `${lastLatency.toFixed(1)}s`;
           latencyEl.style.color = '#00ff00';  // Green - fast
         } else if (lastLatency < 30) {
-          latencyEl.textContent = `${lastLatency.toFixed(1)}s`;
           latencyEl.style.color = '#ff9900';  // Orange - moderate
         } else {
-          latencyEl.textContent = `${lastLatency.toFixed(1)}s`;
           latencyEl.style.color = '#ff0000';  // Red - slow
         }
-        lastQueryStartTs = 0;  // Reset for next query
       }
 
       messages.push(msg);
