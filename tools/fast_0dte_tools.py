@@ -57,6 +57,12 @@ async def fast_spy_check() -> str:
       - value: current TRAMA level
       - price_vs_trama: positive = above TRAMA, negative = below
       - trend_strength: 0-1, higher = more new HH/LL = stronger trend
+    - vwap_sd: standard deviation value (flat, not nested)
+    - vwap_position: price position in SD terms (e.g., -1.5 = 1.5 SD below VWAP)
+    - vwap_plus_1: VWAP + 1 SD level
+    - vwap_plus_2: VWAP + 2 SD level
+    - vwap_minus_1: VWAP - 1 SD level
+    - vwap_minus_2: VWAP - 2 SD level
 
     Use for: Quick market read, trend confirmation, entry validation.
     """
@@ -163,7 +169,7 @@ async def fast_spy_check() -> str:
                         "histogram": round(float(mv.get("macd_hist", 0)), 3),
                     }
 
-            # 7. Time series for ORB and TRAMA calculation
+            # 7. Time series for ORB, TRAMA, and VWAP SD calculation
             ts = await mcp.call_tool_async(
                 tool_use_id=f"ts_{symbol}",
                 name="GetTimeSeries",
@@ -181,6 +187,22 @@ async def fast_spy_check() -> str:
                     trama = _calc_trama(t["values"])
                     if trama:
                         data["trama"] = trama
+
+                    # VWAP SD bands calculation - flatten to top level
+                    if data.get("vwap") and data.get("price", {}).get("current"):
+                        vwap_sd = _calc_vwap_sd(
+                            t["values"],
+                            data["vwap"],
+                            data["price"]["current"]
+                        )
+                        if vwap_sd:
+                            # Flatten SD fields to top level for easier LLM parsing
+                            data["vwap_sd"] = vwap_sd["sd"]
+                            data["vwap_position"] = vwap_sd["position"]
+                            data["vwap_plus_1"] = vwap_sd["plus_1"]
+                            data["vwap_plus_2"] = vwap_sd["plus_2"]
+                            data["vwap_minus_1"] = vwap_sd["minus_1"]
+                            data["vwap_minus_2"] = vwap_sd["minus_2"]
 
         # Publish structured market data to UI (no parsing needed)
         _publish_market_data(data)
@@ -291,6 +313,89 @@ def _calc_orb(values: list) -> Optional[Dict]:
         return None
 
 
+def _calc_vwap_sd(values: list, vwap: float, current_price: float) -> Optional[Dict]:
+    """
+    Calculate VWAP Standard Deviation Bands from intraday candles.
+
+    Uses volume-weighted standard deviation of price from VWAP.
+    Only uses today's candles for intraday relevance.
+
+    Args:
+        values: List of candle dicts with 'high', 'low', 'close', 'volume', 'datetime'
+        vwap: Current VWAP value
+        current_price: Current price for position calculation
+
+    Returns:
+        Dict with SD bands and current position
+    """
+    try:
+        import math
+
+        today = datetime.now().strftime("%Y-%m-%d")
+        today_candles = [v for v in values if v.get("datetime", "").startswith(today)]
+
+        if len(today_candles) < 6:  # Need at least 30 min of data
+            return None
+
+        # Calculate volume-weighted squared deviations from VWAP
+        total_volume = 0
+        weighted_sq_dev = 0
+
+        for candle in today_candles:
+            # Typical price for the candle
+            high = float(candle.get("high", 0))
+            low = float(candle.get("low", 0))
+            close = float(candle.get("close", 0))
+            volume = float(candle.get("volume", 0))
+
+            if volume <= 0:
+                continue
+
+            typical_price = (high + low + close) / 3
+
+            # Squared deviation from VWAP, weighted by volume
+            sq_dev = (typical_price - vwap) ** 2
+            weighted_sq_dev += sq_dev * volume
+            total_volume += volume
+
+        if total_volume <= 0:
+            return None
+
+        # Volume-weighted variance and standard deviation
+        variance = weighted_sq_dev / total_volume
+        sd = math.sqrt(variance)
+
+        # Minimum SD threshold (avoid too narrow bands early in day)
+        sd = max(sd, 0.30)
+
+        # Calculate bands
+        plus_1 = round(vwap + sd, 2)
+        plus_2 = round(vwap + 2 * sd, 2)
+        minus_1 = round(vwap - sd, 2)
+        minus_2 = round(vwap - 2 * sd, 2)
+
+        # Calculate current position in SD terms
+        # Positive = above VWAP, negative = below VWAP
+        # ±1 = at ±1 SD, ±2 = at ±2 SD
+        if sd > 0:
+            position = round((current_price - vwap) / sd, 2)
+        else:
+            position = 0
+
+        return {
+            "sd": round(sd, 2),
+            "plus_1": plus_1,
+            "plus_2": plus_2,
+            "minus_1": minus_1,
+            "minus_2": minus_2,
+            "position": position,  # e.g., -1.5 means price is 1.5 SD below VWAP
+        }
+
+    except Exception as e:
+        logger.error(f"VWAP SD calculation error: {e}")
+        return None
+
+
 def _calc_trama(values: list, length: int = 14) -> Optional[Dict]:
     """
     Calculate Trend Regularity Adaptive Moving Average (TRAMA).
@@ -397,10 +502,17 @@ def _publish_market_data(data: Dict) -> None:
             "price_vs_vwap": data.get("price_vs_vwap", 0),
             "trama": data.get("trama", {}).get("value", 0),
             "trend_strength": data.get("trama", {}).get("trend_strength", 0),
+            # VWAP SD bands (flat structure)
+            "vwap_sd": data.get("vwap_sd", 0),
+            "vwap_plus_1": data.get("vwap_plus_1", 0),
+            "vwap_plus_2": data.get("vwap_plus_2", 0),
+            "vwap_minus_1": data.get("vwap_minus_1", 0),
+            "vwap_minus_2": data.get("vwap_minus_2", 0),
+            "vwap_position": data.get("vwap_position", 0),
         }
 
         # Publish as MARKET_DATA event type
         publish_event("MARKET_DATA", "", market_data)
-        logger.debug(f"Published market data: SPY ${market_data['price']:.2f}")
+        logger.debug(f"Published market data: SPY ${market_data['price']:.2f} (SD pos: {market_data['vwap_position']})")
     except Exception as e:
         logger.error(f"Failed to publish market data: {e}")

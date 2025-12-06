@@ -20,6 +20,10 @@ AVAILABLE TOOLS:
    - rsi: 14-period (0-100, <30 oversold, >70 overbought)
    - vwap: volume-weighted average price
    - price_vs_vwap: delta (positive = bullish, negative = bearish)
+   - vwap_sd: standard deviation value
+   - vwap_position: price position in SDs from VWAP (e.g., -1.5 = 1.5 SD below VWAP)
+   - vwap_plus_1, vwap_plus_2: upper SD band levels
+   - vwap_minus_1, vwap_minus_2: lower SD band levels
    - ema_9, ema_21: fast/slow EMAs (9>21 = bullish trend)
    - macd: macd line, signal, histogram (positive histogram = bullish momentum)
    - orb: opening range high/low/range (breakout levels)
@@ -30,9 +34,15 @@ AVAILABLE TOOLS:
 
 HOW TO INTERPRET (you decide):
 
+VWAP SD BANDS:
+- At ±2σ: Price extended far from fair value
+- At ±1σ: Price approaching extended zone
+- Inside ±1σ: Normal range, no edge from VWAP alone
+
 BULLISH SIGNALS:
 - RSI rising from oversold (<35) or holding 40-60
 - Price ABOVE VWAP (positive price_vs_vwap)
+- Price at -1σ to -2σ with buying pressure (potential bounce)
 - EMA 9 > EMA 21 (uptrend)
 - MACD histogram positive and rising
 - ORB breakout above high
@@ -41,6 +51,7 @@ BULLISH SIGNALS:
 BEARISH SIGNALS:
 - RSI falling from overbought (>65) or declining
 - Price BELOW VWAP (negative price_vs_vwap)
+- Price at +1σ to +2σ with selling pressure (potential fade)
 - EMA 9 < EMA 21 (downtrend)
 - MACD histogram negative and falling
 - ORB breakdown below low

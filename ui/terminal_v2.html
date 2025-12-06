@@ -761,6 +761,31 @@
         const dir = vwapDiff >= 0 ? 'bullish' : 'bearish';
         const rsiColor = d.rsi > 70 ? 'down' : d.rsi < 30 ? 'up' : '';
         const emaTrend = d.ema_9 > d.ema_21 ? 'up' : d.ema_9 < d.ema_21 ? 'down' : '';
+
+        // VWAP SD position color coding
+        const sdPos = d.vwap_position || 0;
+        let sdColor = '';
+        let sdLabel = '';
+        if (sdPos <= -2) {
+          sdColor = 'up'; sdLabel = ' OVERSOLD';
+        } else if (sdPos >= 2) {
+          sdColor = 'down'; sdLabel = ' OVERBOUGHT';
+        } else if (sdPos <= -1.5 || sdPos >= 1.5) {
+          sdColor = 'highlight';
+        }
+
+        // SD bands HTML (only show if data available)
+        const sdHtml = d.vwap_sd ? `
+            <div class="row" style="border-top:1px solid #222;margin-top:2px;padding-top:2px;">
+              <span class="label">VWAP σ</span>
+              <span class="value ${sdColor}" style="font-weight:bold">${sdPos >= 0 ? '+' : ''}${sdPos.toFixed(2)}σ${sdLabel}</span>
+            </div>
+            <div class="row"><span class="label">+2σ</span><span class="value" style="color:#ff6666">$${d.vwap_plus_2.toFixed(2)}</span></div>
+            <div class="row"><span class="label">+1σ</span><span class="value" style="color:#ff9999">$${d.vwap_plus_1.toFixed(2)}</span></div>
+            <div class="row"><span class="label">-1σ</span><span class="value" style="color:#99ff99">$${d.vwap_minus_1.toFixed(2)}</span></div>
+            <div class="row"><span class="label">-2σ</span><span class="value" style="color:#66ff66">$${d.vwap_minus_2.toFixed(2)}</span></div>
+        ` : '';
+
         return `<div class="market-entry ${i === 0 ? 'latest' : ''}">
           <div class="agent-entry-header">
             <span class="agent-entry-time">${d.time}</span>
@@ -773,6 +798,7 @@
             <div class="row"><span class="label">ORB</span><span class="value">${d.orb}</span></div>
             <div class="row"><span class="label">EMA 9/21</span><span class="value ${emaTrend}">${d.ema_9.toFixed(2)}/${d.ema_21.toFixed(2)}</span></div>
             <div class="row"><span class="label">MACD H</span><span class="value ${d.macd_hist >= 0 ? 'up' : 'down'}">${d.macd_hist.toFixed(3)}</span></div>
+            ${sdHtml}
           </div>
         </div>`;
       }).join('') || '<div style="color:#444;padding:8px;">No data</div>';
@@ -851,7 +877,14 @@
           ema_9: d.ema_9 || 0,
           ema_21: d.ema_21 || 0,
           macd_hist: d.macd_hist || 0,
-          price_vs_vwap: d.price_vs_vwap || 0
+          price_vs_vwap: d.price_vs_vwap || 0,
+          // VWAP SD bands
+          vwap_sd: d.vwap_sd || 0,
+          vwap_plus_1: d.vwap_plus_1 || 0,
+          vwap_plus_2: d.vwap_plus_2 || 0,
+          vwap_minus_1: d.vwap_minus_1 || 0,
+          vwap_minus_2: d.vwap_minus_2 || 0,
+          vwap_position: d.vwap_position || 0
         });
         if (marketDataHistory.length > 20) marketDataHistory.pop();
         renderMarketHistory();
