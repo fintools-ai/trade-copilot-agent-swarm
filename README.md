@@ -14,11 +14,18 @@
    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝ ╚═════╝    ╚═╝
 ```
 
+## UI
+
+![Terminal UI](docs/ui.png)
+
+
 ## Architecture
 
 ![Architecture](docs/img.png)
 
+
 ## Vision: Proactive LLMs
+
 
 Most AI tools today are **reactive** — they wait for human input, respond, then wait again. This creates a bottleneck: the human becomes the limiting factor.
 
