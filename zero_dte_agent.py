@@ -86,31 +86,63 @@ def get_position_context() -> str:
 
 def get_last_recommendation() -> dict:
     """
-    Get the last recommendation from Redis history for continuity.
-    Returns the most recent signal with action, conviction, price, etc.
+    Get the last active position and current state from Redis history.
+
+    Returns BOTH:
+    1. Original ENTRY params (entry/stop/target) for risk management
+    2. Current state (HOLD/EXIT) and conviction
+
+    Logic:
+    - Find the most recent ENTRY to get trade params
+    - Find the most recent signal to get current state
+    - If EXIT found before ENTRY → position closed, return {}
     """
     try:
         stream = get_stream()
-        # Get last few events (newest first)
-        events = stream.redis.lrange("zero_dte:history", 0, 10)
+        events = stream.redis.lrange("zero_dte:history", 0, 25)
+
+        entry_data = None
+        current_state = None
 
         for event_json in events:
             try:
                 event = json.loads(event_json)
                 if event.get("signal") and event.get("type") == "SWARM_RESPONSE":
                     sig = event["signal"]
-                    return {
-                        "action": sig.get("action") or sig.get("direction"),
-                        "signal": sig.get("signal"),
-                        "conviction": sig.get("conviction"),
-                        "price": sig.get("price"),
-                        "entry": sig.get("entry"),
-                        "stop": sig.get("stop"),
-                        "target": sig.get("target"),
-                        "time": event.get("timestamp")
-                    }
+                    signal_type = sig.get("signal")
+                    action = sig.get("action") or sig.get("direction")
+
+                    # Capture most recent signal as current state (first one we see)
+                    if current_state is None:
+                        current_state = {
+                            "current_signal": signal_type,
+                            "current_conviction": sig.get("conviction"),
+                            "current_price": sig.get("price"),
+                            "last_update": event.get("timestamp")
+                        }
+
+                    # EXIT found before ENTRY → position closed
+                    if entry_data is None and (signal_type == "EXIT" or action == "EXIT"):
+                        return {}
+
+                    # Found ENTRY → capture trade params
+                    if signal_type == "ENTRY" and entry_data is None:
+                        entry_data = {
+                            "action": action,
+                            "entry": sig.get("entry"),
+                            "stop": sig.get("stop"),
+                            "target": sig.get("target"),
+                            "entry_time": event.get("timestamp")
+                        }
+                        break
+
             except (json.JSONDecodeError, KeyError):
                 continue
+
+        # Combine entry + current state if we have both
+        if entry_data and current_state:
+            return {**entry_data, **current_state}
+
         return {}
     except Exception as e:
         console.print(f"[red]Redis error reading last recommendation: {e}[/red]")
@@ -140,12 +172,13 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
         # Auto mode - use agent's decision
         console.print(f"[dim]>>> EXECUTING: {'FAST' if fast_mode else 'FULL'} MODE (auto - agent decided) <<<[/dim]")
 
-    # Get previous recommendation for continuity
+    # Get current trade context (original ENTRY + latest state)
     last_rec = get_last_recommendation()
     if last_rec and last_rec.get("action"):
-        prev_context = f"\n\n[PREVIOUS: {last_rec['action']} {last_rec.get('signal', '')} @ {last_rec.get('time', '')} | Conv: {last_rec.get('conviction', '')} | Entry: {last_rec.get('entry', '')} | Stop: {last_rec.get('stop', '')}]"
+        # Natural language - like a trader would say it
+        prev_context = f"\n\n[CURRENT TRADE: {last_rec['action']} @ ${last_rec.get('entry')} | Stop ${last_rec.get('stop')} | Target ${last_rec.get('target')} — {last_rec.get('current_signal')} with {last_rec.get('current_conviction')} conviction]"
         query_with_context = query + prev_context
-        console.print(f"[dim]Previous: {last_rec['action']} {last_rec.get('conviction', '')}[/dim]")
+        console.print(f"[dim]Trade: {last_rec['action']} @ ${last_rec.get('entry')} — {last_rec.get('current_signal')} {last_rec.get('current_conviction')}[/dim]")
     else:
         query_with_context = query
 
@@ -203,9 +236,6 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
 
     console.print(f"[dim]Latency: {latency:.1f}s[/dim]")
-
-    # Pause before next tool call
-    time.sleep(1)
 
     return response
 
