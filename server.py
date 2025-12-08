@@ -18,6 +18,7 @@ Usage:
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler
 from socketserver import ThreadingMixIn
@@ -83,6 +84,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_set_position()
         elif self.path == "/clear-position":
             self.handle_clear_position()
+        elif self.path == "/exit-trade":
+            self.handle_exit_trade()
         else:
             self.send_error(404, "Not Found")
 
@@ -175,6 +178,42 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps({"status": "ok"}).encode())
+
+    def handle_exit_trade(self):
+        """
+        Exit current trade and return to scan mode.
+        Writes an EXIT event to history so get_last_recommendation() returns {}.
+        """
+        from zoneinfo import ZoneInfo
+        pt_tz = ZoneInfo("America/Los_Angeles")
+        timestamp = datetime.now(pt_tz).strftime("%Y-%m-%d %H:%M:%S PT")
+
+        # Create EXIT event that matches SWARM_RESPONSE format
+        exit_event = {
+            "type": "SWARM_RESPONSE",
+            "content": "Manual exit - position closed, scanning for new trade",
+            "timestamp": timestamp,
+            "signal": {
+                "action": "EXIT",
+                "signal": "EXIT",
+                "conviction": "HIGH",
+                "source": "manual"
+            }
+        }
+
+        # Push to history (lpush = newest first)
+        redis_stream.redis.lpush("zero_dte:history", json.dumps(exit_event))
+
+        # Also publish to SSE so UI updates immediately
+        redis_stream.publish(exit_event)
+
+        console.print("[bold yellow]MANUAL EXIT - Position closed, scanning for new trade[/bold yellow]")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "ok", "message": "Position closed"}).encode())
 
     def handle_history(self):
         """Return event history as JSON for instant UI loading"""

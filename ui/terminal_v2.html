@@ -391,6 +391,21 @@
     .mode-btn[data-mode="fast"] { color: #3399ff; border-color: #3399ff; }
     .mode-btn[data-mode="full"] { color: #ff9900; border-color: #ff9900; }
 
+    /* Exit Trade Button */
+    .exit-btn {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 2px 10px;
+      border: 1px solid #ff3333;
+      background: #111;
+      color: #ff3333;
+      cursor: pointer;
+      text-transform: uppercase;
+      margin-left: 8px;
+    }
+    .exit-btn:hover { background: #331111; border-color: #ff6666; }
+
     /* Position Input */
     .position-box {
       padding: 6px 8px;
@@ -577,6 +592,7 @@
     <div class="bottom-bar">
       <span>
         <button class="mode-btn" id="mode-btn" data-mode="fast">FAST</button>
+        <button class="exit-btn" id="exit-btn">EXIT TRADE</button>
         <span style="color:#444">| 0DTE Desk v2</span>
       </span>
       <span class="warning" id="warning"></span>
@@ -1145,6 +1161,20 @@
       const nextMode = modes[(currentIndex + 1) % modes.length];
       setMode(nextMode);
     });
+
+    // Exit Trade button
+    const exitBtn = document.getElementById('exit-btn');
+
+    async function exitTrade() {
+      try {
+        await fetch('/exit-trade', { method: 'POST' });
+        console.log('Trade exited - scanning for new setup');
+      } catch (e) {
+        console.error('Failed to exit trade:', e);
+      }
+    }
+
+    exitBtn.addEventListener('click', exitTrade);
 
     // Position/Custom Question handling
     const positionInput = document.getElementById('position-input');
