@@ -84,6 +84,34 @@ def get_position_context() -> str:
         return ""
 
 
+def was_just_exited() -> bool:
+    """
+    Check if the most recent signal was an EXIT (manual or system).
+    Used to tell the agent "position just closed, scan for new setup".
+    """
+    try:
+        stream = get_stream()
+        events = stream.redis.lrange("zero_dte:history", 0, 5)
+
+        for event_json in events:
+            try:
+                event = json.loads(event_json)
+                if event.get("signal") and event.get("type") == "SWARM_RESPONSE":
+                    sig = event["signal"]
+                    signal_type = sig.get("signal")
+                    action = sig.get("action")
+                    # First SWARM_RESPONSE we find - check if it's EXIT
+                    if signal_type == "EXIT" or action == "EXIT":
+                        return True
+                    else:
+                        return False  # Most recent signal is not EXIT
+            except (json.JSONDecodeError, KeyError):
+                continue
+        return False
+    except Exception:
+        return False
+
+
 def get_last_recommendation() -> dict:
     """
     Get the last active position and current state from Redis history.
@@ -179,6 +207,11 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
         prev_context = f"\n\n[CURRENT TRADE: {last_rec['action']} @ ${last_rec.get('entry')} | Stop ${last_rec.get('stop')} | Target ${last_rec.get('target')} — {last_rec.get('current_signal')} with {last_rec.get('current_conviction')} conviction]"
         query_with_context = query + prev_context
         console.print(f"[dim]Trade: {last_rec['action']} @ ${last_rec.get('entry')} — {last_rec.get('current_signal')} {last_rec.get('current_conviction')}[/dim]")
+    elif was_just_exited():
+        # Position was just closed - tell agent to scan for new setup
+        exit_context = "\n\n[POSITION CLOSED - scanning for new entry setup. Look for fresh CALL or PUT opportunity.]"
+        query_with_context = query + exit_context
+        console.print(f"[dim]Status: Position closed, scanning for new trade[/dim]")
     else:
         query_with_context = query
 
