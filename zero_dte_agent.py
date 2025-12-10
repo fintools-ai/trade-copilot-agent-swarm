@@ -24,6 +24,7 @@ from rich.panel import Panel
 
 from swarm import TradingSwarm
 from redis_stream import publish_event, get_stream
+from utils.token_tracker import TokenTracker
 
 console = Console()
 
@@ -235,6 +236,23 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     # Calculate latency
     response_end_ts = time.time()
     latency = response_end_ts - query_start_ts
+
+    # Track token usage from swarm
+    try:
+        token_usage = swarm.get_last_token_usage()
+        if token_usage and token_usage.get('total', {}).get('input', 0) > 0:
+            mode_label = "fast" if fast_mode else "full"
+            tracker = TokenTracker(mode=mode_label, model="haiku-4.5")
+
+            # Record per-agent tokens
+            for agent_name, agent_data in token_usage.get('agents', {}).items():
+                tracker.record(agent_name, agent_data.get('input', 0), agent_data.get('output', 0))
+
+            # Save to Redis + JSONL
+            tracker.finish()
+            console.print(f"[dim]Tokens: {token_usage['total']['input']:,} in / {token_usage['total']['output']:,} out[/dim]")
+    except Exception as e:
+        console.print(f"[dim]Token tracking error: {e}[/dim]")
 
     # Extract signal from response - look for JSON with action or direction
     signal = None
@@ -636,7 +654,18 @@ def run_zero_dte_agent():
 
             try:
                 # Agent should run continuously, but if it returns, restart it
-                agent(prompt)
+                result = agent(prompt)
+
+                # Track outer agent tokens (the orchestrating Haiku agent)
+                if hasattr(result, 'metrics') and hasattr(result.metrics, 'accumulated_usage'):
+                    usage = result.metrics.accumulated_usage
+                    outer_input = usage.get('inputTokens', 0)
+                    outer_output = usage.get('outputTokens', 0)
+                    if outer_input > 0 or outer_output > 0:
+                        tracker = TokenTracker(mode=current_mode, model="haiku-4.5")
+                        tracker.record("zero_dte_agent", outer_input, outer_output)
+                        tracker.finish()
+                        console.print(f"[dim]Outer agent tokens: {outer_input:,} in / {outer_output:,} out[/dim]")
 
                 # If agent returns without error, it stopped - restart it
                 console.print("\n[yellow]Agent stopped - restarting...[/yellow]")

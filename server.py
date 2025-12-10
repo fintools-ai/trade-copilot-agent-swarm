@@ -68,6 +68,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_get_mode()
         elif self.path == "/get-position":
             self.handle_get_position()
+        elif self.path == "/token-stats":
+            self.handle_token_stats()
         elif self.path == "/":
             self.path = "/index.html"
             super().do_GET()
@@ -224,6 +226,45 @@ class StreamingHandler(SimpleHTTPRequestHandler):
 
         history = redis_stream.get_history(limit=100)
         self.wfile.write(json.dumps(history).encode())
+
+    def handle_token_stats(self):
+        """Return token usage statistics for the day"""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        from zoneinfo import ZoneInfo
+        pt_tz = ZoneInfo("America/Los_Angeles")
+        today = datetime.now(pt_tz).strftime("%Y-%m-%d")
+
+        # Get daily summary from Redis
+        summary_key = f"zero_dte:tokens:summary:{today}"
+        summary_str = redis_stream.redis.get(summary_key)
+
+        if summary_str:
+            summary = json.loads(summary_str)
+        else:
+            summary = {"cycles": 0, "input_tokens": 0, "output_tokens": 0}
+
+        # Get cycle history (last 50 cycles)
+        history_key = f"zero_dte:tokens:history:{today}"
+        history_raw = redis_stream.redis.lrange(history_key, 0, 49)
+        history = []
+        for item in history_raw:
+            try:
+                history.append(json.loads(item))
+            except json.JSONDecodeError:
+                pass
+
+        response = {
+            "cycles": summary.get("cycles", 0),
+            "input_tokens": summary.get("input_tokens", 0),
+            "output_tokens": summary.get("output_tokens", 0),
+            "history": history
+        }
+
+        self.wfile.write(json.dumps(response).encode())
 
     def handle_sse(self):
         """Handle Server-Sent Events connection with Redis pub/sub"""

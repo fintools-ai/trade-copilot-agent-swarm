@@ -18,8 +18,8 @@
     }
 
     .terminal {
-      display: grid;
-      grid-template-rows: auto 1fr auto;
+      display: flex;
+      flex-direction: column;
       height: 100vh;
     }
 
@@ -47,6 +47,146 @@
       animation: pulse 1.5s infinite;
     }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    /* TAB BAR - Bloomberg style */
+    .tab-bar {
+      display: flex;
+      gap: 1px;
+      background: #1a1a1a;
+      padding: 0;
+      border-bottom: none;
+    }
+    .tab-btn {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 10px;
+      font-weight: bold;
+      padding: 6px 20px;
+      border: none;
+      background: #252525;
+      color: #888;
+      cursor: pointer;
+      text-transform: uppercase;
+      border-bottom: none;
+      position: relative;
+    }
+    .tab-btn:hover { background: #333; color: #ccc; }
+    .tab-btn.active {
+      background: #1a1a1a;
+      color: #ff6600;
+      border-bottom: 2px solid #ff6600;
+    }
+
+    /* Dropdown */
+    .tab-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .tab-dropdown-content {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      background: #252525;
+      border: 1px solid #444;
+      min-width: 160px;
+      z-index: 1000;
+      box-shadow: 2px 2px 8px rgba(0,0,0,0.5);
+    }
+    .tab-dropdown:hover .tab-dropdown-content { display: block; }
+    .tab-dropdown-item {
+      display: block;
+      padding: 10px 16px;
+      color: #ccc;
+      text-decoration: none;
+      font-size: 10px;
+      cursor: pointer;
+      border-bottom: 1px solid #333;
+    }
+    .tab-dropdown-item:last-child { border-bottom: none; }
+    .tab-dropdown-item:hover { background: #333; color: #ff6600; }
+
+    /* Tab Content */
+    .tab-content { display: none; flex: 1; overflow: hidden; }
+    .tab-content.active { display: flex; flex-direction: column; }
+
+    /* Token Metrics Page */
+    .token-page {
+      padding: 16px;
+      overflow-y: auto;
+    }
+    .token-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .token-card {
+      background: #0a0a0a;
+      border: 1px solid #333;
+      padding: 12px;
+    }
+    .token-card-label { color: #666; font-size: 10px; text-transform: uppercase; }
+    .token-card-value { color: #ff9900; font-size: 24px; font-weight: bold; margin-top: 4px; }
+    .token-card-sub { color: #888; font-size: 10px; margin-top: 2px; }
+    .token-model-select {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 10px;
+      background: #111;
+      border: 1px solid #333;
+      color: #ff6600;
+      padding: 2px 6px;
+      margin-top: 4px;
+      cursor: pointer;
+      outline: none;
+    }
+    .token-model-select:hover { border-color: #ff6600; }
+    .token-model-select option { background: #111; color: #ccc; }
+
+    .token-history-title {
+      color: #ff9900;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+    }
+    .token-block {
+      background: #0a0a0a;
+      border: 1px solid #333;
+      margin-bottom: 12px;
+    }
+    .token-block-header {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #111;
+      border-bottom: 1px solid #333;
+    }
+    .token-block-time { color: #888; font-size: 10px; }
+    .token-block-mode { color: #3399ff; font-size: 10px; font-weight: bold; }
+    .token-block-body { padding: 8px 12px; }
+    .token-agent-row {
+      display: grid;
+      grid-template-columns: 150px 1fr 1fr;
+      gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px dotted #222;
+    }
+    .token-agent-row:last-child { border-bottom: none; }
+    .token-agent-name { color: #888; }
+    .token-agent-name.flow { color: #00ccff; }
+    .token-agent-name.tech { color: #cc99ff; }
+    .token-agent-name.coord { color: #ff9900; }
+    .token-input { color: #666; }
+    .token-output { color: #888; }
+    .token-block-footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #111;
+      border-top: 1px solid #333;
+    }
+    .token-total { color: #fff; font-weight: bold; }
+    .token-cost { color: #00ff00; }
 
     /* MAIN */
     .main {
@@ -497,7 +637,19 @@
       <span id="current-time">--</span>
     </div>
 
-    <!-- MAIN -->
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="desk">DESK</button>
+      <div class="tab-dropdown">
+        <button class="tab-btn" data-tab="data">DATA ▼</button>
+        <div class="tab-dropdown-content">
+          <div class="tab-dropdown-item" data-page="tokens">Token Usage</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: DESK (Trading View) -->
+    <div class="tab-content active" id="tab-desk">
     <div class="main">
       <!-- LEFT: AGENT HISTORIES -->
       <div class="left-panel panel" id="left-panel">
@@ -587,8 +739,7 @@
         </div>
       </div>
     </div>
-
-    <!-- BOTTOM BAR -->
+    <!-- BOTTOM BAR (inside desk tab) -->
     <div class="bottom-bar">
       <span>
         <button class="mode-btn" id="mode-btn" data-mode="fast">FAST</button>
@@ -598,7 +749,49 @@
       <span class="warning" id="warning"></span>
       <span><span id="latency-display" style="color:#888;">--</span> | <span id="status">Connected</span></span>
     </div>
-  </div>
+    </div><!-- end tab-desk -->
+
+    <!-- TAB: TOKEN USAGE -->
+    <div class="tab-content" id="tab-tokens">
+      <div class="token-page">
+        <!-- Summary Cards -->
+        <div class="token-summary">
+          <div class="token-card">
+            <div class="token-card-label">Total Cycles</div>
+            <div class="token-card-value" id="token-cycles">0</div>
+            <div class="token-card-sub">Today</div>
+          </div>
+          <div class="token-card">
+            <div class="token-card-label">Input Tokens</div>
+            <div class="token-card-value" id="token-input">0</div>
+            <div class="token-card-sub" id="token-input-m">0M</div>
+          </div>
+          <div class="token-card">
+            <div class="token-card-label">Output Tokens</div>
+            <div class="token-card-value" id="token-output">0</div>
+            <div class="token-card-sub" id="token-output-m">0M</div>
+          </div>
+          <div class="token-card">
+            <div class="token-card-label">Est. Cost</div>
+            <div class="token-card-value" id="token-cost">$0.00</div>
+            <select id="token-model-select" class="token-model-select">
+              <option value="haiku-4.5">Haiku 4.5</option>
+              <option value="sonnet-4">Sonnet 4</option>
+              <option value="sonnet-4.5">Sonnet 4.5</option>
+              <option value="opus-4">Opus 4</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Invocation History -->
+        <div class="token-history-title">Invocation History</div>
+        <div id="token-history">
+          <div style="color:#444;padding:8px;">No token data yet. Start the agent to begin tracking.</div>
+        </div>
+      </div>
+    </div><!-- end tab-tokens -->
+
+  </div><!-- end terminal -->
 
   <script>
     const messages = [];
@@ -1250,6 +1443,125 @@
     positionInput.addEventListener('keydown', function(e) {
       if (e.key === 'Enter') setPosition();
     });
+
+    // Tab switching
+    function switchTab(tabId) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+
+      // Show selected tab
+      const tab = document.getElementById('tab-' + tabId);
+      if (tab) tab.classList.add('active');
+
+      // Highlight tab button
+      const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+      if (btn) btn.classList.add('active');
+
+      // Load data for token page
+      if (tabId === 'tokens') loadTokenData();
+    }
+
+    // Tab button clicks
+    document.querySelector('.tab-btn[data-tab="desk"]').addEventListener('click', () => switchTab('desk'));
+    document.querySelector('.tab-dropdown-item[data-page="tokens"]').addEventListener('click', () => switchTab('tokens'));
+
+    // Token data
+    const tokenHistory = [];
+    let currentTokenTotals = { input: 0, output: 0 };  // Track for recalculation
+    let selectedModel = 'haiku-4.5';
+
+
+    const MODEL_PRICING = {
+      'haiku-4.5': { input: 0.0011, output: 0.0055, name: 'Claude Haiku 4.5' },
+      'sonnet-4': { input: 0.003, output: 0.015, name: 'Claude Sonnet 4' },
+      'sonnet-4.5': { input: 0.0033, output: 0.0165, name: 'Claude Sonnet 4.5' },
+      'opus-4': { input: 0.015, output: 0.075, name: 'Claude Opus 4' }
+    };
+
+    // Calculate cost for given tokens and model
+    function calculateCost(inputTokens, outputTokens, model = 'haiku-4.5') {
+      const pricing = MODEL_PRICING[model] || MODEL_PRICING['haiku-4.5'];
+      // Pricing is per 1,000 tokens
+      return (inputTokens / 1000 * pricing.input) + (outputTokens / 1000 * pricing.output);
+    }
+
+    async function loadTokenData() {
+      try {
+        const res = await fetch('/token-stats');
+        const data = await res.json();
+
+        // Store totals for recalculation when model changes
+        currentTokenTotals.input = data.input_tokens || 0;
+        currentTokenTotals.output = data.output_tokens || 0;
+
+        // Update summary cards
+        document.getElementById('token-cycles').textContent = data.cycles || 0;
+        document.getElementById('token-input').textContent = currentTokenTotals.input.toLocaleString();
+        document.getElementById('token-output').textContent = currentTokenTotals.output.toLocaleString();
+
+        const inputM = currentTokenTotals.input / 1000000;
+        const outputM = currentTokenTotals.output / 1000000;
+        document.getElementById('token-input-m').textContent = inputM.toFixed(2) + 'M';
+        document.getElementById('token-output-m').textContent = outputM.toFixed(2) + 'M';
+
+        // Calculate total cost using selected model
+        updateCostDisplay();
+
+        // Render history
+        renderTokenHistory(data.history || []);
+      } catch (e) {
+        console.error('Failed to load token data:', e);
+      }
+    }
+
+    // Update cost display based on selected model
+    function updateCostDisplay() {
+      const cost = calculateCost(currentTokenTotals.input, currentTokenTotals.output, selectedModel);
+      document.getElementById('token-cost').textContent = '$' + cost.toFixed(2);
+    }
+
+    // Model selector change handler
+    document.getElementById('token-model-select').addEventListener('change', function() {
+      selectedModel = this.value;
+      updateCostDisplay();
+    });
+
+    function renderTokenHistory(history) {
+      const container = document.getElementById('token-history');
+      if (!history || history.length === 0) {
+        container.innerHTML = '<div style="color:#444;padding:8px;">No token data yet. Start the agent to begin tracking.</div>';
+        return;
+      }
+
+      container.innerHTML = history.map(h => {
+        const agents = h.agents || {};
+        const agentRows = Object.entries(agents).map(([name, data]) => {
+          const cls = name === 'order_flow' ? 'flow' : name === 'tech' ? 'tech' : name === 'coordinator' ? 'coord' : '';
+          return `<div class="token-agent-row">
+            <span class="token-agent-name ${cls}">${name}</span>
+            <span class="token-input">In: ${(data.input || 0).toLocaleString()}</span>
+            <span class="token-output">Out: ${(data.output || 0).toLocaleString()}</span>
+          </div>`;
+        }).join('');
+
+        const totalCost = calculateCost(h.total_input || 0, h.total_output || 0, h.model || 'haiku-4.5');
+
+        return `<div class="token-block">
+          <div class="token-block-header">
+            <span class="token-block-time">${h.timestamp || '--'}</span>
+            <span class="token-block-mode">${(h.mode || 'FAST').toUpperCase()}</span>
+          </div>
+          <div class="token-block-body">
+            ${agentRows}
+          </div>
+          <div class="token-block-footer">
+            <span class="token-total">Total: ${(h.total_input || 0).toLocaleString()} in / ${(h.total_output || 0).toLocaleString()} out</span>
+            <span class="token-cost">$${totalCost.toFixed(4)}</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
 
     // Init
     async function init() {

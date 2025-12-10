@@ -76,6 +76,7 @@ class TradingSwarm:
         self.session_id = session_id
         self.graph_full = self._build_graph()
         self.graph_fast = self._build_fast_graph()
+        self._last_token_usage: dict = {'total': {'input': 0, 'output': 0}, 'agents': {}}
 
         console.print(Panel.fit(
             f"[bold green]Trade Copilot Agent Swarm Ready[/bold green]\n"
@@ -327,12 +328,35 @@ Cross-validate signals across all 4 agents, identify the best setup, and provide
         # Show execution metrics if available
         expected_agents = 3 if fast_mode else 6
         metrics_text = f"[blue]Agents Executed:[/blue] {len(result.results) if hasattr(result, 'results') and result.results else 0}/{expected_agents}"
-        
-        if hasattr(result, 'total_tokens'):
-            metrics_text = f"[green]Total Tokens:[/green] {result.total_tokens:,}\n" + metrics_text
-        
-        if hasattr(result, 'latency'):
-            metrics_text = f"[yellow]Latency:[/yellow] {result.latency:.2f}s\n" + metrics_text
+
+        # Extract token usage from accumulated_usage
+        if hasattr(result, 'accumulated_usage') and result.accumulated_usage:
+            usage = result.accumulated_usage
+            input_tokens = usage.get('inputTokens', 0)
+            output_tokens = usage.get('outputTokens', 0)
+            total_tokens = input_tokens + output_tokens
+            metrics_text = f"[green]Tokens:[/green] {input_tokens:,} in / {output_tokens:,} out ({total_tokens:,} total)\n" + metrics_text
+
+            # Store token usage for external access
+            agents_usage: dict[str, dict[str, int]] = {}
+
+            # Extract per-agent token usage
+            if hasattr(result, 'results') and result.results:
+                for agent_name, node_result in result.results.items():
+                    if hasattr(node_result, 'accumulated_usage') and node_result.accumulated_usage:
+                        agent_usage = node_result.accumulated_usage
+                        agents_usage[agent_name] = {
+                            'input': agent_usage.get('inputTokens', 0),
+                            'output': agent_usage.get('outputTokens', 0)
+                        }
+
+            self._last_token_usage = {
+                'total': {'input': input_tokens, 'output': output_tokens},
+                'agents': agents_usage
+            }
+
+        if hasattr(result, 'execution_time'):
+            metrics_text = f"[yellow]Execution Time:[/yellow] {result.execution_time / 1000:.2f}s\n" + metrics_text
 
         console.print(Panel.fit(
             metrics_text,
@@ -341,6 +365,10 @@ Cross-validate signals across all 4 agents, identify the best setup, and provide
         ))
 
         return final_recommendation
+
+    def get_last_token_usage(self) -> dict:
+        """Get token usage from the last ask() call."""
+        return getattr(self, '_last_token_usage', {'total': {'input': 0, 'output': 0}, 'agents': {}})
 
     def _extract_node_text(self, node_result) -> str:
         """Extract text content from a graph node result."""
