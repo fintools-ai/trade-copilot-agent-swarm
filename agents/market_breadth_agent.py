@@ -4,6 +4,7 @@ Analyzes open interest for 1DTE/same-day options to determine intraday key level
 """
 
 from strands import Agent
+from strands.models.bedrock import BedrockModel
 from tools.open_interest_tools import analyze_open_interest_tool, analyze_multi_ticker_oi_breadth
 
 # Top tech tickers for market breadth analysis (SPY + top 3 tech)
@@ -195,9 +196,15 @@ def create_market_breadth_agent(session_manager=None) -> Agent:
     Returns:
         Configured Strands Agent for intraday market breadth analysis
     """
+    # Use BedrockModel with prompt caching for latency reduction
+    model = BedrockModel(
+        model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        cache_prompt="default"
+    )
+
     agent = Agent(
         name="Market Breadth Analyst",
-        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        model=model,
         system_prompt=MARKET_BREADTH_INSTRUCTIONS,
         tools=[
             analyze_open_interest_tool,

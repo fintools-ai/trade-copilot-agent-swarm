@@ -4,6 +4,7 @@ Analyzes volume profile, technical indicators, ORB, and FVG for intraday trading
 """
 
 from strands import Agent
+from strands.models.bedrock import BedrockModel
 from tools.financial_tools import (
     financial_volume_profile_tool,
     financial_technical_analysis_tool,
@@ -170,9 +171,15 @@ Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
 
 """
 
+    # Use BedrockModel with prompt caching for latency reduction
+    model = BedrockModel(
+        model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        cache_prompt="default"
+    )
+
     agent = Agent(
         name="Financial Data Analyst",
-        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        model=model,
         system_prompt=timestamp_header + FINANCIAL_DATA_INSTRUCTIONS,
         #session_manager=session_manager,
         tools=[

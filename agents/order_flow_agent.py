@@ -4,6 +4,7 @@ Analyzes multi-ticker order flow patterns, institutional activity, and volume im
 """
 
 from strands import Agent
+from strands.models.bedrock import BedrockModel
 from tools.order_flow_tools import equity_order_flow_tool
 from strands.session.file_session_manager import FileSessionManager
 from datetime import datetime
@@ -100,9 +101,15 @@ Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
 
 """
 
+    # Use BedrockModel with prompt caching for latency reduction
+    model = BedrockModel(
+        model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        cache_prompt="default"
+    )
+
     agent = Agent(
         name="Order Flow Analyst",
-        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
+        model=model,
         system_prompt=timestamp_header + ORDER_FLOW_INSTRUCTIONS,
         tools=[equity_order_flow_tool]
     )
