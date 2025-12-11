@@ -4,7 +4,6 @@ Sets up strike-specific monitoring based on OI key levels
 """
 
 from strands import Agent
-from strands.models.bedrock import BedrockModel
 from tools.options_flow_tools import options_subscribe_tool
 from tools.price_tools import get_current_price
 
@@ -129,15 +128,9 @@ def create_setup_agent() -> Agent:
     Returns:
         Configured Strands Agent for options monitoring setup
     """
-    # Use BedrockModel with prompt caching for latency reduction
-    model = BedrockModel(
-        model_id="us.anthropic.claude-sonnet-4-20250514-v1:0",
-        cache_prompt="default"
-    )
-
     agent = Agent(
         name="Setup Agent",
-        model=model,
+        model="us.anthropic.claude-sonnet-4-20250514-v1:0",
         system_prompt=SETUP_AGENT_INSTRUCTIONS,
         tools=[get_current_price, options_subscribe_tool]
     )

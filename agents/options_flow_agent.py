@@ -4,7 +4,6 @@ Analyzes options activity, PUT/CALL bias, unusual activity, and smart money posi
 """
 
 from strands import Agent
-from strands.models.bedrock import BedrockModel
 from tools.options_flow_tools import options_order_flow_tool
 
 from strands.session.file_session_manager import FileSessionManager
@@ -124,15 +123,9 @@ def create_options_flow_agent() -> Agent:
     now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
     session_manager = FileSessionManager(session_id=f"options-order-flow-{current_time}")
-    # Use BedrockModel with prompt caching for latency reduction
-    model = BedrockModel(
-        model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        cache_prompt="default"
-    )
-
     agent = Agent(
         name="Options Flow Analyst",
-        model=model,
+        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         #session_manager=session_manager,
         system_prompt=OPTIONS_FLOW_INSTRUCTIONS,
         tools=[options_order_flow_tool]

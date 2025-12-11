@@ -5,7 +5,6 @@ Returns raw JSON data for LLM interpretation
 
 from datetime import datetime
 from strands import Agent
-from strands.models.bedrock import BedrockModel
 from tools.fast_0dte_tools import fast_spy_check, fast_mag7_scan
 
 FAST_FINANCIAL_DATA_INSTRUCTIONS = """
@@ -102,15 +101,9 @@ Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
 
 """
 
-    # Use BedrockModel with prompt caching for latency reduction
-    model = BedrockModel(
-        model_id="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        cache_prompt="default"
-    )
-
     agent = Agent(
         name="Financial Data Analyst (Fast Mode)",
-        model=model,
+        model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=timestamp_header + FAST_FINANCIAL_DATA_INSTRUCTIONS,
         tools=[
             fast_spy_check,
