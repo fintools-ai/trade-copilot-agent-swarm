@@ -4,9 +4,8 @@ Analyzes multi-ticker order flow patterns, institutional activity, and volume im
 """
 
 from strands import Agent
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 from tools.order_flow_tools import equity_order_flow_tool
-from strands.session.file_session_manager import FileSessionManager
-from datetime import datetime
 
 ORDER_FLOW_INSTRUCTIONS = """
 <role>
@@ -86,25 +85,17 @@ def create_order_flow_agent() -> Agent:
     Returns:
         Configured Strands Agent for order flow analysis
     """
-    from zoneinfo import ZoneInfo
-
-    pt_tz = ZoneInfo("America/Los_Angeles")
-    now = datetime.now(pt_tz)
-    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
-
-    # Inject timestamp into system prompt
-    timestamp_header = f"""<current_time>
-Current Time: {current_time_full}
-Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
-</current_time>
-
-"""
+    conversation_manager = SlidingWindowConversationManager(
+        window_size=5,
+        should_truncate_results=False
+    )
 
     agent = Agent(
         name="Order Flow Analyst",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        system_prompt=timestamp_header + ORDER_FLOW_INSTRUCTIONS,
-        tools=[equity_order_flow_tool]
+        system_prompt=ORDER_FLOW_INSTRUCTIONS,
+        tools=[equity_order_flow_tool],
+        conversation_manager=conversation_manager
     )
 
     return agent

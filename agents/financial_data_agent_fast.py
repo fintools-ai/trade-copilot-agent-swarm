@@ -3,8 +3,8 @@ Fast Financial Data Agent - Uses fast_0dte_tools for quick market analysis
 Returns raw JSON data for LLM interpretation
 """
 
-from datetime import datetime
 from strands import Agent
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 from tools.fast_0dte_tools import fast_spy_check, fast_mag7_scan
 
 FAST_FINANCIAL_DATA_INSTRUCTIONS = """
@@ -87,28 +87,20 @@ def create_fast_financial_agent() -> Agent:
     Returns:
         Configured Strands Agent with fast SPY + Mag7 tools
     """
-    from zoneinfo import ZoneInfo
-
-    pt_tz = ZoneInfo("America/Los_Angeles")
-    now = datetime.now(pt_tz)
-    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
-
-    # Inject timestamp into system prompt
-    timestamp_header = f"""<current_time>
-Current Time: {current_time_full}
-Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
-</current_time>
-
-"""
+    conversation_manager = SlidingWindowConversationManager(
+        window_size=5,
+        should_truncate_results=False
+    )
 
     agent = Agent(
         name="Financial Data Analyst (Fast Mode)",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        system_prompt=timestamp_header + FAST_FINANCIAL_DATA_INSTRUCTIONS,
+        system_prompt=FAST_FINANCIAL_DATA_INSTRUCTIONS,
         tools=[
             fast_spy_check,
             fast_mag7_scan
-        ]
+        ],
+        conversation_manager=conversation_manager
     )
 
     return agent

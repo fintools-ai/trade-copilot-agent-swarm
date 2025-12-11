@@ -757,9 +757,9 @@
         <!-- Summary Cards -->
         <div class="token-summary">
           <div class="token-card">
-            <div class="token-card-label">Total Cycles</div>
+            <div class="token-card-label">Sessions</div>
             <div class="token-card-value" id="token-cycles">0</div>
-            <div class="token-card-sub">Today</div>
+            <div class="token-card-sub">Script restarts</div>
           </div>
           <div class="token-card">
             <div class="token-card-label">Input Tokens</div>
@@ -1491,12 +1491,17 @@
         const res = await fetch('/token-stats');
         const data = await res.json();
 
+        // Calculate proper daily totals by detecting session resets
+        // History is newest-first, so reverse to process oldest-first
+        const history = (data.history || []).slice().reverse();
+        const calculatedTotals = calculateDailyTotals(history);
+
         // Store totals for recalculation when model changes
-        currentTokenTotals.input = data.input_tokens || 0;
-        currentTokenTotals.output = data.output_tokens || 0;
+        currentTokenTotals.input = calculatedTotals.input;
+        currentTokenTotals.output = calculatedTotals.output;
 
         // Update summary cards
-        document.getElementById('token-cycles').textContent = data.cycles || 0;
+        document.getElementById('token-cycles').textContent = calculatedTotals.sessions || 1;
         document.getElementById('token-input').textContent = currentTokenTotals.input.toLocaleString();
         document.getElementById('token-output').textContent = currentTokenTotals.output.toLocaleString();
 
@@ -1508,11 +1513,47 @@
         // Calculate total cost using selected model
         updateCostDisplay();
 
-        // Render history
+        // Render history (newest first for display)
         renderTokenHistory(data.history || []);
       } catch (e) {
         console.error('Failed to load token data:', e);
       }
+    }
+
+    // Calculate true daily totals by detecting session resets
+    // When accumulated_usage drops, a new session started
+    function calculateDailyTotals(history) {
+      if (!history || history.length === 0) {
+        return { input: 0, output: 0, sessions: 0 };
+      }
+
+      let totalInput = 0;
+      let totalOutput = 0;
+      let sessions = 1;
+      let prevInput = 0;
+      let prevOutput = 0;
+
+      for (const h of history) {
+        const currentInput = h.total_input || 0;
+        const currentOutput = h.total_output || 0;
+
+        // Detect reset: current accumulated is less than previous
+        if (currentInput < prevInput || currentOutput < prevOutput) {
+          // Session reset - add previous session's final values
+          totalInput += prevInput;
+          totalOutput += prevOutput;
+          sessions++;
+        }
+
+        prevInput = currentInput;
+        prevOutput = currentOutput;
+      }
+
+      // Add current session's latest values
+      totalInput += prevInput;
+      totalOutput += prevOutput;
+
+      return { input: totalInput, output: totalOutput, sessions };
     }
 
     // Update cost display based on selected model

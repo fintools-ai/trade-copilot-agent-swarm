@@ -11,8 +11,6 @@ from tools.financial_tools import (
     financial_orb_analysis_tool,
     financial_fvg_analysis_tool
 )
-from strands.session.file_session_manager import FileSessionManager
-from datetime import datetime
 
 FINANCIAL_DATA_INSTRUCTIONS = """
 You are the Financial Data Analyst - an expert in technical analysis focused on maximum profitability setups.
@@ -154,27 +152,10 @@ def create_financial_data_agent() -> Agent:
     Returns:
         Configured Strands Agent for technical/financial analysis
     """
-    from zoneinfo import ZoneInfo
-
-    pt_tz = ZoneInfo("America/Los_Angeles")
-    now = datetime.now(pt_tz)
-    current_time = now.strftime("%H:%M:%S")
-    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
-    session_manager = FileSessionManager(session_id=f"financial-data-{current_time}")
-
-    # Inject timestamp into system prompt
-    timestamp_header = f"""<current_time>
-Current Time: {current_time_full}
-Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
-</current_time>
-
-"""
-
     agent = Agent(
         name="Financial Data Analyst",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        system_prompt=timestamp_header + FINANCIAL_DATA_INSTRUCTIONS,
-        #session_manager=session_manager,
+        system_prompt=FINANCIAL_DATA_INSTRUCTIONS,
         tools=[
             financial_volume_profile_tool,
             financial_technical_analysis_tool,

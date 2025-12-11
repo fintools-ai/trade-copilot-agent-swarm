@@ -180,6 +180,14 @@ def get_last_recommendation() -> dict:
 
 def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     """Internal helper to call swarm and stream to UI."""
+    # Inject fresh timestamp into every query (agents no longer have static timestamps)
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(pt_tz)
+    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
+    # Market hours: 6:30 AM - 1:00 PM PT
+    market_status = 'OPEN' if (now.hour == 6 and now.minute >= 30) or (7 <= now.hour < 13) else 'CLOSED'
+    time_context = f"\n\n[CURRENT TIME: {current_time_full} | Market: {market_status}]"
+
     # Check for UI mode override - ALWAYS check fresh from Redis
     mode_override = get_mode_override()
     agent_tool = "fast_follow" if fast_mode else "analyze_market"
@@ -206,15 +214,15 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     if last_rec and last_rec.get("action"):
         # Natural language - like a trader would say it
         prev_context = f"\n\n[CURRENT TRADE: {last_rec['action']} @ ${last_rec.get('entry')} | Stop ${last_rec.get('stop')} | Target ${last_rec.get('target')} — {last_rec.get('current_signal')} with {last_rec.get('current_conviction')} conviction]"
-        query_with_context = query + prev_context
+        query_with_context = query + time_context + prev_context
         console.print(f"[dim]Trade: {last_rec['action']} @ ${last_rec.get('entry')} — {last_rec.get('current_signal')} {last_rec.get('current_conviction')}[/dim]")
     elif was_just_exited():
         # Position was just closed - tell agent to scan for new setup
         exit_context = "\n\n[POSITION CLOSED - scanning for new entry setup. Look for fresh CALL or PUT opportunity.]"
-        query_with_context = query + exit_context
+        query_with_context = query + time_context + exit_context
         console.print(f"[dim]Status: Position closed, scanning for new trade[/dim]")
     else:
-        query_with_context = query
+        query_with_context = query + time_context
 
     # Stream the agent's question to UI immediately (without context noise)
     # Include query_start_ts for latency calculation
@@ -515,9 +523,11 @@ def get_prompt_for_position(position: str, mode: str) -> str:
     now = datetime.now(pt_tz)
     current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
 
+    # Market hours: 6:30 AM - 1:00 PM PT
+    market_status = 'OPEN' if (now.hour == 6 and now.minute >= 30) or (7 <= now.hour < 13) else 'CLOSED'
     timestamp_header = f"""<current_time>
 Current Time: {current_time_full}
-Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
+Market Session: {market_status}
 </current_time>
 
 """
@@ -536,10 +546,11 @@ def get_prompt_for_mode(mode: str) -> str:
     now = datetime.now(pt_tz)
     current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
 
-    # Inject timestamp into system prompt
+    # Market hours: 6:30 AM - 1:00 PM PT
+    market_status = 'OPEN' if (now.hour == 6 and now.minute >= 30) or (7 <= now.hour < 13) else 'CLOSED'
     timestamp_header = f"""<current_time>
 Current Time: {current_time_full}
-Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
+Market Session: {market_status}
 </current_time>
 
 """

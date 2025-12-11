@@ -4,8 +4,6 @@ Provides separate 0DTE CALL and PUT recommendations with conviction scores
 """
 
 from strands import Agent
-from strands.session.file_session_manager import FileSessionManager
-from datetime import datetime
 
 COORDINATOR_INSTRUCTIONS = """
 <role>
@@ -201,27 +199,10 @@ def create_coordinator_agent() -> Agent:
     Returns:
         Configured Strands Agent for dual recommendation synthesis
     """
-    from zoneinfo import ZoneInfo
-
-    pt_tz = ZoneInfo("America/Los_Angeles")
-    now = datetime.now(pt_tz)
-    current_time = now.strftime("%H:%M:%S")
-    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
-    session_manager = FileSessionManager(session_id=f"coordinator-{current_time}")
-
-    # Inject timestamp into system prompt
-    timestamp_header = f"""<current_time>
-Current Time: {current_time_full}
-Market Session: {'OPEN' if 6 <= now.hour < 13 else 'CLOSED'}
-</current_time>
-
-"""
-
     agent = Agent(
         name="Trading Coordinator",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        system_prompt=timestamp_header + COORDINATOR_INSTRUCTIONS,
-        #session_manager=session_manager,
+        system_prompt=COORDINATOR_INSTRUCTIONS,
         tools=[]  # Coordinator synthesizes only, no external tools
     )
 
