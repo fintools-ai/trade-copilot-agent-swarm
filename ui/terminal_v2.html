@@ -1521,7 +1521,8 @@
     }
 
     // Calculate true daily totals by detecting session resets
-    // When accumulated_usage drops, a new session started
+    // Handles interleaved token streams (swarm vs outer agent)
+    // Only a TRUE reset is when value drops to <10% of max (near zero restart)
     function calculateDailyTotals(history) {
       if (!history || history.length === 0) {
         return { input: 0, output: 0, sessions: 0 };
@@ -1530,28 +1531,35 @@
       let totalInput = 0;
       let totalOutput = 0;
       let sessions = 1;
-      let prevInput = 0;
-      let prevOutput = 0;
+      let maxInput = 0;
+      let maxOutput = 0;
 
       for (const h of history) {
         const currentInput = h.total_input || 0;
         const currentOutput = h.total_output || 0;
 
-        // Detect reset: current accumulated is less than previous
-        if (currentInput < prevInput || currentOutput < prevOutput) {
-          // Session reset - add previous session's final values
-          totalInput += prevInput;
-          totalOutput += prevOutput;
-          sessions++;
-        }
+        // Detect TRUE session reset: value drops to <10% of max seen
+        // This distinguishes real restarts from interleaved stream switches
+        const inputReset = maxInput > 1000 && currentInput < maxInput * 0.1;
+        const outputReset = maxOutput > 500 && currentOutput < maxOutput * 0.1;
 
-        prevInput = currentInput;
-        prevOutput = currentOutput;
+        if (inputReset || outputReset) {
+          // True session reset - add previous session's max values
+          totalInput += maxInput;
+          totalOutput += maxOutput;
+          sessions++;
+          maxInput = currentInput;
+          maxOutput = currentOutput;
+        } else {
+          // Track running maximum (handles interleaved streams)
+          maxInput = Math.max(maxInput, currentInput);
+          maxOutput = Math.max(maxOutput, currentOutput);
+        }
       }
 
-      // Add current session's latest values
-      totalInput += prevInput;
-      totalOutput += prevOutput;
+      // Add current session's max values
+      totalInput += maxInput;
+      totalOutput += maxOutput;
 
       return { input: totalInput, output: totalOutput, sessions };
     }
