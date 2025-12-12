@@ -19,6 +19,7 @@ import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from strands import Agent, tool
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 from rich.console import Console
 from rich.panel import Panel
 
@@ -574,10 +575,16 @@ def create_zero_dte_agent(mode: str = "auto", position: str = "") -> Agent:
         prompt = get_prompt_for_mode(mode)
         console.print(f"[cyan]Creating agent in SCANNING mode: {mode}[/cyan]")
 
+    conversation_manager = SlidingWindowConversationManager(
+        window_size=5,
+        should_truncate_results=False
+    )
+
     return Agent(
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=prompt,
-        tools=[analyze_market, fast_follow]
+        tools=[analyze_market, fast_follow],
+        conversation_manager=conversation_manager
     )
 
 
