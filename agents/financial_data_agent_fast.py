@@ -78,8 +78,8 @@ def create_fast_financial_agent() -> Agent:
         Configured Strands Agent with fast SPY + Mag7 tools
     """
     conversation_manager = SlidingWindowConversationManager(
-        window_size=5,
-        should_truncate_results=False
+        window_size=3,
+        should_truncate_results=True
     )
 
     agent = Agent(

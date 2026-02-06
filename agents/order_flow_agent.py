@@ -28,6 +28,25 @@ MIXED: roughly balanced, no clear winner (e.g., 22 vs 19)
 If you have to think about whether it's lopsided, it's MIXED.
 </interpretation>
 
+<gamma_hedging_awareness>
+CRITICAL: Not all order flow is directional. In 0DTE trading, a large portion of equity
+flow is GAMMA HEDGING by market makers, not organic institutional buying/selling.
+
+How gamma hedging contaminates flow:
+- Trader buys 0DTE calls → MM sells calls → MM buys SPY shares to hedge delta
+- This shows up as bid_lifts in SPY, but it is MECHANICAL, not directional intent
+- The reverse happens with puts: put buying → MM sells SPY to hedge → looks like selling
+
+How to discount it:
+- If lifts are STEADY and GRADUAL (small consistent lifts), it's likely hedging flow
+- If lifts are CLUSTERED and LARGE (bursts of aggressive lifts), it's more likely organic
+- When SPY flow is borderline (e.g., 30 lifts vs 20 drops), lean toward MIXED — the edge
+  may be hedging noise, not real conviction
+- Breadth confirmation matters MORE when SPY flow is ambiguous — if Mag7 stocks show
+  the same direction independently, it's less likely to be hedging artifacts from one product
+- Only call BUYING/SELLING with confidence when the ratio is decisive (2:1+) AND breadth confirms
+</gamma_hedging_awareness>
+
 <breadth>
 Check Mag7 for confirmation:
 - 5+ tickers same direction = HIGH conviction
@@ -86,8 +105,8 @@ def create_order_flow_agent() -> Agent:
         Configured Strands Agent for order flow analysis
     """
     conversation_manager = SlidingWindowConversationManager(
-        window_size=5,
-        should_truncate_results=False
+        window_size=3,
+        should_truncate_results=True
     )
 
     agent = Agent(

@@ -78,6 +78,14 @@ CRITICAL: Do not flip between CALL and PUT without clear evidence.
 - Only change direction if Order Flow REVERSES (not just weakens)
 - Technicals alone cannot override Order Flow direction
 - When in doubt, WAIT
+
+0DTE THETA OVERRIDE — weakening flow demands faster response than stocks:
+- Flow WEAKENS (was strong, now marginal) within 30 min of entry → reduce conviction to LOW, tighten stop
+- Flow goes from directional to MIXED → EXIT. Do NOT HOLD waiting for "clear reversal."
+  On 0DTE, theta burns $0.02-0.05/min by midday. Waiting for reversal confirmation costs
+  more than exiting on weakness and re-entering if flow returns.
+- The anti-flip rule still applies: don't flip CALL→PUT on weakness alone. But EXIT on weakness is correct.
+  Flat is free. Holding a decaying option on hope is not.
 </anti_flip_rules>
 
 <conviction_criteria>
@@ -142,22 +150,28 @@ Signal field rules:
 <hold_vs_exit>
 CRITICAL: Distinguish NOISE from BREAKDOWN. Desk traders hold through noise.
 
+PRICE INVALIDATION IS ABSOLUTE — overrides everything:
+- If current price is AT or BELOW the stop level for a CALL → EXIT immediately, regardless of flow
+- If current price is AT or ABOVE the stop level for a PUT → EXIT immediately, regardless of flow
+- Price is truth. Flow is interpretation. Flow can show "buying" while price breaks your level
+  (spoofing, delayed data, or gamma unwind). The stop level IS the invalidation — respect it.
+
 HOLD (stay in trade):
-- Price dipped but ABOVE invalidation level
+- Price ABOVE stop/invalidation level (structure intact)
 - Order Flow still directional (buying > selling for CALL position)
 - Minor pullback, structure intact
 - Normal profit-taking, not distribution
 - "Shakeout" - price dips to stop hunt then recovers
 
 EXIT (get out):
-- Price BELOW invalidation level (structure broken)
+- Price AT or BELOW stop level (hard rule — no exceptions, no "let's see if it recovers")
 - Order Flow REVERSED (not just weakened - actually flipped direction)
+- Order Flow WEAKENED significantly on 0DTE (see anti_flip_rules theta override)
 - After 12:45 PM PT (exit before expiry regardless)
 - Flow that supported entry is GONE (not weak, GONE)
 
-KEY INSIGHT: A dip with intact flow = HOLD. A dip with reversed flow = EXIT.
-If flow is still buying but price pulled back = normal, hold.
-If flow flipped to selling = real reversal, exit.
+KEY INSIGHT: A dip with intact flow AND above stop = HOLD. Price at/below stop = EXIT, period.
+Flow confirmation matters only ABOVE invalidation. Below invalidation, get out.
 </hold_vs_exit>
 
 <examples>

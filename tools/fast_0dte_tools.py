@@ -10,6 +10,7 @@ Two tools:
 
 import os
 import json
+import asyncio
 import logging
 from datetime import datetime
 from typing import Dict, Optional
@@ -77,13 +78,49 @@ async def fast_spy_check() -> str:
         }
 
         with create_twelvedata_mcp() as mcp:
-            # 1. Quote - price, volume, change
-            quote = await mcp.call_tool_async(
-                tool_use_id=f"q_{symbol}",
-                name="GetQuote",
-                arguments={"params": {"symbol": symbol}}
+            # Fire ALL 7 MCP calls concurrently instead of sequentially
+            # This reduces data fetch from ~10-14s to ~2-3s (bounded by slowest call)
+            quote, rsi, vwap, ema9, ema21, macd, ts = await asyncio.gather(
+                mcp.call_tool_async(
+                    tool_use_id=f"q_{symbol}",
+                    name="GetQuote",
+                    arguments={"params": {"symbol": symbol}}
+                ),
+                mcp.call_tool_async(
+                    tool_use_id=f"rsi_{symbol}",
+                    name="GetTimeSeriesRsi",
+                    arguments={"params": {"symbol": symbol, "interval": "5min", "time_period": 14}}
+                ),
+                mcp.call_tool_async(
+                    tool_use_id=f"vwap_{symbol}",
+                    name="GetTimeSeriesVwap",
+                    arguments={"params": {"symbol": symbol, "interval": "5min"}}
+                ),
+                mcp.call_tool_async(
+                    tool_use_id=f"ema9_{symbol}",
+                    name="GetTimeSeriesEma",
+                    arguments={"params": {"symbol": symbol, "interval": "5min", "time_period": 9}}
+                ),
+                mcp.call_tool_async(
+                    tool_use_id=f"ema21_{symbol}",
+                    name="GetTimeSeriesEma",
+                    arguments={"params": {"symbol": symbol, "interval": "5min", "time_period": 21}}
+                ),
+                mcp.call_tool_async(
+                    tool_use_id=f"macd_{symbol}",
+                    name="GetTimeSeriesMacd",
+                    arguments={"params": {"symbol": symbol, "interval": "5min"}}
+                ),
+                mcp.call_tool_async(
+                    tool_use_id=f"ts_{symbol}",
+                    name="GetTimeSeries",
+                    arguments={"params": {"symbol": symbol, "interval": "5min", "outputsize": 50}}
+                ),
+                return_exceptions=True
             )
-            if quote and quote.get("status") == "success":
+
+            # Process Quote
+            if not isinstance(quote, Exception) and quote and quote.get("status") == "success":
                 q = _parse(quote)
                 if q:
                     data["price"] = {
@@ -104,24 +141,14 @@ async def fast_spy_check() -> str:
                             data["volume"]["current"] / data["volume"]["average"], 2
                         )
 
-            # 2. RSI (14 period, 5min)
-            rsi = await mcp.call_tool_async(
-                tool_use_id=f"rsi_{symbol}",
-                name="GetTimeSeriesRsi",
-                arguments={"params": {"symbol": symbol, "interval": "5min", "time_period": 14}}
-            )
-            if rsi and rsi.get("status") == "success":
+            # Process RSI
+            if not isinstance(rsi, Exception) and rsi and rsi.get("status") == "success":
                 r = _parse(rsi)
                 if r and "values" in r and r["values"]:
                     data["rsi"] = round(float(r["values"][0].get("rsi", 0)), 1)
 
-            # 3. VWAP
-            vwap = await mcp.call_tool_async(
-                tool_use_id=f"vwap_{symbol}",
-                name="GetTimeSeriesVwap",
-                arguments={"params": {"symbol": symbol, "interval": "5min"}}
-            )
-            if vwap and vwap.get("status") == "success":
+            # Process VWAP
+            if not isinstance(vwap, Exception) and vwap and vwap.get("status") == "success":
                 v = _parse(vwap)
                 if v and "values" in v and v["values"]:
                     vwap_val = float(v["values"][0].get("vwap", 0))
@@ -131,35 +158,20 @@ async def fast_spy_check() -> str:
                             data["price"]["current"] - vwap_val, 2
                         )
 
-            # 4. EMA 9 (fast)
-            ema9 = await mcp.call_tool_async(
-                tool_use_id=f"ema9_{symbol}",
-                name="GetTimeSeriesEma",
-                arguments={"params": {"symbol": symbol, "interval": "5min", "time_period": 9}}
-            )
-            if ema9 and ema9.get("status") == "success":
+            # Process EMA 9
+            if not isinstance(ema9, Exception) and ema9 and ema9.get("status") == "success":
                 e = _parse(ema9)
                 if e and "values" in e and e["values"]:
                     data["ema_9"] = round(float(e["values"][0].get("ema", 0)), 2)
 
-            # 5. EMA 21 (slow)
-            ema21 = await mcp.call_tool_async(
-                tool_use_id=f"ema21_{symbol}",
-                name="GetTimeSeriesEma",
-                arguments={"params": {"symbol": symbol, "interval": "5min", "time_period": 21}}
-            )
-            if ema21 and ema21.get("status") == "success":
+            # Process EMA 21
+            if not isinstance(ema21, Exception) and ema21 and ema21.get("status") == "success":
                 e = _parse(ema21)
                 if e and "values" in e and e["values"]:
                     data["ema_21"] = round(float(e["values"][0].get("ema", 0)), 2)
 
-            # 6. MACD
-            macd = await mcp.call_tool_async(
-                tool_use_id=f"macd_{symbol}",
-                name="GetTimeSeriesMacd",
-                arguments={"params": {"symbol": symbol, "interval": "5min"}}
-            )
-            if macd and macd.get("status") == "success":
+            # Process MACD
+            if not isinstance(macd, Exception) and macd and macd.get("status") == "success":
                 m = _parse(macd)
                 if m and "values" in m and m["values"]:
                     mv = m["values"][0]
@@ -169,26 +181,18 @@ async def fast_spy_check() -> str:
                         "histogram": round(float(mv.get("macd_hist", 0)), 3),
                     }
 
-            # 7. Time series for ORB, TRAMA, and VWAP SD calculation
-            ts = await mcp.call_tool_async(
-                tool_use_id=f"ts_{symbol}",
-                name="GetTimeSeries",
-                arguments={"params": {"symbol": symbol, "interval": "5min", "outputsize": 50}}
-            )
-            if ts and ts.get("status") == "success":
+            # Process Time Series (ORB, TRAMA, VWAP SD)
+            if not isinstance(ts, Exception) and ts and ts.get("status") == "success":
                 t = _parse(ts)
                 if t and "values" in t:
-                    # ORB calculation
                     orb = _calc_orb(t["values"])
                     if orb:
                         data["orb"] = orb
 
-                    # TRAMA calculation (Trend Regularity Adaptive MA)
                     trama = _calc_trama(t["values"])
                     if trama:
                         data["trama"] = trama
 
-                    # VWAP SD bands calculation - flatten to top level
                     if data.get("vwap") and data.get("price", {}).get("current"):
                         vwap_sd = _calc_vwap_sd(
                             t["values"],
@@ -196,7 +200,6 @@ async def fast_spy_check() -> str:
                             data["price"]["current"]
                         )
                         if vwap_sd:
-                            # Flatten SD fields to top level for easier LLM parsing
                             data["vwap_sd"] = vwap_sd["sd"]
                             data["vwap_position"] = vwap_sd["position"]
                             data["vwap_plus_1"] = vwap_sd["plus_1"]
@@ -240,33 +243,42 @@ async def fast_mag7_scan() -> str:
         }
 
         with create_twelvedata_mcp() as mcp:
-            for sym in symbols:
-                try:
-                    quote = await mcp.call_tool_async(
+            # Fire ALL 7 quote requests concurrently instead of sequentially
+            # This reduces breadth scan from ~7-10s to ~1-2s
+            results = await asyncio.gather(
+                *[
+                    mcp.call_tool_async(
                         tool_use_id=f"q_{sym}",
                         name="GetQuote",
                         arguments={"params": {"symbol": sym}}
                     )
-                    if quote and quote.get("status") == "success":
-                        q = _parse(quote)
-                        if q:
-                            pct = float(q.get("percent_change", 0))
+                    for sym in symbols
+                ],
+                return_exceptions=True
+            )
 
-                            # Categorize for summary
-                            if pct > 0.15:
-                                data["summary"]["bullish"] += 1
-                            elif pct < -0.15:
-                                data["summary"]["bearish"] += 1
-                            else:
-                                data["summary"]["neutral"] += 1
+            for sym, result in zip(symbols, results):
+                if isinstance(result, Exception):
+                    data["symbols"][sym] = {"error": str(result)}
+                    continue
 
-                            data["symbols"][sym] = {
-                                "price": float(q.get("close", 0)),
-                                "change": float(q.get("change", 0)),
-                                "change_pct": round(pct, 2),
-                            }
-                except Exception as e:
-                    data["symbols"][sym] = {"error": str(e)}
+                if result and result.get("status") == "success":
+                    q = _parse(result)
+                    if q:
+                        pct = float(q.get("percent_change", 0))
+
+                        if pct > 0.15:
+                            data["summary"]["bullish"] += 1
+                        elif pct < -0.15:
+                            data["summary"]["bearish"] += 1
+                        else:
+                            data["summary"]["neutral"] += 1
+
+                        data["symbols"][sym] = {
+                            "price": float(q.get("close", 0)),
+                            "change": float(q.get("change", 0)),
+                            "change_pct": round(pct, 2),
+                        }
 
         return json.dumps(data, indent=2)
 
