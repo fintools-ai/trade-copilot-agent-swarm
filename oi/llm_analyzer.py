@@ -14,7 +14,7 @@ class LLMAnalyzer:
         self.bedrock_client = boto3.client('bedrock-runtime', region_name=AWS_REGION)
         self.model_id = BEDROCK_MODEL_ID
 
-    def analyze_ticker(self, ticker, all_dte_data, market_context=None, oi_history=None):
+    def analyze_ticker(self, ticker, all_dte_data, market_context=None, historical_context=None):
         """
         Analyze ONE ticker with ALL DTEs in a single LLM call.
 
@@ -22,10 +22,10 @@ class LLMAnalyzer:
             ticker: Stock symbol
             all_dte_data: {dte: {oi_data, delta, market_data}} for all DTEs
             market_context: VIX regime data
-            oi_history: {dte: [{date, data}, ...]} last 5 days per DTE
+            historical_context: list of fact strings from Bedrock Memory
         """
         try:
-            prompt = self._build_prompt(ticker, all_dte_data, market_context, oi_history)
+            prompt = self._build_prompt(ticker, all_dte_data, market_context, historical_context)
             response = self._call_bedrock(prompt)
             analysis = self._parse_response(response)
             analysis["ticker"] = ticker
@@ -39,7 +39,7 @@ class LLMAnalyzer:
                 "analysis_timestamp": datetime.now().isoformat()
             }
 
-    def _build_prompt(self, ticker, all_dte_data, market_context, oi_history):
+    def _build_prompt(self, ticker, all_dte_data, market_context, historical_context=None):
         """Build prompt with all DTEs for one ticker"""
 
         # Build per-DTE data sections
@@ -57,13 +57,6 @@ class LLMAnalyzer:
 #### Technical/Market Data:
 {json.dumps(data.get('market_data'), indent=2) if data.get('market_data') else 'No data'}"""
 
-            # Add historical OI if available
-            if oi_history and dte in oi_history and oi_history[dte]:
-                section += f"""
-
-#### 5-Day OI History:
-{json.dumps(oi_history[dte], indent=2)}"""
-
             dte_sections.append(section)
 
         dte_block = "\n\n".join(dte_sections)
@@ -78,7 +71,7 @@ You have data across MULTIPLE expiration timeframes (DTEs). Analyze the FULL TER
 - Long-term (90 DTE) = institutional hedging/strategic positioning
 - When short and long term agree = HIGH conviction (aligned)
 - When they disagree = investigate why (divergent)
-- If 5-day history is provided, look for SUSTAINED accumulation vs one-day spikes
+- If historical context is provided, compare past patterns vs present data to spot SUSTAINED accumulation vs one-day spikes
 - Feed your analysis from the RAW DATA — do not make up numbers
 
 # ANTI-BIAS RULES
@@ -94,6 +87,8 @@ You have data across MULTIPLE expiration timeframes (DTEs). Analyze the FULL TER
 
 ## Market Context (VIX):
 {json.dumps(market_context, indent=2) if market_context else 'Not available'}
+
+{self._build_memory_section(ticker, historical_context)}
 
 # OUTPUT FORMAT
 Return ONLY valid JSON with this exact structure. No text before or after.
@@ -130,6 +125,20 @@ CRITICAL FORMATTING RULES:
 }}"""
 
         return prompt
+
+    def _build_memory_section(self, ticker, historical_context):
+        """Build historical context section from Bedrock Memory facts"""
+        if not historical_context:
+            return ""
+
+        facts = "\n".join(f"- {fact}" for fact in historical_context)
+        return f"""# HISTORICAL CONTEXT (from past analyses)
+These are facts extracted from your previous analyses of {ticker}.
+Use them to identify TRENDS — is today confirming or contradicting the pattern?
+Do NOT blindly repeat past conclusions. Compare past vs present data.
+
+{facts}
+"""
 
     def _call_bedrock(self, prompt):
         """Call AWS Bedrock"""

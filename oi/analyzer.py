@@ -9,7 +9,7 @@ from datetime import datetime
 
 from oi.collector import OIDataCollector
 from oi.redis_manager import (
-    store_oi_data, get_previous_oi_data, get_oi_history,
+    store_oi_data, get_previous_oi_data,
     store_delta_data, store_analysis_result, store_full_results,
     set_status, publish_progress
 )
@@ -17,6 +17,7 @@ from oi.delta_calculator import DeltaCalculator
 from oi.market_context import MarketContextProvider
 from oi.llm_analyzer import LLMAnalyzer
 from oi.clustering import ClusteringEngine
+from oi.memory import recall, store_episode
 
 
 class OIAnalyzer:
@@ -110,20 +111,18 @@ class OIAnalyzer:
                     })
                     continue
 
-                # Get 5-day history per DTE
-                oi_history = {}
-                for dte_str in all_dte_data:
-                    dte_key = f"{dte_str}DTE"
-                    history = get_oi_history(ticker, dte_key, days=5)
-                    if history:
-                        oi_history[dte_str] = history
+                # Recall historical context from Bedrock Memory
+                historical_context = recall(ticker)
 
                 analysis = self.llm_analyzer.analyze_ticker(
                     ticker, all_dte_data, market_context,
-                    oi_history if oi_history else None
+                    historical_context if historical_context else None
                 )
                 analyses.append(analysis)
                 store_analysis_result(ticker, today, analysis)
+
+                # Store episode in Bedrock Memory for future recall
+                store_episode(ticker, analysis, market_context)
 
             print(f"LLM analysis complete: {len(analyses)} tickers")
 
