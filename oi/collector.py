@@ -111,7 +111,7 @@ class OIDataCollector:
                 logger.warning(f"{ticker} {target_dte}DTE OI: FAILED - {oi_result}")
             else:
                 data["oi_data"] = oi_result
-                logger.debug(f"{ticker} {target_dte}DTE OI: OK")
+                _log_oi_summary(ticker, target_dte, oi_result)
 
             if isinstance(market_result, Exception):
                 data["market_data"] = None
@@ -119,6 +119,7 @@ class OIDataCollector:
                 logger.warning(f"{ticker} market data: FAILED - {market_result}")
             else:
                 data["market_data"] = market_result
+                _log_market_summary(ticker, market_result)
 
             dur = time.time() - t0
             logger.debug(f"{ticker} {target_dte}DTE: done ({dur:.1f}s)")
@@ -249,3 +250,68 @@ class OIDataCollector:
 
         result_content = tool_response["result"]["content"][0]["text"]
         return json.loads(result_content)
+
+
+def _log_oi_summary(ticker, dte, oi_data):
+    """Log key OI metrics from raw data"""
+    try:
+        data_by_date = oi_data.get("data_by_date", {})
+        if not data_by_date:
+            logger.info(f"{ticker} {dte}DTE OI: empty response")
+            return
+
+        latest_date = max(data_by_date.keys())
+        d = data_by_date[latest_date]
+        summary = d.get("summary_metrics", {})
+
+        total_oi = summary.get("total_open_interest", d.get("total_oi", 0))
+        call_oi = summary.get("call_open_interest", d.get("call_oi", 0))
+        put_oi = summary.get("put_open_interest", d.get("put_oi", 0))
+        pcr = summary.get("put_call_ratio", d.get("put_call_ratio", 0))
+        max_pain = summary.get("max_pain", d.get("max_pain", 0))
+
+        # Top strikes by OI
+        strikes = d.get("strikes", {})
+        top_calls = []
+        for strike, oi in sorted(strikes.get("calls", {}).items(), key=lambda x: x[1], reverse=True)[:3]:
+            top_calls.append(f"${strike}:{oi:,}")
+        top_puts = []
+        for strike, oi in sorted(strikes.get("puts", {}).items(), key=lambda x: x[1], reverse=True)[:3]:
+            top_puts.append(f"${strike}:{oi:,}")
+
+        logger.info(
+            f"{ticker} {dte}DTE OI [{latest_date}]: "
+            f"total={total_oi:,} call={call_oi:,} put={put_oi:,} P/C={pcr:.2f} maxpain=${max_pain} | "
+            f"top calls: {', '.join(top_calls) or 'none'} | "
+            f"top puts: {', '.join(top_puts) or 'none'}"
+        )
+    except Exception as e:
+        logger.debug(f"{ticker} {dte}DTE OI: couldn't parse summary - {e}")
+
+
+def _log_market_summary(ticker, market_data):
+    """Log key technical/market data metrics"""
+    try:
+        if not market_data or not isinstance(market_data, dict):
+            logger.info(f"{ticker} market: empty response")
+            return
+
+        price = market_data.get("price") or market_data.get("close") or market_data.get("current_price", "?")
+        rsi = market_data.get("rsi", market_data.get("RSI", "?"))
+        vwap = market_data.get("vwap", market_data.get("VWAP", "?"))
+        macd = market_data.get("macd", market_data.get("MACD", {}))
+        trend = market_data.get("trend", market_data.get("overall_trend", "?"))
+
+        macd_signal = ""
+        if isinstance(macd, dict):
+            macd_val = macd.get("macd", macd.get("value", "?"))
+            macd_sig = macd.get("signal", "?")
+            macd_signal = f"MACD={macd_val}/{macd_sig}"
+        elif macd != "?":
+            macd_signal = f"MACD={macd}"
+
+        logger.info(
+            f"{ticker} market: price=${price} RSI={rsi} VWAP={vwap} {macd_signal} trend={trend}"
+        )
+    except Exception as e:
+        logger.debug(f"{ticker} market: couldn't parse summary - {e}")

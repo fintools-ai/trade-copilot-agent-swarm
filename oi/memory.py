@@ -18,7 +18,7 @@ from config.settings import AWS_REGION
 logger = logging.getLogger(__name__)
 
 # Memory store name — created once via setup_memory()
-MEMORY_NAME = "oi-analysis"
+MEMORY_NAME = "oi_analysis"
 EVENT_EXPIRY_DAYS = 30
 
 _memory_client = None
@@ -54,19 +54,42 @@ def _get_memory_id():
     try:
         response = control.list_memories()
         for mem in response.get("memories", []):
-            if mem.get("name") == MEMORY_NAME:
-                _memory_id = mem["id"]
+            # Try both possible field names
+            name = mem.get("name") or mem.get("memoryName", "")
+            mid = mem.get("memoryId") or mem.get("id", "")
+            if name == MEMORY_NAME and mid:
+                _memory_id = mid
+                logger.info(f"Found existing memory store: {_memory_id}")
                 return _memory_id
     except Exception as e:
         logger.warning(f"Bedrock Memory list failed: {e}")
 
     # Not found — create it
-    _memory_id = setup_memory()
+    try:
+        _memory_id = setup_memory()
+    except Exception as e:
+        # Handle "already exists" — extract ID from the name
+        if "already exists" in str(e):
+            logger.info(f"Memory '{MEMORY_NAME}' exists but wasn't found in list, retrying list...")
+            try:
+                response = control.list_memories()
+                for mem in response.get("memories", []):
+                    name = mem.get("name") or mem.get("memoryName", "")
+                    mid = mem.get("memoryId") or mem.get("id", "")
+                    if name == MEMORY_NAME and mid:
+                        _memory_id = mid
+                        logger.info(f"Found memory store on retry: {_memory_id}")
+                        return _memory_id
+            except Exception as e2:
+                logger.error(f"Failed to find memory on retry: {e2}")
+        else:
+            logger.error(f"Failed to create memory: {e}")
+
     return _memory_id
 
 
 def setup_memory():
-    """One-time setup: create the memory store with semantic + episodic strategies"""
+    """One-time setup: create the memory store with semantic + summary strategies"""
     client = _get_memory_client()
 
     result = client.create_memory_and_wait(
@@ -74,14 +97,14 @@ def setup_memory():
         description="OI pattern analysis memory - stores daily analysis episodes and extracted facts",
         strategies=[
             {"semanticMemoryStrategy": {
-                "name": "oi-facts",
+                "name": "oi_facts",
                 "description": "Key OI facts: levels, walls, bias, patterns",
                 "namespaces": ["/facts/{actorId}/"],
             }},
-            {"episodicMemoryStrategy": {
-                "name": "oi-episodes",
-                "description": "Full daily analysis episodes with conditions and outcomes",
-                "namespaces": ["/episodes/{actorId}/"],
+            {"summaryMemoryStrategy": {
+                "name": "oi_summaries",
+                "description": "Rolling summaries of daily OI analysis episodes with conditions and outcomes",
+                "namespaces": ["/summaries/{actorId}/{sessionId}/"],
             }},
         ],
         event_expiry_days=EVENT_EXPIRY_DAYS,
@@ -95,14 +118,17 @@ def setup_memory():
 def store_episode(ticker, analysis, market_context=None):
     """
     Store an analysis episode after LLM completes.
-    Bedrock automatically extracts facts into semantic memory
-    and stores the full episode in episodic memory.
+    Bedrock automatically extracts facts into semantic memory.
     """
     if analysis.get("status") == "error":
         return
 
     today = datetime.now().strftime("%Y-%m-%d")
     memory_id = _get_memory_id()
+    if not memory_id:
+        logger.warning(f"{ticker}: skipping store_episode — no memory ID")
+        return
+
     client = _get_memory_client()
 
     trade = analysis.get("trade", {})
@@ -111,13 +137,11 @@ def store_episode(ticker, analysis, market_context=None):
     long_term = term.get("long_term", {})
     key_strikes = analysis.get("key_strikes", [])
 
-    # Format key strikes for readability
     strikes_text = "\n".join(
         f"  - ${s.get('strike')} ({s.get('type')}): {s.get('oi', 0):,} OI, 5d change: {s.get('change_5d', 'N/A')}"
         for s in key_strikes
     )
 
-    # Build context string
     regime = market_context.get("regime", "unknown") if market_context else "unknown"
     fear = market_context.get("fear_level", "unknown") if market_context else "unknown"
 
@@ -135,15 +159,12 @@ Risks: {', '.join(analysis.get('risks', []))}"""
     try:
         t0 = time.time()
         client.create_event(
-            memory_id=memory_id,
-            actor_id=f"/ticker/{ticker}",
-            session_id=f"analysis-{today}",
-            event_timestamp=int(datetime.now().timestamp() * 1000),
-            payload=[{
-                "Conversational": {
-                    "content": content,
-                    "role": "assistant"
-                }
+            memoryId=memory_id,
+            actorId=f"/ticker/{ticker}",
+            sessionId=f"analysis-{today}",
+            messages=[{
+                "content": content,
+                "role": "assistant"
             }]
         )
         logger.info(f"{ticker}: stored episode ({analysis.get('direction', '?')} {analysis.get('confidence', '?')}%) ({time.time()-t0:.1f}s)")
@@ -160,6 +181,10 @@ def recall(ticker, query=None):
         query = f"OI patterns, key levels, institutional positioning, past accuracy for {ticker}"
 
     memory_id = _get_memory_id()
+    if not memory_id:
+        logger.warning(f"{ticker}: skipping recall — no memory ID")
+        return []
+
     client = _get_memory_client()
 
     facts = []
@@ -167,9 +192,9 @@ def recall(ticker, query=None):
     try:
         t0 = time.time()
         result = client.retrieve_memory_records(
-            memory_id=memory_id,
+            memoryId=memory_id,
             namespace=f"/facts//ticker/{ticker}/",
-            search_criteria={
+            searchCriteria={
                 "searchQuery": query,
                 "topK": 5,
             }
