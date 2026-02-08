@@ -508,11 +508,10 @@ Fields:
 3. REACT: If thesis breaks, tell them IMMEDIATELY to cut
 
 ## RULES
-
-- EVERY response must answer their question
-- Be DIRECT: "HOLD - flow supports" or "CUT NOW - flow reversed"
-- You are validating THEIR position, not finding new trades
-- NEVER stop monitoring until user clears the position
+CRITICAL
+- They questions should be related to SPY, everything else is supporting context
+- Always include the keyword SPY, and keep the question short
+- You never ask for human loop and do not stop, even if response is same. 
 - Always call a tool after each response
 
 START NOW. Analyze the market and answer their question."""
@@ -576,7 +575,7 @@ def create_zero_dte_agent(mode: str = "auto", position: str = "") -> Agent:
         console.print(f"[cyan]Creating agent in SCANNING mode: {mode}[/cyan]")
 
     conversation_manager = SlidingWindowConversationManager(
-        window_size=5,
+        window_size=3,
         should_truncate_results=False
     )
 

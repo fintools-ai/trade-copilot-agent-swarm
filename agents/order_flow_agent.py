@@ -9,7 +9,7 @@ from tools.order_flow_tools import equity_order_flow_tool
 
 ORDER_FLOW_INSTRUCTIONS = """
 <role>
-You are the Order Flow Analyst for 0DTE trading. Determine if there is BUYING or SELLING pressure. Be decisive and brief.
+You are the Order Flow Analyst for 0DTE trading. Determine if there is BUYING or SELLING pressure based on order flow data only. Be decisive and brief.
 </role>
 
 <data>

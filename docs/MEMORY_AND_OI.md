@@ -14,10 +14,10 @@ The core idea: every analysis both **reads from** and **writes to** memory, crea
 
 ```
                          ┌──────────────────────────────────┐
-                         │         MEMORY STORE              │
+                         │         MEMORY STORE             │
                          │                                  │
-                         │  Semantic Facts    Episodes       │
-                         │  (compressed)      (full context) │
+                         │  Semantic Facts    Episodes      │
+                         │  (compressed)      (full context)│
                          │                                  │
                          └──────┬───────────────────▲───────┘
                                 │                   │
@@ -29,13 +29,13 @@ The core idea: every analysis both **reads from** and **writes to** memory, crea
        │                                                                     │
        │                        DAILY ANALYSIS LOOP                          │
        │                                                                     │
-       │   ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐ │
-       │   │  Collect   │    │  Compute  │    │    LLM    │    │   Store   │ │
-       │   │  raw OI    │───▶│  deltas   │───▶│  analyzes │───▶│  results  │ │
-       │   │  + market  │    │  vs prev  │    │  raw data │    │  + store  │ │
-       │   │  data      │    │  day      │    │  + delta  │    │  episode  │ │
-       │   │           │    │           │    │  + memory  │    │  to memory│ │
-       │   └───────────┘    └───────────┘    └───────────┘    └───────────┘ │
+       │   ┌───────────┐    ┌───────────┐    ┌───────────┐    ┌───────────┐  │
+       │   │  Collect  │    │  Compute  │    │    LLM    │    │   Store   │  │
+       │   │  raw OI   │───▶│  deltas   │───▶│  analyzes │───▶│  results  │  │ 
+       │   │  + market │    │  vs prev  │    │  raw data │    │  + store  │  │
+       │   │  data     │    │  day      │    │  + delta  │    │  episode  │  │
+       │   │           │    │           │    │  + memory │    │  to memory│  │
+       │   └───────────┘    └───────────┘    └───────────┘    └───────────┘  │
        │                                                                     │
        └─────────────────────────────────────────────────────────────────────┘
                                         │
