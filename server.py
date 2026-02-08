@@ -18,6 +18,8 @@ Usage:
 """
 
 import json
+import threading
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler
@@ -70,6 +72,12 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_get_position()
         elif self.path == "/token-stats":
             self.handle_token_stats()
+        elif self.path == "/oi-results":
+            self.handle_oi_results()
+        elif self.path == "/oi-status":
+            self.handle_oi_status()
+        elif self.path == "/oi-stream":
+            self.handle_oi_stream()
         elif self.path == "/":
             self.path = "/index.html"
             super().do_GET()
@@ -88,6 +96,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_clear_position()
         elif self.path == "/exit-trade":
             self.handle_exit_trade()
+        elif self.path == "/run-oi-analysis":
+            self.handle_run_oi_analysis()
         else:
             self.send_error(404, "Not Found")
 
@@ -265,6 +275,82 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         }
 
         self.wfile.write(json.dumps(response).encode())
+
+    def handle_oi_results(self):
+        """Return latest OI analysis results"""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        from oi.redis_manager import get_full_results
+        results = get_full_results()
+        self.wfile.write(json.dumps(results or {}).encode())
+
+    def handle_oi_status(self):
+        """Return current OI analysis status"""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        from oi.redis_manager import get_status
+        status = get_status()
+        self.wfile.write(json.dumps(status).encode())
+
+    def handle_oi_stream(self):
+        """SSE stream for OI analysis progress events"""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        import redis as redis_lib
+        r = redis_lib.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+        ps = r.pubsub()
+        ps.subscribe("oi:events")
+
+        try:
+            for message in ps.listen():
+                if message["type"] == "message":
+                    self.wfile.write(f"data: {message['data']}\n\n".encode())
+                    self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            pass
+        finally:
+            ps.close()
+            r.close()
+
+    def handle_run_oi_analysis(self):
+        """Start OI analysis in background thread"""
+        from oi.redis_manager import get_status
+
+        # Check if already running
+        status = get_status()
+        if status.get("status") == "running":
+            self.send_response(409)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
+            return
+
+        def run_analysis():
+            from oi.analyzer import OIAnalyzer
+            analyzer = OIAnalyzer()
+            asyncio.run(analyzer.run_analysis())
+
+        thread = threading.Thread(target=run_analysis, daemon=True)
+        thread.start()
+        console.print("[bold cyan]OI Analysis started in background[/bold cyan]")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "started"}).encode())
 
     def handle_sse(self):
         """Handle Server-Sent Events connection with Redis pub/sub"""

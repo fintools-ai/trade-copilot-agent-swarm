@@ -188,6 +188,122 @@
     .token-total { color: #fff; font-weight: bold; }
     .token-cost { color: #00ff00; }
 
+    /* OI ANALYSIS TAB */
+    .oi-layout { display: flex; flex: 1; overflow: hidden; }
+    .oi-left { width: 240px; min-width: 180px; border-right: 1px solid #222; display: flex; flex-direction: column; overflow: hidden; }
+    .oi-center { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .oi-right { width: 300px; min-width: 220px; border-left: 1px solid #222; display: flex; flex-direction: column; overflow: hidden; }
+
+    .oi-panel-header {
+      padding: 4px 6px; background: #0a0a0a; border-bottom: 1px solid #333;
+      color: #ff9900; font-weight: bold; font-size: 10px; text-transform: uppercase;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .oi-panel-body { flex: 1; overflow-y: auto; padding: 4px; }
+    .oi-panel-body::-webkit-scrollbar { width: 4px; }
+    .oi-panel-body::-webkit-scrollbar-thumb { background: #333; }
+
+    .oi-ticker-item {
+      padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #111;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .oi-ticker-item:hover { background: #111; }
+    .oi-ticker-item.selected { background: #1a1a0a; border-left: 2px solid #ff6600; }
+    .oi-ticker-item .ticker-name { font-weight: bold; color: #fff; font-size: 11px; }
+    .oi-ticker-item .ticker-conf { font-size: 10px; }
+    .oi-ticker-item .ticker-conf.high { color: #00ff00; }
+    .oi-ticker-item .ticker-conf.med { color: #ffcc00; }
+    .oi-ticker-item .ticker-conf.low { color: #888; }
+    .oi-ticker-item .ticker-tag {
+      font-size: 8px; padding: 1px 4px; font-weight: bold; margin-left: 4px;
+    }
+    .oi-ticker-item .ticker-tag.aligned { background: #003300; color: #00ff00; }
+    .oi-ticker-item .ticker-tag.divergent { background: #332200; color: #ffaa00; }
+    .oi-ticker-item .ticker-tag.bullish { background: #003300; color: #00ff00; }
+    .oi-ticker-item .ticker-tag.bearish { background: #330000; color: #ff4444; }
+
+    .oi-term-strip { display: flex; gap: 4px; margin-bottom: 8px; }
+    .oi-dte-card {
+      flex: 1; padding: 6px; background: #0a0a0a; border: 1px solid #333; text-align: center;
+    }
+    .oi-dte-card .dte-label { font-size: 9px; color: #888; text-transform: uppercase; }
+    .oi-dte-card .dte-bias { font-size: 10px; font-weight: bold; margin-top: 2px; }
+    .oi-dte-card .dte-bias.bullish { color: #00ff00; }
+    .oi-dte-card .dte-bias.bearish { color: #ff4444; }
+    .oi-dte-card .dte-bias.neutral { color: #888; }
+    .oi-dte-card .dte-strike { font-size: 9px; color: #ff9900; margin-top: 2px; }
+
+    .oi-section { margin-bottom: 8px; }
+    .oi-section-title {
+      font-size: 10px; font-weight: bold; color: #ff9900; text-transform: uppercase;
+      padding: 4px 6px; background: #0a0a0a; border-bottom: 1px solid #333; margin-bottom: 4px;
+    }
+    .oi-thesis { color: #ccc; font-size: 11px; padding: 6px; line-height: 1.5; background: #0a0a0a; border: 1px solid #222; }
+    .oi-strikes-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .oi-strikes-table th {
+      text-align: left; color: #888; font-size: 9px; text-transform: uppercase;
+      padding: 3px 6px; border-bottom: 1px solid #333; background: #0a0a0a;
+    }
+    .oi-strikes-table td { padding: 3px 6px; border-bottom: 1px solid #111; color: #ccc; }
+    .oi-strikes-table .type-call_wall { color: #00ff00; }
+    .oi-strikes-table .type-put_wall { color: #ff4444; }
+    .oi-strikes-table .type-max_pain { color: #ff9900; }
+
+    .oi-trade-box {
+      background: #0a0a0a; border: 1px solid #333; padding: 8px; margin-top: 4px;
+    }
+    .oi-trade-box .trade-direction { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+    .oi-trade-box .trade-direction.CALL { color: #00ff00; }
+    .oi-trade-box .trade-direction.PUT { color: #ff4444; }
+    .oi-trade-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 10px; }
+    .oi-trade-row .label { color: #888; }
+    .oi-trade-row .value { color: #fff; }
+    .oi-risk-list { list-style: none; padding: 4px 6px; }
+    .oi-risk-list li { color: #ff6666; font-size: 10px; padding: 2px 0; }
+    .oi-risk-list li::before { content: "! "; color: #ff4444; font-weight: bold; }
+
+    .oi-run-btn {
+      font-family: 'Consolas', monospace; font-size: 10px; font-weight: bold;
+      padding: 6px 16px; border: 1px solid #ff6600; background: #1a0a00;
+      color: #ff6600; cursor: pointer; text-transform: uppercase; width: 100%;
+      margin-bottom: 8px;
+    }
+    .oi-run-btn:hover { background: #331a00; }
+    .oi-run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .oi-status-bar { color: #888; font-size: 10px; padding: 4px 0; margin-bottom: 8px; }
+    .oi-progress-bar {
+      height: 3px; background: #222; margin-bottom: 8px; overflow: hidden;
+    }
+    .oi-progress-fill { height: 100%; background: #ff6600; transition: width 0.3s; width: 0%; }
+
+    .oi-context-card {
+      background: #0a0a0a; border: 1px solid #333; padding: 8px; margin-bottom: 8px;
+    }
+    .oi-context-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 10px; }
+    .oi-context-row .label { color: #888; }
+    .oi-context-row .value { color: #ccc; }
+
+    .oi-conviction-item {
+      padding: 6px 8px; background: #0a0a0a; border: 1px solid #222; margin-bottom: 4px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .oi-conviction-item .cv-ticker { font-weight: bold; color: #fff; }
+    .oi-conviction-item .cv-dir { font-size: 10px; font-weight: bold; }
+    .oi-conviction-item .cv-dir.CALL { color: #00ff00; }
+    .oi-conviction-item .cv-dir.PUT { color: #ff4444; }
+    .oi-conviction-item .cv-conf { font-size: 10px; color: #ff9900; }
+
+    .oi-empty { color: #444; font-size: 11px; padding: 20px; text-align: center; }
+    .oi-bias-summary {
+      display: flex; gap: 8px; margin-bottom: 8px;
+    }
+    .oi-bias-card { flex: 1; text-align: center; padding: 6px; background: #0a0a0a; border: 1px solid #333; }
+    .oi-bias-card .bias-count { font-size: 18px; font-weight: bold; }
+    .oi-bias-card .bias-count.bullish { color: #00ff00; }
+    .oi-bias-card .bias-count.bearish { color: #ff4444; }
+    .oi-bias-card .bias-count.unclear { color: #888; }
+    .oi-bias-card .bias-label { font-size: 9px; color: #888; text-transform: uppercase; }
+
     /* MAIN */
     .main {
       display: flex;
@@ -640,6 +756,7 @@
     <!-- TAB BAR -->
     <div class="tab-bar">
       <button class="tab-btn active" data-tab="desk">DESK</button>
+      <button class="tab-btn" data-tab="oi">OI ANALYSIS</button>
       <div class="tab-dropdown">
         <button class="tab-btn" data-tab="data">DATA ▼</button>
         <div class="tab-dropdown-content">
@@ -750,6 +867,63 @@
       <span><span id="latency-display" style="color:#888;">--</span> | <span id="status">Connected</span></span>
     </div>
     </div><!-- end tab-desk -->
+
+    <!-- TAB: OI ANALYSIS -->
+    <div class="tab-content" id="tab-oi">
+      <div class="oi-layout">
+        <!-- LEFT: Ticker List -->
+        <div class="oi-left">
+          <div class="oi-panel-header">Tickers <span id="oi-ticker-count" style="color:#888;font-weight:normal;">--</span></div>
+          <div class="oi-panel-body" id="oi-ticker-list">
+            <div class="oi-empty">Click "Run Analysis" to start</div>
+          </div>
+        </div>
+
+        <!-- CENTER: Ticker Detail -->
+        <div class="oi-center">
+          <div class="oi-panel-header">Analysis <span id="oi-selected-ticker" style="color:#fff;">--</span></div>
+          <div class="oi-panel-body" id="oi-detail">
+            <div class="oi-empty">Select a ticker from the left panel</div>
+          </div>
+        </div>
+
+        <!-- RIGHT: Market Overview -->
+        <div class="oi-right">
+          <div class="oi-panel-header">Overview</div>
+          <div class="oi-panel-body" id="oi-overview">
+            <button class="oi-run-btn" id="oi-run-btn" onclick="runOIAnalysis()">Run Analysis</button>
+            <div class="oi-progress-bar" id="oi-progress-bar"><div class="oi-progress-fill" id="oi-progress-fill"></div></div>
+            <div class="oi-status-bar" id="oi-status">Ready</div>
+
+            <div class="oi-section">
+              <div class="oi-section-title">Signal Distribution</div>
+              <div class="oi-bias-summary" id="oi-bias-summary">
+                <div class="oi-bias-card"><div class="bias-count bullish" id="oi-bull-count">--</div><div class="bias-label">Bullish</div></div>
+                <div class="oi-bias-card"><div class="bias-count bearish" id="oi-bear-count">--</div><div class="bias-label">Bearish</div></div>
+                <div class="oi-bias-card"><div class="bias-count unclear" id="oi-unclear-count">--</div><div class="bias-label">Unclear</div></div>
+              </div>
+            </div>
+
+            <div class="oi-section">
+              <div class="oi-section-title">Market Context</div>
+              <div class="oi-context-card" id="oi-market-context">
+                <div class="oi-context-row"><span class="label">Regime</span><span class="value" id="oi-regime">--</span></div>
+                <div class="oi-context-row"><span class="label">Fear Level</span><span class="value" id="oi-fear">--</span></div>
+                <div class="oi-context-row"><span class="label">VIX P/C</span><span class="value" id="oi-vix-pcr">--</span></div>
+                <div class="oi-context-row"><span class="label">Vol Expectation</span><span class="value" id="oi-vol">--</span></div>
+              </div>
+            </div>
+
+            <div class="oi-section">
+              <div class="oi-section-title">High Conviction</div>
+              <div id="oi-high-conviction">
+                <div class="oi-empty">No results yet</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- end tab-oi -->
 
     <!-- TAB: TOKEN USAGE -->
     <div class="tab-content" id="tab-tokens">
@@ -1458,12 +1632,14 @@
       const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
       if (btn) btn.classList.add('active');
 
-      // Load data for token page
+      // Load data for specific pages
       if (tabId === 'tokens') loadTokenData();
+      if (tabId === 'oi') loadOIData();
     }
 
     // Tab button clicks
     document.querySelector('.tab-btn[data-tab="desk"]').addEventListener('click', () => switchTab('desk'));
+    document.querySelector('.tab-btn[data-tab="oi"]').addEventListener('click', () => switchTab('oi'));
     document.querySelector('.tab-dropdown-item[data-page="tokens"]').addEventListener('click', () => switchTab('tokens'));
 
     // Token data
@@ -1610,6 +1786,270 @@
           </div>
         </div>`;
       }).join('');
+    }
+
+    // ============ OI ANALYSIS ============
+    let oiData = null;
+    let oiSelectedTicker = null;
+    let oiEventSource = null;
+
+    async function loadOIData() {
+      try {
+        const [resultsRes, statusRes] = await Promise.all([
+          fetch('/oi-results'), fetch('/oi-status')
+        ]);
+        const results = await resultsRes.json();
+        const status = await statusRes.json();
+
+        updateOIStatus(status);
+
+        if (results && results.clusters) {
+          oiData = results;
+          renderOITickers(results);
+          renderOIOverview(results);
+        }
+      } catch (e) {
+        console.error('Failed to load OI data:', e);
+      }
+    }
+
+    function updateOIStatus(status) {
+      const el = document.getElementById('oi-status');
+      const bar = document.getElementById('oi-progress-fill');
+      const btn = document.getElementById('oi-run-btn');
+
+      el.textContent = status.message || status.status || 'Ready';
+      bar.style.width = (status.progress || 0) + '%';
+
+      if (status.status === 'running') {
+        btn.disabled = true;
+        btn.textContent = 'Running...';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Run Analysis';
+      }
+
+      if (status.status === 'complete') {
+        el.style.color = '#00ff00';
+      } else if (status.status === 'error') {
+        el.style.color = '#ff4444';
+      } else {
+        el.style.color = '#888';
+      }
+    }
+
+    async function runOIAnalysis() {
+      const btn = document.getElementById('oi-run-btn');
+      btn.disabled = true;
+      btn.textContent = 'Starting...';
+
+      try {
+        const res = await fetch('/run-oi-analysis', { method: 'POST' });
+        const data = await res.json();
+
+        if (res.status === 409) {
+          updateOIStatus({ status: 'running', message: data.error });
+          return;
+        }
+
+        // Connect to SSE for progress
+        if (oiEventSource) oiEventSource.close();
+        oiEventSource = new EventSource('/oi-stream');
+        oiEventSource.onmessage = function(e) {
+          try {
+            const event = JSON.parse(e.data);
+            updateOIStatus({ status: 'running', message: event.message, progress: event.progress });
+
+            if (event.progress >= 100) {
+              oiEventSource.close();
+              oiEventSource = null;
+              setTimeout(loadOIData, 1000);
+            }
+          } catch (err) {}
+        };
+        oiEventSource.onerror = function() {
+          oiEventSource.close();
+          oiEventSource = null;
+          setTimeout(loadOIData, 2000);
+        };
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Run Analysis';
+        updateOIStatus({ status: 'error', message: 'Failed to start: ' + e.message });
+      }
+    }
+
+    function renderOITickers(results) {
+      const container = document.getElementById('oi-ticker-list');
+      const clusters = results.clusters;
+
+      // Combine all tickers and sort by confidence
+      const all = [
+        ...clusters.bullish_group.tickers.map(t => ({ ...t, group: 'bullish' })),
+        ...clusters.bearish_group.tickers.map(t => ({ ...t, group: 'bearish' })),
+        ...clusters.unclear_group.tickers.map(t => ({ ...t, group: 'unclear' }))
+      ].sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+
+      document.getElementById('oi-ticker-count').textContent = `(${all.length})`;
+
+      if (all.length === 0) {
+        container.innerHTML = '<div class="oi-empty">No results</div>';
+        return;
+      }
+
+      container.innerHTML = all.map(t => {
+        const conf = t.confidence || 0;
+        const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
+        const dirTag = t.direction === 'CALL' ? 'bullish' : t.direction === 'PUT' ? 'bearish' : '';
+        const confTag = t.confluence === 'aligned' ? 'aligned' : t.confluence === 'divergent' ? 'divergent' : '';
+
+        return `<div class="oi-ticker-item${oiSelectedTicker === t.ticker ? ' selected' : ''}" onclick="selectOITicker('${t.ticker}')">
+          <span>
+            <span class="ticker-name">${t.ticker}</span>
+            ${dirTag ? `<span class="ticker-tag ${dirTag}">${t.direction}</span>` : ''}
+            ${confTag ? `<span class="ticker-tag ${confTag}">${confTag.toUpperCase()}</span>` : ''}
+          </span>
+          <span class="ticker-conf ${confClass}">${conf}%</span>
+        </div>`;
+      }).join('');
+    }
+
+    function selectOITicker(ticker) {
+      oiSelectedTicker = ticker;
+      document.getElementById('oi-selected-ticker').textContent = ticker;
+
+      // Highlight in list
+      document.querySelectorAll('.oi-ticker-item').forEach(el => el.classList.remove('selected'));
+      const items = document.querySelectorAll('.oi-ticker-item');
+      items.forEach(el => { if (el.textContent.includes(ticker)) el.classList.add('selected'); });
+
+      // Find analysis for this ticker
+      if (!oiData) return;
+      const analysis = oiData.analyses.find(a => a.ticker === ticker);
+      if (!analysis || analysis.status === 'error') {
+        document.getElementById('oi-detail').innerHTML = `<div class="oi-empty">No data for ${ticker}: ${analysis?.error || 'unknown'}</div>`;
+        return;
+      }
+
+      renderOIDetail(analysis);
+    }
+
+    function renderOIDetail(analysis) {
+      const container = document.getElementById('oi-detail');
+      const trade = analysis.trade || {};
+      const term = analysis.term_structure || {};
+      const keyStrikes = analysis.key_strikes || [];
+      const risks = analysis.risks || [];
+
+      // Term structure strip
+      const shortTerm = term.short_term || {};
+      const longTerm = term.long_term || {};
+
+      let html = '';
+
+      // Term Structure
+      html += '<div class="oi-section"><div class="oi-section-title">Term Structure</div>';
+      html += '<div class="oi-term-strip">';
+      html += renderDteCard('Short Term', shortTerm);
+      html += renderDteCard('Long Term', longTerm);
+      html += '</div></div>';
+
+      // Thesis
+      if (analysis.thesis) {
+        html += '<div class="oi-section"><div class="oi-section-title">Institutional Thesis</div>';
+        html += `<div class="oi-thesis">${analysis.thesis}</div></div>`;
+      }
+
+      // Key Strikes
+      if (keyStrikes.length > 0) {
+        html += '<div class="oi-section"><div class="oi-section-title">Key Strikes</div>';
+        html += '<table class="oi-strikes-table"><thead><tr><th>Strike</th><th>Type</th><th>OI</th><th>5d Change</th></tr></thead><tbody>';
+        keyStrikes.forEach(s => {
+          const typeClass = 'type-' + (s.type || '').replace(' ', '_');
+          html += `<tr><td>$${s.strike}</td><td class="${typeClass}">${s.type || '--'}</td><td>${(s.oi || 0).toLocaleString()}</td><td>${s.change_5d || 'N/A'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+      }
+
+      // Trade Recommendation
+      html += '<div class="oi-section"><div class="oi-section-title">Trade Recommendation</div>';
+      html += '<div class="oi-trade-box">';
+      html += `<div class="trade-direction ${analysis.direction || ''}">${trade.instrument || analysis.direction || '--'}</div>`;
+      html += `<div class="oi-trade-row"><span class="label">Current</span><span class="value">$${trade.current_price || '--'}</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">Entry</span><span class="value">$${trade.entry || '--'}</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">Stop</span><span class="value" style="color:#ff4444;">$${trade.stop || '--'}</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">Target</span><span class="value" style="color:#00ff00;">$${trade.target || '--'}</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">R/R</span><span class="value">${trade.risk_reward || '--'}</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">Expiry</span><span class="value">${trade.expiry_dte || '--'} DTE</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">Confidence</span><span class="value" style="color:#ff9900;">${analysis.confidence || '--'}%</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">Confluence</span><span class="value">${analysis.confluence || '--'}</span></div>`;
+      html += '</div></div>';
+
+      // Risks
+      if (risks.length > 0) {
+        html += '<div class="oi-section"><div class="oi-section-title">Risks</div>';
+        html += '<ul class="oi-risk-list">';
+        risks.forEach(r => { html += `<li>${r}</li>`; });
+        html += '</ul></div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    function renderDteCard(label, data) {
+      const bias = (data.bias || 'neutral').toLowerCase();
+      return `<div class="oi-dte-card">
+        <div class="dte-label">${label}</div>
+        <div class="dte-bias ${bias}">${(data.bias || 'N/A').toUpperCase()}</div>
+        <div class="dte-strike">${data.key_strike ? '$' + data.key_strike : '--'} ${data.key_oi ? '(' + data.key_oi.toLocaleString() + ')' : ''}</div>
+        ${data.note ? `<div style="font-size:8px;color:#666;margin-top:2px;">${data.note}</div>` : ''}
+      </div>`;
+    }
+
+    function renderOIOverview(results) {
+      const summary = results.summary || {};
+      const clusters = results.clusters || {};
+      const ctx = results.market_context || {};
+
+      // Bias counts
+      document.getElementById('oi-bull-count').textContent = summary.bullish || 0;
+      document.getElementById('oi-bear-count').textContent = summary.bearish || 0;
+      document.getElementById('oi-unclear-count').textContent = summary.unclear || 0;
+
+      // Market context
+      document.getElementById('oi-regime').textContent = ctx.regime || '--';
+      document.getElementById('oi-fear').textContent = ctx.fear_level || '--';
+      document.getElementById('oi-vix-pcr').textContent = ctx.vix_put_call_ratio ? ctx.vix_put_call_ratio.toFixed(2) : '--';
+      document.getElementById('oi-vol').textContent = ctx.volatility_expectation || '--';
+
+      // Style regime
+      const regimeEl = document.getElementById('oi-regime');
+      if (ctx.regime === 'bullish') regimeEl.style.color = '#00ff00';
+      else if (ctx.regime === 'bearish') regimeEl.style.color = '#ff4444';
+      else regimeEl.style.color = '#ccc';
+
+      // High conviction picks
+      const hcContainer = document.getElementById('oi-high-conviction');
+      const hc = clusters.high_conviction || [];
+      if (hc.length === 0) {
+        hcContainer.innerHTML = '<div class="oi-empty">No high conviction trades</div>';
+      } else {
+        hcContainer.innerHTML = hc.map(t => `<div class="oi-conviction-item" onclick="selectOITicker('${t.ticker}')">
+          <span class="cv-ticker">${t.ticker}</span>
+          <span class="cv-dir ${t.direction || ''}">${t.direction || '--'}</span>
+          <span class="cv-conf">${t.confidence || 0}%</span>
+        </div>`).join('');
+      }
+
+      // Update status
+      if (summary.timestamp) {
+        const ts = new Date(summary.timestamp);
+        updateOIStatus({
+          status: 'complete',
+          message: `Last run: ${ts.toLocaleTimeString()} (${summary.duration || '--'})`,
+          progress: 100
+        });
+      }
     }
 
     // Init
