@@ -3,8 +3,12 @@ Market Context Provider - Uses VIX OI data to determine market regime
 """
 
 import json
+import time
+import logging
 from datetime import datetime
 from config.settings import OI_ANALYSIS_DAYS
+
+logger = logging.getLogger(__name__)
 
 
 class MarketContextProvider:
@@ -14,19 +18,24 @@ class MarketContextProvider:
     async def get_market_context(self):
         """Get market context using VIX open interest data"""
         try:
+            t0 = time.time()
             vix_data = await self._get_vix_oi_data()
             if not vix_data:
+                logger.warning("VIX: no OI data returned")
                 return None
 
             context = self._analyze_vix_context(vix_data)
             if not context:
+                logger.warning("VIX: analysis returned no context")
                 return None
 
             context["timestamp"] = datetime.now().isoformat()
+            dur = time.time() - t0
+            logger.info(f"VIX context: {context['regime']} regime, {context['fear_level']} fear, P/C {context.get('vix_put_call_ratio', 0):.2f} ({dur:.1f}s)")
             return context
 
         except Exception as e:
-            print(f"Market context failed: {str(e)}")
+            logger.error(f"Market context failed: {e}")
             return None
 
     async def _get_vix_oi_data(self):

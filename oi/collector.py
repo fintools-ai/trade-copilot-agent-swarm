@@ -4,9 +4,13 @@ OI Data Collector - Interfaces with MCP services for open interest and market da
 
 import asyncio
 import json
+import time
+import logging
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from config.settings import MCP_OI_EXECUTABLE, MCP_MARKET_DATA_EXECUTABLE, OI_TICKERS, OI_ANALYSIS_DAYS
+
+logger = logging.getLogger(__name__)
 
 
 class MCPOIClient:
@@ -90,6 +94,7 @@ class OIDataCollector:
 
     async def collect_ticker_data(self, ticker, target_dte):
         """Collect OI + market data for a single ticker/DTE"""
+        t0 = time.time()
         try:
             oi_task = self._call_oi_mcp(ticker, target_dte)
             market_task = self._call_market_data_mcp(ticker)
@@ -103,18 +108,25 @@ class OIDataCollector:
             if isinstance(oi_result, Exception):
                 data["oi_data"] = None
                 data["oi_error"] = str(oi_result)
+                logger.warning(f"{ticker} {target_dte}DTE OI: FAILED - {oi_result}")
             else:
                 data["oi_data"] = oi_result
+                logger.debug(f"{ticker} {target_dte}DTE OI: OK")
 
             if isinstance(market_result, Exception):
                 data["market_data"] = None
                 data["market_error"] = str(market_result)
+                logger.warning(f"{ticker} market data: FAILED - {market_result}")
             else:
                 data["market_data"] = market_result
 
+            dur = time.time() - t0
+            logger.debug(f"{ticker} {target_dte}DTE: done ({dur:.1f}s)")
             return {"status": "success", "data": data, "timestamp": datetime.now().isoformat()}
 
         except Exception as e:
+            dur = time.time() - t0
+            logger.error(f"{ticker} {target_dte}DTE: ERROR ({dur:.1f}s) - {e}")
             return {"status": "error", "ticker": ticker, "error": str(e), "timestamp": datetime.now().isoformat()}
 
     async def collect_all_tickers(self, progress_callback=None):

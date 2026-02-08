@@ -4,9 +4,13 @@ Uses AWS Bedrock Claude to analyze OI patterns across the full term structure
 """
 
 import json
+import time
+import logging
 import boto3
 from datetime import datetime
 from config.settings import AWS_REGION, BEDROCK_MODEL_ID
+
+logger = logging.getLogger(__name__)
 
 
 class LLMAnalyzer:
@@ -26,12 +30,27 @@ class LLMAnalyzer:
         """
         try:
             prompt = self._build_prompt(ticker, all_dte_data, market_context, historical_context)
+            n_dtes = len(all_dte_data)
+            n_facts = len(historical_context) if historical_context else 0
+            logger.info(f"{ticker}: prompt ~{len(prompt)} chars, {n_dtes} DTEs, {n_facts} memory facts")
+
+            t0 = time.time()
             response = self._call_bedrock(prompt)
+            bedrock_dur = time.time() - t0
+            logger.info(f"{ticker}: Bedrock call {bedrock_dur:.1f}s")
+
             analysis = self._parse_response(response)
             analysis["ticker"] = ticker
             analysis["analysis_timestamp"] = datetime.now().isoformat()
+
+            if analysis.get("status") == "error":
+                logger.warning(f"{ticker}: parse failed - {analysis.get('error', 'unknown')}")
+            else:
+                logger.info(f"{ticker}: {analysis.get('direction', '?')} {analysis.get('confidence', '?')}% conf, {analysis.get('confluence', '?')}")
+
             return analysis
         except Exception as e:
+            logger.error(f"{ticker}: LLM analysis failed - {e}")
             return {
                 "ticker": ticker,
                 "status": "error",

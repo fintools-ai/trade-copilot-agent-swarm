@@ -896,6 +896,11 @@
             <div class="oi-status-bar" id="oi-status">Ready</div>
 
             <div class="oi-section">
+              <div class="oi-section-title">Live Log <span id="oi-log-clear" style="color:#555;cursor:pointer;float:right;font-weight:normal;" onclick="document.getElementById('oi-log').innerHTML=''">[clear]</span></div>
+              <div id="oi-log" style="max-height:180px;overflow-y:auto;font-size:9px;color:#888;background:#050505;padding:4px;border:1px solid #222;font-family:monospace;"></div>
+            </div>
+
+            <div class="oi-section">
               <div class="oi-section-title">Signal Distribution</div>
               <div class="oi-bias-summary" id="oi-bias-summary">
                 <div class="oi-bias-card"><div class="bias-count bullish" id="oi-bull-count">--</div><div class="bias-label">Bullish</div></div>
@@ -1822,19 +1827,41 @@
       bar.style.width = (status.progress || 0) + '%';
 
       if (status.status === 'running') {
+        btn.disabled = false;
+        btn.textContent = 'CANCEL';
+        btn.style.color = '#ff4444';
+        btn.style.borderColor = '#ff4444';
+        btn.onclick = cancelOIAnalysis;
+      } else if (status.status === 'cancelling') {
         btn.disabled = true;
-        btn.textContent = 'Running...';
+        btn.textContent = 'Cancelling...';
+        btn.style.color = '#ffaa00';
+        btn.style.borderColor = '#ffaa00';
       } else {
         btn.disabled = false;
         btn.textContent = 'Run Analysis';
+        btn.style.color = '#ff6600';
+        btn.style.borderColor = '#ff6600';
+        btn.onclick = runOIAnalysis;
       }
 
       if (status.status === 'complete') {
         el.style.color = '#00ff00';
-      } else if (status.status === 'error') {
+      } else if (status.status === 'error' || status.status === 'cancelled') {
         el.style.color = '#ff4444';
       } else {
         el.style.color = '#888';
+      }
+    }
+
+    async function cancelOIAnalysis() {
+      const btn = document.getElementById('oi-run-btn');
+      btn.disabled = true;
+      btn.textContent = 'Cancelling...';
+      try {
+        await fetch('/cancel-oi-analysis', { method: 'POST' });
+      } catch (e) {
+        console.error('Cancel failed:', e);
       }
     }
 
@@ -1858,9 +1885,19 @@
         oiEventSource.onmessage = function(e) {
           try {
             const event = JSON.parse(e.data);
-            updateOIStatus({ status: 'running', message: event.message, progress: event.progress });
+            const st = event.progress >= 100 ? 'complete' : (event.message && event.message.includes('Cancel') ? 'cancelled' : 'running');
+            updateOIStatus({ status: st, message: event.message, progress: event.progress });
 
-            if (event.progress >= 100) {
+            // Append to live log
+            const logEl = document.getElementById('oi-log');
+            if (logEl) {
+              const levelColors = { success: '#00ff00', warning: '#ffaa00', error: '#ff4444', info: '#888' };
+              const color = levelColors[event.level] || '#888';
+              logEl.innerHTML += `<div><span style="color:#555">${event.timestamp || ''}</span> <span style="color:${color}">${event.message || ''}</span></div>`;
+              logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            if (event.progress >= 100 || st === 'cancelled') {
               oiEventSource.close();
               oiEventSource = null;
               setTimeout(loadOIData, 1000);
@@ -1881,19 +1918,41 @@
 
     function renderOITickers(results) {
       const container = document.getElementById('oi-ticker-list');
-      const clusters = results.clusters;
+      const clusters = results.clusters || {};
 
-      // Combine all tickers and sort by confidence
-      const all = [
-        ...clusters.bullish_group.tickers.map(t => ({ ...t, group: 'bullish' })),
-        ...clusters.bearish_group.tickers.map(t => ({ ...t, group: 'bearish' })),
-        ...clusters.unclear_group.tickers.map(t => ({ ...t, group: 'unclear' }))
-      ].sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
+      // Combine all tickers from clusters + any errored analyses
+      const bullish = (clusters.bullish_group && clusters.bullish_group.tickers) || [];
+      const bearish = (clusters.bearish_group && clusters.bearish_group.tickers) || [];
+      const unclear = (clusters.unclear_group && clusters.unclear_group.tickers) || [];
+
+      let all = [
+        ...bullish.map(t => ({ ...t, group: 'bullish' })),
+        ...bearish.map(t => ({ ...t, group: 'bearish' })),
+        ...unclear.map(t => ({ ...t, group: 'unclear' }))
+      ];
+
+      // If clusters are empty but analyses exist, build ticker list from analyses directly
+      if (all.length === 0 && results.analyses && results.analyses.length > 0) {
+        all = results.analyses.map(a => ({
+          ticker: a.ticker,
+          direction: a.direction || 'N/A',
+          confidence: a.confidence || 0,
+          confluence: a.confluence || '',
+          thesis: a.thesis || '',
+          trade: a.trade || {},
+          key_strikes: a.key_strikes || [],
+          risks: a.risks || [],
+          term_structure: a.term_structure || {},
+          group: a.direction === 'CALL' ? 'bullish' : a.direction === 'PUT' ? 'bearish' : 'unclear'
+        }));
+      }
+
+      all.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
 
       document.getElementById('oi-ticker-count').textContent = `(${all.length})`;
 
       if (all.length === 0) {
-        container.innerHTML = '<div class="oi-empty">No results</div>';
+        container.innerHTML = '<div class="oi-empty">No results — run analysis first</div>';
         return;
       }
 
@@ -1902,16 +1961,22 @@
         const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
         const dirTag = t.direction === 'CALL' ? 'bullish' : t.direction === 'PUT' ? 'bearish' : '';
         const confTag = t.confluence === 'aligned' ? 'aligned' : t.confluence === 'divergent' ? 'divergent' : '';
+        const errorFlag = (t.status === 'error') ? '<span style="color:#ff4444;font-size:8px;margin-left:4px;">ERR</span>' : '';
 
         return `<div class="oi-ticker-item${oiSelectedTicker === t.ticker ? ' selected' : ''}" onclick="selectOITicker('${t.ticker}')">
           <span>
-            <span class="ticker-name">${t.ticker}</span>
+            <span class="ticker-name">${t.ticker}</span>${errorFlag}
             ${dirTag ? `<span class="ticker-tag ${dirTag}">${t.direction}</span>` : ''}
             ${confTag ? `<span class="ticker-tag ${confTag}">${confTag.toUpperCase()}</span>` : ''}
           </span>
           <span class="ticker-conf ${confClass}">${conf}%</span>
         </div>`;
       }).join('');
+
+      // Auto-select first ticker if none selected
+      if (!oiSelectedTicker && all.length > 0) {
+        selectOITicker(all[0].ticker);
+      }
     }
 
     function selectOITicker(ticker) {

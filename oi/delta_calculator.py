@@ -3,7 +3,10 @@ Delta Calculator - Calculates day-over-day changes in OI data
 Identifies patterns and unusual activity for LLM analysis
 """
 
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class DeltaCalculator:
@@ -63,6 +66,16 @@ class DeltaCalculator:
                 "put_weighted_avg"
             ),
         }
+
+        pcr_d = delta_data["put_call_ratio_delta"]
+        mp_s = delta_data["max_pain_shift"]
+        n_large = len(delta_data["large_oi_increases"])
+        n_unusual = len(delta_data["unusual_activity"])
+        logger.debug(f"{ticker}: P/C delta {pcr_d:+.2f}, max pain shift {mp_s:+.0f}, {n_large} large blocks, {n_unusual} unusual flags")
+        if delta_data["unusual_activity"]:
+            for flag in delta_data["unusual_activity"]:
+                logger.info(f"{ticker}: unusual - {flag}")
+
         return delta_data
 
     def _create_baseline_delta(self, current_data, ticker):

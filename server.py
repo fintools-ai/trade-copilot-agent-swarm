@@ -98,6 +98,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_exit_trade()
         elif self.path == "/run-oi-analysis":
             self.handle_run_oi_analysis()
+        elif self.path == "/cancel-oi-analysis":
+            self.handle_cancel_oi_analysis()
         else:
             self.send_error(404, "Not Found")
 
@@ -351,6 +353,19 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps({"status": "started"}).encode())
+
+    def handle_cancel_oi_analysis(self):
+        """Cancel a running OI analysis"""
+        from oi.redis_manager import request_cancel
+
+        request_cancel()
+        console.print("[bold yellow]OI Analysis cancel requested[/bold yellow]")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "cancelling"}).encode())
 
     def handle_sse(self):
         """Handle Server-Sent Events connection with Redis pub/sub"""

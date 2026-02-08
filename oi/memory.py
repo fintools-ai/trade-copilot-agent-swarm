@@ -8,10 +8,14 @@ Uses two clients:
 """
 
 import json
+import time
+import logging
 import boto3
 from datetime import datetime
 from bedrock_agentcore.memory import MemoryClient
 from config.settings import AWS_REGION
+
+logger = logging.getLogger(__name__)
 
 # Memory store name — created once via setup_memory()
 MEMORY_NAME = "oi-analysis"
@@ -54,7 +58,7 @@ def _get_memory_id():
                 _memory_id = mem["id"]
                 return _memory_id
     except Exception as e:
-        print(f"Bedrock Memory list failed: {e}")
+        logger.warning(f"Bedrock Memory list failed: {e}")
 
     # Not found — create it
     _memory_id = setup_memory()
@@ -84,7 +88,7 @@ def setup_memory():
     )
 
     memory_id = result["memoryId"]
-    print(f"Created Bedrock Memory store: {memory_id}")
+    logger.info(f"Created Bedrock Memory store: {memory_id}")
     return memory_id
 
 
@@ -129,6 +133,7 @@ Market Regime: {regime} | Fear: {fear}
 Risks: {', '.join(analysis.get('risks', []))}"""
 
     try:
+        t0 = time.time()
         client.create_event(
             memory_id=memory_id,
             actor_id=f"/ticker/{ticker}",
@@ -141,8 +146,9 @@ Risks: {', '.join(analysis.get('risks', []))}"""
                 }
             }]
         )
+        logger.info(f"{ticker}: stored episode ({analysis.get('direction', '?')} {analysis.get('confidence', '?')}%) ({time.time()-t0:.1f}s)")
     except Exception as e:
-        print(f"Bedrock Memory store_episode failed for {ticker}: {e}")
+        logger.warning(f"{ticker}: store_episode failed - {e}")
 
 
 def recall(ticker, query=None):
@@ -159,7 +165,7 @@ def recall(ticker, query=None):
     facts = []
 
     try:
-        # Get semantic facts — namespace uses actorId substitution
+        t0 = time.time()
         result = client.retrieve_memory_records(
             memory_id=memory_id,
             namespace=f"/facts//ticker/{ticker}/",
@@ -174,7 +180,13 @@ def recall(ticker, query=None):
             if content:
                 facts.append(content)
 
+        dur = time.time() - t0
+        if facts:
+            logger.info(f"{ticker}: recalled {len(facts)} facts ({dur:.1f}s)")
+        else:
+            logger.info(f"{ticker}: no facts found ({dur:.1f}s)")
+
     except Exception as e:
-        print(f"Bedrock Memory recall failed for {ticker}: {e}")
+        logger.warning(f"{ticker}: recall failed - {e}")
 
     return facts

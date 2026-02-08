@@ -87,12 +87,28 @@ def get_status():
     return json.loads(data) if data else {"status": "idle", "message": "", "progress": 0}
 
 
-def publish_progress(message, progress=0):
+def publish_progress(message, progress=0, level="info"):
     """Publish progress event to SSE channel"""
     event = {
         "type": "OI_PROGRESS",
         "message": message,
         "progress": progress,
+        "level": level,
         "timestamp": datetime.now().strftime("%H:%M:%S")
     }
     _redis().publish("oi:events", json.dumps(event))
+
+
+def request_cancel():
+    """Set cancel flag — checked by analyzer between phases/tickers"""
+    _redis().set("oi:cancel", "1", ex=300)
+
+
+def clear_cancel():
+    """Clear cancel flag (called at start of new run)"""
+    _redis().delete("oi:cancel")
+
+
+def is_cancelled():
+    """Check if cancellation was requested"""
+    return _redis().get("oi:cancel") == "1"
