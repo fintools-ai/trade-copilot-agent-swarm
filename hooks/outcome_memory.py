@@ -25,7 +25,7 @@ from config.settings import AWS_REGION
 
 logger = logging.getLogger(__name__)
 
-MEMORY_NAME = "zero_dte_outcomes"
+MEMORY_NAME = "zero_dte_outcomes_v2"
 EVENT_EXPIRY_DAYS = 30
 
 _memory_client = None
@@ -129,7 +129,12 @@ def _create_memory():
             {"semanticMemoryStrategy": {
                 "name": "trade_outcomes",
                 "description": "0DTE trade outcomes: win/loss, flow conditions, exit reason",
-                "namespaces": ["/outcomes/{actorId}/"],
+                "namespaces": ["/facts/{actorId}/"],
+            }},
+            {"summaryMemoryStrategy": {
+                "name": "trade_summaries",
+                "description": "Rolling summaries of 0DTE trade outcomes per session",
+                "namespaces": ["/summaries/{actorId}/{sessionId}/"],
             }},
         ],
         event_expiry_days=EVENT_EXPIRY_DAYS,
@@ -142,7 +147,7 @@ def _create_memory():
 
 # ── Entry Capture (Redis, temporary) ──────────────────────────────────
 
-def capture_entry(signal, flow_text):
+def capture_entry(signal, flow_text, reasoning=""):
     """Store entry snapshot in Redis — read back on EXIT to compute outcome."""
     from redis_stream import get_stream
 
@@ -154,12 +159,22 @@ def capture_entry(signal, flow_text):
         "stop": signal.get("stop"),
         "target": signal.get("target"),
         "entry_time": now_pt.strftime("%H:%M"),
-        "flow": (flow_text or "")[:300],
+        "flow": (flow_text or "")[:800],
+        "reasoning": (reasoning or "")[:1000],
         "period": "morning" if now_pt.hour < 10 else "midday" if now_pt.hour < 12 else "afternoon",
     }
 
     get_stream().redis.setex("zero_dte:entry_snapshot", 3600, json.dumps(snapshot))
     logger.info(f"outcome: captured entry {signal.get('action')} ${signal.get('entry')} {signal.get('conviction')}")
+    print(f"\n{'='*60}")
+    print(f"OUTCOME MEMORY — ENTRY CAPTURED")
+    print(f"{'='*60}")
+    print(f"Action: {snapshot['action']} | Conviction: {snapshot['conviction']}")
+    print(f"Entry: ${snapshot['entry_price']} | Stop: ${snapshot.get('stop')} | Target: ${snapshot.get('target')}")
+    print(f"Time: {snapshot['entry_time']} ({snapshot['period']})")
+    print(f"Flow: {(snapshot['flow'] or 'N/A')[:150]}...")
+    print(f"Reasoning: {(snapshot['reasoning'] or 'N/A')[:150]}...")
+    print(f"{'='*60}\n")
 
 
 # ── Outcome Recording (Bedrock Memory, async) ────────────────────────
@@ -192,19 +207,21 @@ def record_outcome(exit_signal):
         else:
             result = "WIN" if exit_price < entry_price else "LOSS"
 
-        diff = abs(exit_price - entry_price)
-        direction = "+" if result == "WIN" else "-"
-
         now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
         exit_time = now_pt.strftime("%H:%M")
         today = now_pt.strftime("%Y-%m-%d")
 
-        # Compact episode format
+        # Episode: WHY was this decided + WHAT actually happened
         content = (
-            f"{result}: {action} ${entry_price}→${exit_price} ({direction}${diff:.2f}) "
-            f"| {entry.get('entry_time')}→{exit_time} | {entry.get('conviction')}\n"
-            f"flow: {entry.get('flow', 'N/A')[:200]}\n"
-            f"period: {entry.get('period')}\n"
+            f"OUTCOME: {result} — decided {action} but price went {'with' if result == 'WIN' else 'against'} the trade\n"
+            f"Decision: {action} with {entry.get('conviction')} conviction at {entry.get('entry_time')} ({entry.get('period')})\n"
+            f"Entry: ${entry_price} → Exit: ${exit_price} at {exit_time} on {today}\n"
+            f"\n"
+            f"COORDINATOR REASONING AT ENTRY:\n"
+            f"{entry.get('reasoning', 'N/A')}\n"
+            f"\n"
+            f"ORDER FLOW AT ENTRY:\n"
+            f"{entry.get('flow', 'N/A')}\n"
         )
 
         memory_id = _get_memory_id()
@@ -223,7 +240,21 @@ def record_outcome(exit_signal):
         # Clear entry snapshot
         get_stream().redis.delete("zero_dte:entry_snapshot")
 
-        logger.info(f"outcome: stored {result} {action} ${entry_price}→${exit_price} ({time.time()-t0:.1f}s)")
+        dur = time.time() - t0
+        logger.info(f"outcome: stored {result} {action} ${entry_price}→${exit_price} ({dur:.1f}s)")
+        print(f"\n{'='*60}")
+        print(f"OUTCOME MEMORY — EPISODE STORED")
+        print(f"{'='*60}")
+        print(f"Result: {result}")
+        print(f"Trade: {action} ${entry_price} → ${exit_price}")
+        print(f"Time: {entry.get('entry_time')} → {exit_time} ({entry.get('period')})")
+        print(f"Conviction: {entry.get('conviction')}")
+        print(f"Bedrock write: {dur:.1f}s")
+        print(f"\nStored episode:")
+        print(f"---")
+        print(content[:500])
+        print(f"---")
+        print(f"{'='*60}\n")
 
     except Exception as e:
         logger.warning(f"outcome: record_outcome failed - {e}")
@@ -241,14 +272,14 @@ def recall_outcomes(flow_text, top_k=5):
         logger.warning("outcome: no memory ID, skipping recall")
         return []
 
-    query = f"trade outcomes when flow was {flow_text[:150]}"
+    query = f"trade outcomes when flow was {flow_text[:200]}"
     facts = []
 
     try:
         t0 = time.time()
         records = _get_memory_client().retrieve_memories(
             memory_id=memory_id,
-            namespace="/outcomes/trader/SPY/",
+            namespace="/summaries/trader/SPY/",
             query=query,
             top_k=top_k,
         )
@@ -267,8 +298,18 @@ def recall_outcomes(flow_text, top_k=5):
         dur = time.time() - t0
         if facts:
             logger.info(f"outcome: recalled {len(facts)} past outcomes ({dur:.1f}s)")
+            print(f"\n{'='*60}")
+            print(f" OUTCOME MEMORY — RECALLED {len(facts)} PAST OUTCOMES")
+            print(f"{'='*60}")
+            print(f"Query: {query[:100]}...")
+            print(f"Bedrock read: {dur:.1f}s")
+            for i, fact in enumerate(facts, 1):
+                print(f"\n--- Outcome {i} ---")
+                print(fact[:300])
+            print(f"\n{'='*60}\n")
         else:
             logger.info(f"outcome: no past outcomes found ({dur:.1f}s)")
+            print(f"\n OUTCOME MEMORY — no past outcomes found ({dur:.1f}s)\n")
 
     except Exception as e:
         logger.warning(f"outcome: recall failed - {e}")
@@ -287,7 +328,7 @@ def _get_latest_flow_text():
         for event_json in events:
             event = json.loads(event_json)
             if event.get("type") == "FLOW_RESPONSE":
-                return event.get("content", "")[:300]
+                return event.get("content", "")[:800]
     except Exception:
         pass
     return ""
@@ -315,18 +356,18 @@ def before_swarm(query_with_context, has_position):
     return query_with_context
 
 
-def after_signal(signal):
+def after_signal(signal, response_text=""):
     """
-    Post-signal hook: capture ENTRY snapshot, record EXIT outcome (async).
+    Post-signal hook: capture ENTRY snapshot (with reasoning), record EXIT outcome (async).
     """
     if not signal:
         return
 
-    # On ENTRY — capture snapshot to Redis
+    # On ENTRY — capture snapshot + coordinator reasoning to Redis
     if signal.get("signal") == "ENTRY":
         try:
             flow_text = _get_latest_flow_text()
-            capture_entry(signal, flow_text or "")
+            capture_entry(signal, flow_text or "", reasoning=response_text)
         except Exception as e:
             logger.warning(f"outcome: entry capture failed - {e}")
 

@@ -300,7 +300,7 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     # Outcome memory: capture ENTRY, record EXIT
     try:
         from hooks.outcome_memory import after_signal
-        after_signal(signal)
+        after_signal(signal, response)
     except Exception as e:
         console.print(f"[dim]Outcome hook error: {e}[/dim]")
 
