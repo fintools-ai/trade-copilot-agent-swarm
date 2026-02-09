@@ -910,7 +910,7 @@
         <div class="oi-left">
           <div class="oi-panel-header">Tickers <span id="oi-ticker-count" style="color:#888;font-weight:normal;">--</span></div>
           <div class="oi-panel-body" id="oi-ticker-list">
-            <div class="oi-empty">Click "Run Analysis" to start</div>
+            <div class="oi-empty">Enter a ticker and click Analyze</div>
           </div>
         </div>
 
@@ -922,43 +922,31 @@
           </div>
         </div>
 
-        <!-- RIGHT: Market Overview -->
+        <!-- RIGHT: Controls + Log -->
         <div class="oi-right">
-          <div class="oi-panel-header">Overview</div>
+          <div class="oi-panel-header">Analyze</div>
           <div class="oi-panel-body" id="oi-overview">
-            <button class="oi-run-btn" id="oi-run-btn" onclick="runOIAnalysis()">Run Analysis</button>
+            <!-- Ticker Input -->
+            <div style="display:flex;gap:4px;margin-bottom:6px;">
+              <input type="text" id="oi-ticker-input" placeholder="Ticker (e.g. SPY)" style="flex:1;background:#111;border:1px solid #333;color:#fff;padding:6px 8px;font-family:monospace;font-size:11px;text-transform:uppercase;" onkeydown="if(event.key==='Enter')analyzeTickerOnDemand()">
+              <button class="oi-run-btn" id="oi-analyze-btn" onclick="analyzeTickerOnDemand()" style="padding:6px 12px;white-space:nowrap;">Analyze</button>
+            </div>
+            <!-- DTE Checkboxes -->
+            <div style="display:flex;gap:8px;margin-bottom:8px;font-size:10px;color:#888;">
+              <label style="cursor:pointer;"><input type="checkbox" class="oi-dte-checkbox" value="30" checked style="margin-right:2px;">30</label>
+              <label style="cursor:pointer;"><input type="checkbox" class="oi-dte-checkbox" value="50" style="margin-right:2px;">50</label>
+              <label style="cursor:pointer;"><input type="checkbox" class="oi-dte-checkbox" value="60" checked style="margin-right:2px;">60</label>
+              <label style="cursor:pointer;"><input type="checkbox" class="oi-dte-checkbox" value="90" checked style="margin-right:2px;">90</label>
+            </div>
+            <!-- Run All (secondary) -->
+            <button class="oi-run-btn" id="oi-run-btn" onclick="runOIAnalysis()" style="font-size:9px;padding:4px 8px;color:#666;border-color:#333;margin-bottom:8px;">Run All 18 Tickers</button>
+
             <div class="oi-progress-bar" id="oi-progress-bar"><div class="oi-progress-fill" id="oi-progress-fill"></div></div>
             <div class="oi-status-bar" id="oi-status">Ready</div>
 
             <div class="oi-section">
               <div class="oi-section-title">Live Log <span id="oi-log-clear" style="color:#555;cursor:pointer;float:right;font-weight:normal;" onclick="document.getElementById('oi-log').innerHTML=''">[clear]</span></div>
-              <div id="oi-log" style="max-height:180px;overflow-y:auto;font-size:9px;color:#888;background:#050505;padding:4px;border:1px solid #222;font-family:monospace;"></div>
-            </div>
-
-            <div class="oi-section">
-              <div class="oi-section-title">Signal Distribution</div>
-              <div class="oi-bias-summary" id="oi-bias-summary">
-                <div class="oi-bias-card"><div class="bias-count bullish" id="oi-bull-count">--</div><div class="bias-label">Bullish</div></div>
-                <div class="oi-bias-card"><div class="bias-count bearish" id="oi-bear-count">--</div><div class="bias-label">Bearish</div></div>
-                <div class="oi-bias-card"><div class="bias-count unclear" id="oi-unclear-count">--</div><div class="bias-label">Unclear</div></div>
-              </div>
-            </div>
-
-            <div class="oi-section">
-              <div class="oi-section-title">Market Context</div>
-              <div class="oi-context-card" id="oi-market-context">
-                <div class="oi-context-row"><span class="label">Regime</span><span class="value" id="oi-regime">--</span></div>
-                <div class="oi-context-row"><span class="label">Fear Level</span><span class="value" id="oi-fear">--</span></div>
-                <div class="oi-context-row"><span class="label">VIX P/C</span><span class="value" id="oi-vix-pcr">--</span></div>
-                <div class="oi-context-row"><span class="label">Vol Expectation</span><span class="value" id="oi-vol">--</span></div>
-              </div>
-            </div>
-
-            <div class="oi-section">
-              <div class="oi-section-title">High Conviction</div>
-              <div id="oi-high-conviction">
-                <div class="oi-empty">No results yet</div>
-              </div>
+              <div id="oi-log" style="max-height:300px;overflow-y:auto;font-size:9px;color:#888;background:#050505;padding:4px;border:1px solid #222;font-family:monospace;"></div>
             </div>
           </div>
         </div>
@@ -1829,24 +1817,31 @@
     }
 
     // ============ OI ANALYSIS ============
-    let oiData = null;
+    let oiData = {};  // {ticker: {analysis + analyzed_at + analysis_date}, ...}
     let oiSelectedTicker = null;
     let oiEventSource = null;
 
     async function loadOIData() {
       try {
         const [resultsRes, statusRes] = await Promise.all([
-          fetch('/oi-results'), fetch('/oi-status')
+          fetch('/oi-ondemand-results'), fetch('/oi-status')
         ]);
         const results = await resultsRes.json();
         const status = await statusRes.json();
 
-        updateOIStatus(status);
-
-        if (results && results.clusters) {
+        // Render existing on-demand results
+        if (results && Object.keys(results).length > 0) {
           oiData = results;
-          renderOITickers(results);
-          renderOIOverview(results);
+          renderOnDemandTickers(results);
+        }
+
+        // Refresh resilience: if analysis is running, reconnect SSE
+        if (status.status === 'running') {
+          updateOIStatus(status);
+          setAnalyzeButtonState('running', status.ticker);
+          connectOIStream();
+        } else {
+          updateOIStatus(status);
         }
       } catch (e) {
         console.error('Failed to load OI data:', e);
@@ -1856,29 +1851,9 @@
     function updateOIStatus(status) {
       const el = document.getElementById('oi-status');
       const bar = document.getElementById('oi-progress-fill');
-      const btn = document.getElementById('oi-run-btn');
 
       el.textContent = status.message || status.status || 'Ready';
       bar.style.width = (status.progress || 0) + '%';
-
-      if (status.status === 'running') {
-        btn.disabled = false;
-        btn.textContent = 'CANCEL';
-        btn.style.color = '#ff4444';
-        btn.style.borderColor = '#ff4444';
-        btn.onclick = cancelOIAnalysis;
-      } else if (status.status === 'cancelling') {
-        btn.disabled = true;
-        btn.textContent = 'Cancelling...';
-        btn.style.color = '#ffaa00';
-        btn.style.borderColor = '#ffaa00';
-      } else {
-        btn.disabled = false;
-        btn.textContent = 'Run Analysis';
-        btn.style.color = '#ff6600';
-        btn.style.borderColor = '#ff6600';
-        btn.onclick = runOIAnalysis;
-      }
 
       if (status.status === 'complete') {
         el.style.color = '#00ff00';
@@ -1889,10 +1864,103 @@
       }
     }
 
+    function setAnalyzeButtonState(state, ticker) {
+      const btn = document.getElementById('oi-analyze-btn');
+      const input = document.getElementById('oi-ticker-input');
+      const runAllBtn = document.getElementById('oi-run-btn');
+
+      if (state === 'running') {
+        btn.disabled = true;
+        btn.textContent = 'Analyzing...';
+        btn.style.color = '#ffaa00';
+        btn.style.borderColor = '#ffaa00';
+        input.disabled = true;
+        runAllBtn.disabled = true;
+        if (ticker) input.value = ticker;
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Analyze';
+        btn.style.color = '#ff6600';
+        btn.style.borderColor = '#ff6600';
+        input.disabled = false;
+        runAllBtn.disabled = false;
+        runAllBtn.textContent = 'Run All 18 Tickers';
+      }
+    }
+
+    async function analyzeTickerOnDemand() {
+      const input = document.getElementById('oi-ticker-input');
+      const ticker = input.value.trim().toUpperCase();
+      if (!ticker) return;
+
+      const dtes = [];
+      document.querySelectorAll('.oi-dte-checkbox:checked').forEach(cb => dtes.push(parseInt(cb.value)));
+      if (!dtes.length) {
+        updateOIStatus({ status: 'error', message: 'Select at least one DTE' });
+        return;
+      }
+
+      setAnalyzeButtonState('running', ticker);
+      document.getElementById('oi-log').innerHTML = '';
+
+      try {
+        const res = await fetch('/oi-analyze-ticker', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ ticker, dtes })
+        });
+        const data = await res.json();
+
+        if (res.status === 409) {
+          updateOIStatus({ status: 'running', message: data.error });
+          return;
+        }
+
+        connectOIStream();
+      } catch (e) {
+        setAnalyzeButtonState('idle');
+        updateOIStatus({ status: 'error', message: 'Failed to start: ' + e.message });
+      }
+    }
+
+    function connectOIStream() {
+      if (oiEventSource) oiEventSource.close();
+      oiEventSource = new EventSource('/oi-stream');
+
+      oiEventSource.onmessage = function(e) {
+        try {
+          const event = JSON.parse(e.data);
+          const st = event.progress >= 100 ? 'complete' :
+                     (event.message && event.message.includes('Cancel') ? 'cancelled' : 'running');
+          updateOIStatus({ status: st, message: event.message, progress: event.progress });
+
+          // Append to live log
+          const logEl = document.getElementById('oi-log');
+          if (logEl) {
+            const levelColors = { success: '#00ff00', warning: '#ffaa00', error: '#ff4444', info: '#888' };
+            const color = levelColors[event.level] || '#888';
+            logEl.innerHTML += `<div><span style="color:#555">${event.timestamp || ''}</span> <span style="color:${color}">${event.message || ''}</span></div>`;
+            logEl.scrollTop = logEl.scrollHeight;
+          }
+
+          if (event.progress >= 100 || st === 'cancelled') {
+            oiEventSource.close();
+            oiEventSource = null;
+            setAnalyzeButtonState('idle');
+            setTimeout(loadOIData, 1000);
+          }
+        } catch (err) {}
+      };
+
+      oiEventSource.onerror = function() {
+        oiEventSource.close();
+        oiEventSource = null;
+        setAnalyzeButtonState('idle');
+        setTimeout(loadOIData, 2000);
+      };
+    }
+
     async function cancelOIAnalysis() {
-      const btn = document.getElementById('oi-run-btn');
-      btn.disabled = true;
-      btn.textContent = 'Cancelling...';
       try {
         await fetch('/cancel-oi-analysis', { method: 'POST' });
       } catch (e) {
@@ -1904,6 +1972,8 @@
       const btn = document.getElementById('oi-run-btn');
       btn.disabled = true;
       btn.textContent = 'Starting...';
+      setAnalyzeButtonState('running');
+      document.getElementById('oi-log').innerHTML = '';
 
       try {
         const res = await fetch('/run-oi-analysis', { method: 'POST' });
@@ -1914,89 +1984,37 @@
           return;
         }
 
-        // Connect to SSE for progress
-        if (oiEventSource) oiEventSource.close();
-        oiEventSource = new EventSource('/oi-stream');
-        oiEventSource.onmessage = function(e) {
-          try {
-            const event = JSON.parse(e.data);
-            const st = event.progress >= 100 ? 'complete' : (event.message && event.message.includes('Cancel') ? 'cancelled' : 'running');
-            updateOIStatus({ status: st, message: event.message, progress: event.progress });
-
-            // Append to live log
-            const logEl = document.getElementById('oi-log');
-            if (logEl) {
-              const levelColors = { success: '#00ff00', warning: '#ffaa00', error: '#ff4444', info: '#888' };
-              const color = levelColors[event.level] || '#888';
-              logEl.innerHTML += `<div><span style="color:#555">${event.timestamp || ''}</span> <span style="color:${color}">${event.message || ''}</span></div>`;
-              logEl.scrollTop = logEl.scrollHeight;
-            }
-
-            if (event.progress >= 100 || st === 'cancelled') {
-              oiEventSource.close();
-              oiEventSource = null;
-              setTimeout(loadOIData, 1000);
-            }
-          } catch (err) {}
-        };
-        oiEventSource.onerror = function() {
-          oiEventSource.close();
-          oiEventSource = null;
-          setTimeout(loadOIData, 2000);
-        };
+        connectOIStream();
       } catch (e) {
-        btn.disabled = false;
-        btn.textContent = 'Run Analysis';
+        setAnalyzeButtonState('idle');
         updateOIStatus({ status: 'error', message: 'Failed to start: ' + e.message });
       }
     }
 
-    function renderOITickers(results) {
+    function renderOnDemandTickers(results) {
       const container = document.getElementById('oi-ticker-list');
-      const clusters = results.clusters || {};
 
-      // Combine all tickers from clusters + any errored analyses
-      const bullish = (clusters.bullish_group && clusters.bullish_group.tickers) || [];
-      const bearish = (clusters.bearish_group && clusters.bearish_group.tickers) || [];
-      const unclear = (clusters.unclear_group && clusters.unclear_group.tickers) || [];
+      // Convert dict to array and sort by analyzed_at descending (most recent first)
+      const tickers = Object.entries(results).map(([ticker, data]) => ({
+        ticker,
+        ...data
+      }));
+      tickers.sort((a, b) => (b.analyzed_at || '').localeCompare(a.analyzed_at || ''));
 
-      let all = [
-        ...bullish.map(t => ({ ...t, group: 'bullish' })),
-        ...bearish.map(t => ({ ...t, group: 'bearish' })),
-        ...unclear.map(t => ({ ...t, group: 'unclear' }))
-      ];
+      document.getElementById('oi-ticker-count').textContent = `(${tickers.length})`;
 
-      // If clusters are empty but analyses exist, build ticker list from analyses directly
-      if (all.length === 0 && results.analyses && results.analyses.length > 0) {
-        all = results.analyses.map(a => ({
-          ticker: a.ticker,
-          direction: a.direction || 'N/A',
-          confidence: a.confidence || 0,
-          confluence: a.confluence || '',
-          thesis: a.thesis || '',
-          trade: a.trade || {},
-          key_strikes: a.key_strikes || [],
-          risks: a.risks || [],
-          term_structure: a.term_structure || {},
-          group: a.direction === 'CALL' ? 'bullish' : a.direction === 'PUT' ? 'bearish' : 'unclear'
-        }));
-      }
-
-      all.sort((a, b) => (b.confidence || 0) - (a.confidence || 0));
-
-      document.getElementById('oi-ticker-count').textContent = `(${all.length})`;
-
-      if (all.length === 0) {
-        container.innerHTML = '<div class="oi-empty">No results — run analysis first</div>';
+      if (tickers.length === 0) {
+        container.innerHTML = '<div class="oi-empty">Enter a ticker and click Analyze</div>';
         return;
       }
 
-      container.innerHTML = all.map(t => {
+      container.innerHTML = tickers.map(t => {
         const conf = t.confidence || 0;
         const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
         const dirTag = t.direction === 'CALL' ? 'bullish' : t.direction === 'PUT' ? 'bearish' : '';
         const confTag = t.confluence === 'aligned' ? 'aligned' : t.confluence === 'divergent' ? 'divergent' : '';
         const errorFlag = (t.status === 'error') ? '<span style="color:#ff4444;font-size:8px;margin-left:4px;">ERR</span>' : '';
+        const timeStr = t.analyzed_at || '';
 
         return `<div class="oi-ticker-item${oiSelectedTicker === t.ticker ? ' selected' : ''}" onclick="selectOITicker('${t.ticker}')">
           <span>
@@ -2004,28 +2022,39 @@
             ${dirTag ? `<span class="ticker-tag ${dirTag}">${t.direction}</span>` : ''}
             ${confTag ? `<span class="ticker-tag ${confTag}">${confTag.toUpperCase()}</span>` : ''}
           </span>
-          <span class="ticker-conf ${confClass}">${conf}%</span>
+          <span style="display:flex;gap:6px;align-items:center;">
+            <span class="ticker-conf ${confClass}">${conf}%</span>
+            <span style="color:#555;font-size:8px;">${timeStr}</span>
+          </span>
         </div>`;
       }).join('');
 
       // Auto-select first ticker if none selected
-      if (!oiSelectedTicker && all.length > 0) {
-        selectOITicker(all[0].ticker);
+      if (!oiSelectedTicker && tickers.length > 0) {
+        selectOITicker(tickers[0].ticker);
       }
     }
 
     function selectOITicker(ticker) {
       oiSelectedTicker = ticker;
-      document.getElementById('oi-selected-ticker').textContent = ticker;
+
+      // Update header with ticker + date/time
+      const analysis = oiData[ticker];
+      let headerText = ticker;
+      if (analysis && analysis.analysis_date) {
+        const d = new Date(analysis.analysis_date);
+        const formatted = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        headerText = `${ticker} — ${formatted} ${analysis.analyzed_at || ''}`;
+      }
+      document.getElementById('oi-selected-ticker').textContent = headerText;
 
       // Highlight in list
       document.querySelectorAll('.oi-ticker-item').forEach(el => el.classList.remove('selected'));
-      const items = document.querySelectorAll('.oi-ticker-item');
-      items.forEach(el => { if (el.textContent.includes(ticker)) el.classList.add('selected'); });
+      document.querySelectorAll('.oi-ticker-item').forEach(el => {
+        if (el.textContent.includes(ticker)) el.classList.add('selected');
+      });
 
-      // Find analysis for this ticker
-      if (!oiData) return;
-      const analysis = oiData.analyses.find(a => a.ticker === ticker);
+      // Find analysis for this ticker from on-demand data
       if (!analysis || analysis.status === 'error') {
         document.getElementById('oi-detail').innerHTML = `<div class="oi-empty">No data for ${ticker}: ${analysis?.error || 'unknown'}</div>`;
         return;
@@ -2192,51 +2221,6 @@
       </div>`;
     }
 
-    function renderOIOverview(results) {
-      const summary = results.summary || {};
-      const clusters = results.clusters || {};
-      const ctx = results.market_context || {};
-
-      // Bias counts
-      document.getElementById('oi-bull-count').textContent = summary.bullish || 0;
-      document.getElementById('oi-bear-count').textContent = summary.bearish || 0;
-      document.getElementById('oi-unclear-count').textContent = summary.unclear || 0;
-
-      // Market context
-      document.getElementById('oi-regime').textContent = ctx.regime || '--';
-      document.getElementById('oi-fear').textContent = ctx.fear_level || '--';
-      document.getElementById('oi-vix-pcr').textContent = ctx.vix_put_call_ratio ? ctx.vix_put_call_ratio.toFixed(2) : '--';
-      document.getElementById('oi-vol').textContent = ctx.volatility_expectation || '--';
-
-      // Style regime
-      const regimeEl = document.getElementById('oi-regime');
-      if (ctx.regime === 'bullish') regimeEl.style.color = '#00ff00';
-      else if (ctx.regime === 'bearish') regimeEl.style.color = '#ff4444';
-      else regimeEl.style.color = '#ccc';
-
-      // High conviction picks
-      const hcContainer = document.getElementById('oi-high-conviction');
-      const hc = clusters.high_conviction || [];
-      if (hc.length === 0) {
-        hcContainer.innerHTML = '<div class="oi-empty">No high conviction trades</div>';
-      } else {
-        hcContainer.innerHTML = hc.map(t => `<div class="oi-conviction-item" onclick="selectOITicker('${t.ticker}')">
-          <span class="cv-ticker">${t.ticker}</span>
-          <span class="cv-dir ${t.direction || ''}">${t.direction || '--'}</span>
-          <span class="cv-conf">${t.confidence || 0}%</span>
-        </div>`).join('');
-      }
-
-      // Update status
-      if (summary.timestamp) {
-        const ts = new Date(summary.timestamp);
-        updateOIStatus({
-          status: 'complete',
-          message: `Last run: ${ts.toLocaleTimeString()} (${summary.duration || '--'})`,
-          progress: 100
-        });
-      }
-    }
 
     // Init
     async function init() {

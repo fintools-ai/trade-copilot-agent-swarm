@@ -70,7 +70,31 @@ def get_full_results():
     return json.loads(data) if data else None
 
 
-def set_status(status, message="", progress=0):
+def store_ondemand_result(ticker, analysis):
+    """Add/update a single ticker in today's on-demand results"""
+    today = datetime.now().strftime('%Y-%m-%d')
+    key = f"oi:ondemand:{today}"
+    r = _redis()
+
+    existing = r.get(key)
+    results = json.loads(existing) if existing else {}
+    results[ticker] = {
+        **analysis,
+        "analyzed_at": datetime.now().strftime("%H:%M:%S"),
+        "analysis_date": today,
+    }
+    r.setex(key, 86400, json.dumps(results))
+
+
+def get_ondemand_results():
+    """Get all on-demand results for today only"""
+    today = datetime.now().strftime('%Y-%m-%d')
+    key = f"oi:ondemand:{today}"
+    data = _redis().get(key)
+    return json.loads(data) if data else {}
+
+
+def set_status(status, message="", progress=0, ticker=None):
     """Set analysis status: oi:status"""
     status_data = {
         "status": status,
@@ -78,6 +102,8 @@ def set_status(status, message="", progress=0):
         "progress": progress,
         "timestamp": datetime.now().isoformat()
     }
+    if ticker:
+        status_data["ticker"] = ticker
     _redis().setex("oi:status", 3600, json.dumps(status_data))
 
 

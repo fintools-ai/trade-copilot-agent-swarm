@@ -74,6 +74,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_token_stats()
         elif self.path == "/oi-results":
             self.handle_oi_results()
+        elif self.path == "/oi-ondemand-results":
+            self.handle_oi_ondemand_results()
         elif self.path == "/oi-status":
             self.handle_oi_status()
         elif self.path == "/oi-stream":
@@ -98,6 +100,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_exit_trade()
         elif self.path == "/run-oi-analysis":
             self.handle_run_oi_analysis()
+        elif self.path == "/oi-analyze-ticker":
+            self.handle_oi_analyze_ticker()
         elif self.path == "/cancel-oi-analysis":
             self.handle_cancel_oi_analysis()
         else:
@@ -289,6 +293,17 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         results = get_full_results()
         self.wfile.write(json.dumps(results or {}).encode())
 
+    def handle_oi_ondemand_results(self):
+        """Return all on-demand results for today"""
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        from oi.redis_manager import get_ondemand_results
+        results = get_ondemand_results()
+        self.wfile.write(json.dumps(results).encode())
+
     def handle_oi_status(self):
         """Return current OI analysis status"""
         self.send_response(200)
@@ -353,6 +368,48 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps({"status": "started"}).encode())
+
+    def handle_oi_analyze_ticker(self):
+        """Analyze a single ticker on-demand"""
+        from oi.redis_manager import get_status
+
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = json.loads(self.rfile.read(content_length).decode())
+        ticker = body.get("ticker", "").upper().strip()
+        dtes = body.get("dtes", [30, 60, 90])
+
+        if not ticker:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "ticker is required"}).encode())
+            return
+
+        # Check if already running
+        status = get_status()
+        if status.get("status") == "running":
+            self.send_response(409)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
+            return
+
+        def run():
+            from oi.analyzer import OIAnalyzer
+            analyzer = OIAnalyzer()
+            asyncio.run(analyzer.analyze_single_ticker(ticker, dtes))
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes})[/bold cyan]")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "started", "ticker": ticker, "dtes": dtes}).encode())
 
     def handle_cancel_oi_analysis(self):
         """Cancel a running OI analysis"""

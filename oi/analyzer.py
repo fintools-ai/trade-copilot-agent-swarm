@@ -13,6 +13,7 @@ from oi.collector import OIDataCollector
 from oi.redis_manager import (
     store_oi_data, get_previous_oi_data,
     store_delta_data, store_analysis_result, store_full_results,
+    store_ondemand_result,
     set_status, publish_progress, clear_cancel, is_cancelled
 )
 from oi.delta_calculator import DeltaCalculator
@@ -249,6 +250,95 @@ class OIAnalyzer:
             publish_progress(f"Error: {error_msg}", 0, level="error")
             logger.error(f"OI Analysis failed: {error_msg}", exc_info=True)
             return {"status": "error", "error": error_msg}
+
+    async def analyze_single_ticker(self, ticker, dtes):
+        """Analyze a single ticker on-demand with specified DTEs"""
+        start_time = time.time()
+        clear_cancel()
+        set_status("running", f"Analyzing {ticker}...", 5, ticker=ticker)
+        publish_progress(f"{ticker}: starting analysis...", 5)
+        logger.info(f"=== On-demand analysis: {ticker} DTEs={dtes} ===")
+
+        try:
+            # 1. Collect OI + market data
+            publish_progress(f"{ticker}: collecting OI data...", 10)
+            ticker_data = {}
+            for i, dte in enumerate(dtes):
+                pct = 10 + int((i / len(dtes)) * 15)
+                publish_progress(f"{ticker}: collecting {dte} DTE...", pct)
+                result = await self.collector.collect_ticker_data(ticker, dte)
+                if result["status"] == "success":
+                    ticker_data[str(dte)] = {
+                        "oi_data": result["data"].get("oi_data"),
+                        "market_data": result["data"].get("market_data"),
+                    }
+
+            if not ticker_data:
+                msg = f"{ticker}: no OI data collected"
+                set_status("error", msg, 0)
+                publish_progress(msg, 0, level="error")
+                return {"ticker": ticker, "status": "error", "error": msg}
+
+            # 2. Market context
+            publish_progress(f"{ticker}: fetching market context...", 30)
+            market_context = await self.market_context_provider.get_market_context()
+
+            # 3. Deltas
+            publish_progress(f"{ticker}: calculating deltas...", 40)
+            today = datetime.now().strftime('%Y-%m-%d')
+            processed = {}
+            for dte_str, data in ticker_data.items():
+                oi_data = data.get("oi_data")
+                dte_key = f"{dte_str}DTE"
+                if oi_data:
+                    store_oi_data(ticker, dte_key, today, oi_data)
+                    previous = get_previous_oi_data(ticker, dte_key, days_back=1)
+                    delta = self.delta_calculator.calculate_deltas(
+                        oi_data, previous, f"{ticker}:{dte_key}"
+                    )
+                    store_delta_data(ticker, dte_key, today, delta)
+                else:
+                    delta = {"ticker": ticker, "is_baseline": True}
+                processed[dte_str] = {
+                    "oi_data": oi_data,
+                    "delta": delta,
+                    "market_data": data.get("market_data"),
+                }
+
+            # 4. LLM per-DTE + synthesis
+            publish_progress(f"{ticker}: running LLM analysis...", 55)
+            historical_context = recall(ticker)
+            analysis = await self.llm_analyzer.analyze_ticker_full(
+                ticker, processed, market_context,
+                historical_context if historical_context else None
+            )
+
+            # 5. Store
+            store_analysis_result(ticker, today, analysis)
+            store_episode(ticker, analysis, market_context)
+            store_ondemand_result(ticker, analysis)
+
+            total_dur = time.time() - start_time
+            n_dtes = len(analysis.get("dte_analyses", []))
+
+            if analysis.get("status") == "error":
+                msg = f"{ticker}: ERROR - {analysis.get('error', '?')} ({total_dur:.1f}s)"
+                set_status("error", msg, 0)
+                publish_progress(msg, 100, level="error")
+            else:
+                msg = f"{ticker}: {analysis.get('direction', '?')} {analysis.get('confidence', '?')}% {analysis.get('confluence', '?')} [{n_dtes} DTEs] ({total_dur:.1f}s)"
+                set_status("complete", msg, 100, ticker=ticker)
+                publish_progress(msg, 100, level="success")
+
+            logger.info(f"=== {msg} ===")
+            return analysis
+
+        except Exception as e:
+            error_msg = str(e)
+            set_status("error", error_msg, 0)
+            publish_progress(f"{ticker}: {error_msg}", 0, level="error")
+            logger.error(f"{ticker} on-demand failed: {error_msg}", exc_info=True)
+            return {"ticker": ticker, "status": "error", "error": error_msg}
 
     def _collection_progress(self, message, completed, total):
         """Callback for collection progress"""
