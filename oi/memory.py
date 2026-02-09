@@ -196,7 +196,7 @@ def store_episode(ticker, analysis, market_context=None):
         t0 = time.time()
         client.create_event(
             memory_id=memory_id,
-            actor_id=f"/ticker/{ticker}",
+            actor_id=f"ticker/{ticker}",
             session_id=f"analysis-{today}",
             messages=[(content, "ASSISTANT")],
         )
@@ -226,7 +226,7 @@ def recall(ticker, query=None):
         # MemoryClient.retrieve_memories: returns List[Dict]
         records = client.retrieve_memories(
             memory_id=memory_id,
-            namespace=f"/facts//ticker/{ticker}/",
+            namespace=f"/facts/ticker/{ticker}/",
             query=query,
             top_k=5,
         )
