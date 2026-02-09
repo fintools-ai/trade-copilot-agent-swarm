@@ -233,6 +233,41 @@
     .oi-dte-card .dte-bias.neutral { color: #888; }
     .oi-dte-card .dte-strike { font-size: 9px; color: #ff9900; margin-top: 2px; }
 
+    /* Per-DTE expanded analysis cards */
+    .oi-dte-card-expanded {
+      flex: 1; padding: 8px; background: #0a0a0a; border: 1px solid #333;
+      text-align: left; min-width: 0;
+    }
+    .oi-dte-card-expanded .dte-label { font-size: 9px; color: #888; text-transform: uppercase; font-weight: bold; }
+    .oi-dte-card-expanded .dte-bias { font-size: 11px; font-weight: bold; margin-top: 2px; }
+    .oi-dte-card-expanded .dte-bias.bullish { color: #00ff00; }
+    .oi-dte-card-expanded .dte-bias.bearish { color: #ff4444; }
+    .oi-dte-card-expanded .dte-bias.neutral { color: #888; }
+    .oi-dte-card-expanded .dte-conf { font-size: 10px; margin-top: 2px; }
+    .oi-dte-card-expanded .dte-conf.high { color: #00ff00; }
+    .oi-dte-card-expanded .dte-conf.med { color: #ffcc00; }
+    .oi-dte-card-expanded .dte-conf.low { color: #888; }
+    .oi-dte-card-expanded .dte-strike { font-size: 9px; color: #ff9900; margin-top: 2px; }
+    .oi-dte-card-expanded .dte-pcr { font-size: 8px; color: #888; margin-top: 2px; }
+    .oi-dte-card-expanded .dte-flow { font-size: 8px; color: #ff9900; margin-top: 3px; font-style: italic; }
+    .oi-dte-card-expanded .dte-thesis {
+      font-size: 9px; color: #aaa; margin-top: 4px; line-height: 1.4;
+      max-height: 80px; overflow-y: auto; border-top: 1px solid #222; padding-top: 4px;
+    }
+
+    /* Synthesis header */
+    .oi-synthesis-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; background: #0a0a0a; border: 1px solid #333; margin-bottom: 8px;
+    }
+    .synth-direction { font-size: 16px; font-weight: bold; }
+    .synth-direction.CALL { color: #00ff00; }
+    .synth-direction.PUT { color: #ff4444; }
+    .synth-conf { font-size: 14px; color: #ff9900; font-weight: bold; }
+    .synth-confluence { font-size: 9px; padding: 2px 8px; border-radius: 2px; text-transform: uppercase; }
+    .synth-confluence.aligned { background: #003300; color: #00ff00; border: 1px solid #005500; }
+    .synth-confluence.divergent { background: #332200; color: #ffaa00; border: 1px solid #554400; }
+
     .oi-section { margin-bottom: 8px; }
     .oi-section-title {
       font-size: 10px; font-weight: bold; color: #ff9900; text-transform: uppercase;
@@ -2002,36 +2037,57 @@
     function renderOIDetail(analysis) {
       const container = document.getElementById('oi-detail');
       const trade = analysis.trade || {};
-      const term = analysis.term_structure || {};
       const keyStrikes = analysis.key_strikes || [];
-      const risks = analysis.risks || [];
-
-      // Term structure strip
-      const shortTerm = term.short_term || {};
-      const longTerm = term.long_term || {};
+      const riskMgmt = analysis.risk_management || {};
+      const risks = riskMgmt.primary_risks || analysis.risks || [];
+      const dteAnalyses = analysis.dte_analyses || [];
+      const dq = analysis.data_quality || {};
 
       let html = '';
 
-      // Term Structure
-      html += '<div class="oi-section"><div class="oi-section-title">Term Structure</div>';
-      html += '<div class="oi-term-strip">';
-      html += renderDteCard('Short Term', shortTerm);
-      html += renderDteCard('Long Term', longTerm);
-      html += '</div></div>';
+      // Synthesis header bar with pattern type and data quality
+      html += `<div class="oi-synthesis-header">
+        <span class="synth-direction ${analysis.direction || ''}">${analysis.direction || '--'}</span>
+        <span class="synth-conf">${analysis.confidence || '--'}%</span>
+        <span class="synth-confluence ${analysis.confluence || ''}">${(analysis.confluence || '--').toUpperCase()}</span>
+        ${analysis.pattern_type ? `<span style="font-size:8px;color:#888;padding:2px 6px;background:#111;border:1px solid #333;">${analysis.pattern_type.replace(/_/g,' ').toUpperCase()}</span>` : ''}
+        ${dq.overall_score ? `<span style="font-size:9px;color:${dq.overall_score === 'A' ? '#00ff00' : dq.overall_score === 'B' ? '#ffcc00' : '#ff6666'};margin-left:auto;">DATA: ${dq.overall_score}</span>` : ''}
+      </div>`;
 
-      // Thesis
+      // Smart Money Summary (if available)
+      if (analysis.smart_money_summary) {
+        html += `<div style="padding:4px 8px;background:#0a0a0a;border:1px solid #222;margin-bottom:6px;font-size:10px;color:#ff9900;font-style:italic;">${analysis.smart_money_summary}</div>`;
+      }
+
+      // Synthesis Thesis
       if (analysis.thesis) {
-        html += '<div class="oi-section"><div class="oi-section-title">Institutional Thesis</div>';
+        html += '<div class="oi-section"><div class="oi-section-title">Synthesis Thesis</div>';
         html += `<div class="oi-thesis">${analysis.thesis}</div></div>`;
       }
 
-      // Key Strikes
+      // Per-DTE Analysis Strip
+      html += renderDteAnalysisStrip(dteAnalyses);
+
+      // Fallback: old term structure if no per-DTE data
+      if (dteAnalyses.length === 0) {
+        const term = analysis.term_structure || {};
+        const shortTerm = term.short_term || {};
+        const longTerm = term.long_term || {};
+        html += '<div class="oi-section"><div class="oi-section-title">Term Structure</div>';
+        html += '<div class="oi-term-strip">';
+        html += renderDteCard('Short Term', shortTerm);
+        html += renderDteCard('Long Term', longTerm);
+        html += '</div></div>';
+      }
+
+      // Key Strikes (with interpretation column)
       if (keyStrikes.length > 0) {
+        const hasInterp = keyStrikes.some(s => s.interpretation);
         html += '<div class="oi-section"><div class="oi-section-title">Key Strikes</div>';
-        html += '<table class="oi-strikes-table"><thead><tr><th>Strike</th><th>Type</th><th>OI</th><th>5d Change</th></tr></thead><tbody>';
+        html += `<table class="oi-strikes-table"><thead><tr><th>Strike</th><th>Type</th><th>OI</th><th>5d Change</th>${hasInterp ? '<th>Interpretation</th>' : ''}</tr></thead><tbody>`;
         keyStrikes.forEach(s => {
           const typeClass = 'type-' + (s.type || '').replace(' ', '_');
-          html += `<tr><td>$${s.strike}</td><td class="${typeClass}">${s.type || '--'}</td><td>${(s.oi || 0).toLocaleString()}</td><td>${s.change_5d || 'N/A'}</td></tr>`;
+          html += `<tr><td>$${s.strike}</td><td class="${typeClass}">${s.type || '--'}</td><td>${(s.oi || 0).toLocaleString()}</td><td>${s.change_5d || 'N/A'}</td>${hasInterp ? `<td style="color:#aaa;font-size:9px;">${s.interpretation || ''}</td>` : ''}</tr>`;
         });
         html += '</tbody></table></div>';
       }
@@ -2047,18 +2103,83 @@
       html += `<div class="oi-trade-row"><span class="label">R/R</span><span class="value">${trade.risk_reward || '--'}</span></div>`;
       html += `<div class="oi-trade-row"><span class="label">Expiry</span><span class="value">${trade.expiry_dte || '--'} DTE</span></div>`;
       html += `<div class="oi-trade-row"><span class="label">Confidence</span><span class="value" style="color:#ff9900;">${analysis.confidence || '--'}%</span></div>`;
+      html += `<div class="oi-trade-row"><span class="label">Win Prob</span><span class="value" style="color:#ff9900;">${analysis.success_probability || '--'}%</span></div>`;
       html += `<div class="oi-trade-row"><span class="label">Confluence</span><span class="value">${analysis.confluence || '--'}</span></div>`;
+      // Entry triggers
+      const triggers = trade.entry_triggers || [];
+      if (triggers.length > 0) {
+        html += `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #222;">`;
+        html += `<div style="font-size:8px;color:#888;text-transform:uppercase;margin-bottom:2px;">Entry Triggers</div>`;
+        triggers.forEach(t => { html += `<div style="font-size:9px;color:#aaa;padding:1px 0;">• ${t}</div>`; });
+        html += '</div>';
+      }
+      // Exit strategy
+      if (trade.exit_strategy) {
+        html += `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #222;">`;
+        html += `<div style="font-size:8px;color:#888;text-transform:uppercase;margin-bottom:2px;">Exit Strategy</div>`;
+        html += `<div style="font-size:9px;color:#aaa;">${trade.exit_strategy}</div></div>`;
+      }
       html += '</div></div>';
 
-      // Risks
-      if (risks.length > 0) {
-        html += '<div class="oi-section"><div class="oi-section-title">Risks</div>';
-        html += '<ul class="oi-risk-list">';
-        risks.forEach(r => { html += `<li>${r}</li>`; });
-        html += '</ul></div>';
+      // Risk Management
+      if (risks.length > 0 || riskMgmt.hedge_strategy) {
+        html += '<div class="oi-section"><div class="oi-section-title">Risk Management</div>';
+        if (risks.length > 0) {
+          html += '<ul class="oi-risk-list">';
+          risks.forEach(r => { html += `<li>${r}</li>`; });
+          html += '</ul>';
+        }
+        if (riskMgmt.hedge_strategy) {
+          html += `<div style="font-size:9px;color:#aaa;padding:4px 6px;"><span style="color:#888;">Hedge:</span> ${riskMgmt.hedge_strategy}</div>`;
+        }
+        if (riskMgmt.volatility_considerations) {
+          html += `<div style="font-size:9px;color:#aaa;padding:2px 6px;"><span style="color:#888;">IV:</span> ${riskMgmt.volatility_considerations}</div>`;
+        }
+        if (riskMgmt.position_adjustments) {
+          html += `<div style="font-size:9px;color:#aaa;padding:2px 6px;"><span style="color:#888;">Adjust:</span> ${riskMgmt.position_adjustments}</div>`;
+        }
+        html += '</div>';
       }
 
       container.innerHTML = html;
+    }
+
+    function renderDteAnalysisStrip(dteAnalyses) {
+      if (!dteAnalyses || dteAnalyses.length === 0) return '';
+
+      let html = '<div class="oi-section"><div class="oi-section-title">Per-DTE Analysis</div>';
+      html += '<div class="oi-term-strip">';
+
+      const sorted = [...dteAnalyses].sort((a, b) => (a.dte || 0) - (b.dte || 0));
+
+      sorted.forEach(da => {
+        const bias = (da.bias || 'neutral').toLowerCase();
+        const conf = da.confidence || 0;
+        const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
+        const smRead = da.smart_money_read || '';
+        const smColor = smRead.includes('BULLISH') ? '#00ff00' : smRead.includes('BEARISH') ? '#ff4444' : '#888';
+        const gammaRisk = da.gamma_risk || '';
+        const gammaColor = gammaRisk.includes('squeeze_up') ? '#00ff00' : gammaRisk.includes('squeeze_down') ? '#ff4444' : '#888';
+        const dqColor = da.data_quality === 'A' ? '#00ff00' : da.data_quality === 'B' ? '#ffcc00' : '#888';
+
+        html += `<div class="oi-dte-card-expanded">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="dte-label">${da.dte || '?'} DTE</div>
+            ${da.data_quality ? `<span style="font-size:7px;color:${dqColor};">${da.data_quality}</span>` : ''}
+          </div>
+          <div class="dte-bias ${bias}">${(da.bias || 'N/A').toUpperCase()}</div>
+          <div class="dte-conf ${confClass}">${conf}%</div>
+          <div class="dte-strike">${da.key_strike ? '$' + da.key_strike : '--'}${da.key_oi ? ' (' + da.key_oi.toLocaleString() + ')' : ''}</div>
+          <div class="dte-pcr">P/C: ${da.pcr != null ? da.pcr.toFixed(2) : '--'} | MaxPain: ${da.max_pain ? '$' + da.max_pain : '--'}</div>
+          ${smRead ? `<div style="font-size:7px;color:${smColor};margin-top:2px;">${smRead.replace(/_/g,' ')}</div>` : ''}
+          ${gammaRisk && gammaRisk !== 'neutral' && gammaRisk !== 'unknown' ? `<div style="font-size:7px;color:${gammaColor};margin-top:1px;">GAMMA: ${gammaRisk.replace(/_/g,' ').toUpperCase()}</div>` : ''}
+          ${da.notable_flow ? `<div class="dte-flow">${da.notable_flow}</div>` : ''}
+          ${da.thesis ? `<div class="dte-thesis">${da.thesis}</div>` : ''}
+        </div>`;
+      });
+
+      html += '</div></div>';
+      return html;
     }
 
     function renderDteCard(label, data) {

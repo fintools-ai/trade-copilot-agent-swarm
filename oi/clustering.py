@@ -84,12 +84,17 @@ class ClusteringEngine:
         short_term = term.get("short_term", {})
         long_term = term.get("long_term", {})
 
+        risk_mgmt = analysis.get("risk_management", {})
+
         return {
             "ticker": analysis.get("ticker", "UNKNOWN"),
             "direction": analysis.get("direction", "N/A"),
             "confidence": safe_int(analysis.get("confidence", 0)),
+            "success_probability": safe_int(analysis.get("success_probability", 0)),
             "thesis": analysis.get("thesis", ""),
             "confluence": analysis.get("confluence", "unclear"),
+            "pattern_type": analysis.get("pattern_type", ""),
+            "smart_money_summary": analysis.get("smart_money_summary", ""),
             "term_structure": {
                 "short_term": short_term,
                 "long_term": long_term
@@ -103,8 +108,17 @@ class ClusteringEngine:
                 "expiry_dte": trade.get("expiry_dte"),
                 "risk_reward": trade.get("risk_reward", "N/A"),
                 "current_price": trade.get("current_price"),
+                "entry_triggers": trade.get("entry_triggers", []),
+                "exit_strategy": trade.get("exit_strategy", ""),
             },
-            "risks": analysis.get("risks", []),
+            "risk_management": {
+                "primary_risks": risk_mgmt.get("primary_risks", analysis.get("risks", [])),
+                "hedge_strategy": risk_mgmt.get("hedge_strategy", ""),
+                "volatility_considerations": risk_mgmt.get("volatility_considerations", ""),
+                "position_adjustments": risk_mgmt.get("position_adjustments", ""),
+            },
+            "data_quality": analysis.get("data_quality", {}),
+            "dte_analyses": analysis.get("dte_analyses", []),
             "classification": classification,
         }
 

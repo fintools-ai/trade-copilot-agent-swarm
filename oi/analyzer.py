@@ -133,11 +133,11 @@ class OIAnalyzer:
 
             self._check_cancelled()
 
-            # Phase 4: LLM Analysis — one call per ticker
+            # Phase 4: LLM Analysis — per-DTE parallel + synthesis
             phase_start = time.time()
             set_status("running", "Phase 4: LLM analysis...", 50)
-            publish_progress("Phase 4: Running LLM analysis...", 50)
-            logger.info("Phase 4: LLM analysis...")
+            publish_progress("Phase 4: Running per-DTE LLM analysis...", 50)
+            logger.info("Phase 4: Per-DTE LLM analysis + synthesis...")
 
             analyses = []
             ticker_list = list(processed_tickers.keys())
@@ -148,7 +148,7 @@ class OIAnalyzer:
 
                 progress = 50 + int((i / total_tickers) * 40)
                 set_status("running", f"Analyzing {ticker} ({i+1}/{total_tickers})...", progress)
-                publish_progress(f"Analyzing {ticker} ({i+1}/{total_tickers})...", progress)
+                publish_progress(f"{ticker}: analyzing per-DTE ({i+1}/{total_tickers})...", progress)
 
                 all_dte_data = processed_tickers[ticker]
 
@@ -165,10 +165,11 @@ class OIAnalyzer:
 
                 ticker_start = time.time()
 
-                # Recall historical context from Bedrock Memory
+                # Recall historical context from Bedrock Memory (once per ticker)
                 historical_context = recall(ticker)
 
-                analysis = self.llm_analyzer.analyze_ticker(
+                # Per-DTE parallel analysis + synthesis
+                analysis = await self.llm_analyzer.analyze_ticker_full(
                     ticker, all_dte_data, market_context,
                     historical_context if historical_context else None
                 )
@@ -179,12 +180,13 @@ class OIAnalyzer:
                 store_episode(ticker, analysis, market_context)
 
                 ticker_dur = time.time() - ticker_start
+                n_dtes = len(analysis.get("dte_analyses", []))
                 if analysis.get("status") == "error":
                     msg = f"{ticker}: ERROR - {analysis.get('error', 'unknown')} ({ticker_dur:.1f}s)"
                     logger.warning(msg)
                     publish_progress(msg, progress, level="warning")
                 else:
-                    msg = f"{ticker}: {analysis.get('direction', '?')} {analysis.get('confidence', '?')}% ({ticker_dur:.1f}s)"
+                    msg = f"{ticker}: {analysis.get('direction', '?')} {analysis.get('confidence', '?')}% {analysis.get('confluence', '?')} [{n_dtes} DTEs] ({ticker_dur:.1f}s)"
                     logger.info(msg)
                     publish_progress(msg, progress, level="success")
 

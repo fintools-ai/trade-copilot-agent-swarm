@@ -27,6 +27,7 @@ OI_TICKERS = [
 OI_ANALYSIS_DAYS = [30, 50, 60, 90]
 AWS_REGION = "us-east-1"
 BEDROCK_MODEL_ID = "us.anthropic.claude-opus-4-6-20250610-v1:0"
+OI_BEDROCK_CONCURRENCY = int(os.getenv('OI_BEDROCK_CONCURRENCY', '4'))
 
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
