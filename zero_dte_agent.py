@@ -225,6 +225,14 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     else:
         query_with_context = query + time_context
 
+    # Outcome memory: recall past outcomes when flat (no position)
+    try:
+        from hooks.outcome_memory import before_swarm
+        has_position = bool(last_rec and last_rec.get("action"))
+        query_with_context = before_swarm(query_with_context, has_position)
+    except Exception as e:
+        console.print(f"[dim]Outcome hook error: {e}[/dim]")
+
     # Stream the agent's question to UI immediately (without context noise)
     # Include query_start_ts for latency calculation
     query_start_ts = time.time()
@@ -288,6 +296,13 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     # If no signal parsed, create minimal one with latency
     if signal is None:
         signal = {"latency": round(latency, 1)}
+
+    # Outcome memory: capture ENTRY, record EXIT
+    try:
+        from hooks.outcome_memory import after_signal
+        after_signal(signal)
+    except Exception as e:
+        console.print(f"[dim]Outcome hook error: {e}[/dim]")
 
     # Stream the swarm's response to UI with mode indicator and signal
     mode_label = "Fast" if fast_mode else "Full"

@@ -44,6 +44,17 @@ FLOW REVERSAL TRIGGERS EXIT:
 - In position + Flow MIXED = HOLD (benefit of doubt, wait for clarity)
 </position_tracking>
 
+<past_outcomes>
+CHECK USER QUERY for "[PAST TRADE OUTCOMES ...]" context.
+
+If present, these are REAL outcomes from your previous trades in similar flow conditions.
+Use them to calibrate your confidence:
+- Multiple LOSS entries with similar flow → the flow pattern is unreliable, increase WAIT threshold
+- WIN entries required stronger flow magnitude → only enter on strong flow, not moderate
+- Losses concentrated in afternoon → be more cautious after 11:00 AM
+- Do NOT ignore this data — it represents actual results from your past signals
+</past_outcomes>
+
 <signal_hierarchy>
 Order Flow determines direction. All other data confirms or adjusts conviction.
 

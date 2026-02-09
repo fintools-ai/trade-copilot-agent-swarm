@@ -226,7 +226,7 @@ def recall(ticker, query=None):
         # MemoryClient.retrieve_memories: returns List[Dict]
         records = client.retrieve_memories(
             memory_id=memory_id,
-            namespace=f"/facts/ticker/{ticker}/",
+            namespace=f"/summaries/ticker/{ticker}/",
             query=query,
             top_k=5,
         )
