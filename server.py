@@ -358,7 +358,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             return
 
         subprocess.Popen(
-            [sys.executable, "-m", "oi.analyzer"],
+            [sys.executable, "-u", "-m", "oi.analyzer"],
             cwd=os.path.dirname(os.path.abspath(__file__)),
         )
         console.print("[bold cyan]OI Analysis started in subprocess[/bold cyan]")
@@ -397,7 +397,7 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             return
 
         subprocess.Popen(
-            [sys.executable, "-m", "oi.analyzer", "--ticker", ticker, "--dtes", json.dumps(dtes)],
+            [sys.executable, "-u", "-m", "oi.analyzer", "--ticker", ticker, "--dtes", json.dumps(dtes)],
             cwd=os.path.dirname(os.path.abspath(__file__)),
         )
         console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes}) in subprocess[/bold cyan]")
@@ -469,9 +469,31 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         pass
 
 
+def _kill_stale_oi_processes():
+    """Kill any leftover oi.analyzer subprocesses from a previous server run."""
+    import signal
+    try:
+        # Find python processes running oi.analyzer (exclude ourselves)
+        result = subprocess.run(
+            ["pgrep", "-f", "oi.analyzer"],
+            capture_output=True, text=True,
+        )
+        pids = [int(p) for p in result.stdout.strip().split("\n") if p.strip()]
+        my_pid = os.getpid()
+        for pid in pids:
+            if pid != my_pid:
+                os.kill(pid, signal.SIGTERM)
+                console.print(f"[yellow]Terminated stale oi.analyzer process (PID {pid})[/yellow]")
+    except Exception:
+        pass  # pgrep not found or no processes — fine
+
+
 def run_server(port: int = 5000):
     """Run the HTTP/SSE server with Redis"""
     global redis_stream
+
+    # Kill stale OI analysis subprocesses + reset status
+    _kill_stale_oi_processes()
 
     # Initialize Redis (history persists with TTL)
     try:
@@ -480,6 +502,10 @@ def run_server(port: int = 5000):
         console.print(f"[red]Failed to connect to Redis: {e}[/red]")
         console.print("[yellow]Make sure Redis is running: brew services start redis[/yellow]")
         return
+
+    # Reset OI status in case previous run left it stuck on "running"
+    from oi.redis_manager import reset_status
+    reset_status()
 
     server = ThreadingHTTPServer(("", port), StreamingHandler)
 
