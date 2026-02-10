@@ -346,3 +346,20 @@ class OIAnalyzer:
             pct = 5 + int((completed / total) * 25)  # 5-30% range
             set_status("running", message, pct)
             publish_progress(message, pct)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="OI Analysis")
+    parser.add_argument("--ticker", help="Single ticker to analyze")
+    parser.add_argument("--dtes", help="DTEs as JSON array", default=None)
+    args = parser.parse_args()
+
+    analyzer = OIAnalyzer()
+
+    if args.ticker:
+        dtes = json.loads(args.dtes) if args.dtes else [30, 60, 90]
+        asyncio.run(analyzer.analyze_single_ticker(args.ticker, dtes))
+    else:
+        asyncio.run(analyzer.run_analysis())

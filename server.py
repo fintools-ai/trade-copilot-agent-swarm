@@ -18,8 +18,9 @@ Usage:
 """
 
 import json
-import threading
-import asyncio
+import os
+import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler
@@ -104,6 +105,8 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.handle_oi_analyze_ticker()
         elif self.path == "/cancel-oi-analysis":
             self.handle_cancel_oi_analysis()
+        elif self.path == "/reset-oi-status":
+            self.handle_reset_oi_status()
         else:
             self.send_error(404, "Not Found")
 
@@ -354,14 +357,11 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
             return
 
-        def run_analysis():
-            from oi.analyzer import OIAnalyzer
-            analyzer = OIAnalyzer()
-            asyncio.run(analyzer.run_analysis())
-
-        thread = threading.Thread(target=run_analysis, daemon=True)
-        thread.start()
-        console.print("[bold cyan]OI Analysis started in background[/bold cyan]")
+        subprocess.Popen(
+            [sys.executable, "-m", "oi.analyzer"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+        )
+        console.print("[bold cyan]OI Analysis started in subprocess[/bold cyan]")
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -396,14 +396,11 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
             return
 
-        def run():
-            from oi.analyzer import OIAnalyzer
-            analyzer = OIAnalyzer()
-            asyncio.run(analyzer.analyze_single_ticker(ticker, dtes))
-
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-        console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes})[/bold cyan]")
+        subprocess.Popen(
+            [sys.executable, "-m", "oi.analyzer", "--ticker", ticker, "--dtes", json.dumps(dtes)],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+        )
+        console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes}) in subprocess[/bold cyan]")
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -423,6 +420,19 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(json.dumps({"status": "cancelling"}).encode())
+
+    def handle_reset_oi_status(self):
+        """Force-reset OI analysis status to idle (unstick crashed analysis)"""
+        from oi.redis_manager import reset_status
+
+        reset_status()
+        console.print("[bold yellow]OI Analysis status reset to idle[/bold yellow]")
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "idle"}).encode())
 
     def handle_sse(self):
         """Handle Server-Sent Events connection with Redis pub/sub"""

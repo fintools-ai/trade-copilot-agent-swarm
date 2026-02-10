@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from redis_stream import get_stream
 
 
-EXPIRY_SECONDS = 604800  # 7 days
+EXPIRY_SECONDS = 2592000  # 30 days
 
 
 def _redis():
@@ -71,9 +71,9 @@ def get_full_results():
 
 
 def store_ondemand_result(ticker, analysis):
-    """Add/update a single ticker in today's on-demand results"""
+    """Add/update a single ticker in on-demand results (persists 30 days)"""
     today = datetime.now().strftime('%Y-%m-%d')
-    key = f"oi:ondemand:{today}"
+    key = "oi:ondemand:latest"
     r = _redis()
 
     existing = r.get(key)
@@ -83,14 +83,12 @@ def store_ondemand_result(ticker, analysis):
         "analyzed_at": datetime.now().strftime("%H:%M:%S"),
         "analysis_date": today,
     }
-    r.setex(key, 86400, json.dumps(results))
+    r.setex(key, EXPIRY_SECONDS, json.dumps(results))
 
 
 def get_ondemand_results():
-    """Get all on-demand results for today only"""
-    today = datetime.now().strftime('%Y-%m-%d')
-    key = f"oi:ondemand:{today}"
-    data = _redis().get(key)
+    """Get all on-demand results"""
+    data = _redis().get("oi:ondemand:latest")
     return json.loads(data) if data else {}
 
 
@@ -138,3 +136,9 @@ def clear_cancel():
 def is_cancelled():
     """Check if cancellation was requested"""
     return _redis().get("oi:cancel") == "1"
+
+
+def reset_status():
+    """Force-reset status to idle (unstick a crashed analysis)"""
+    _redis().delete("oi:status")
+    _redis().delete("oi:cancel")
