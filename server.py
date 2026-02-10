@@ -50,6 +50,9 @@ console = Console()
 # Redis stream instance (reset session on server start)
 redis_stream: RedisStream = None
 
+# Track OI analysis subprocess so we can kill it on shutdown
+_oi_process = None
+
 # Default mode when not set in Redis (must match zero_dte_agent.py)
 DEFAULT_MODE = "fast"
 
@@ -333,9 +336,14 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         ps.subscribe("oi:events")
 
         try:
-            for message in ps.listen():
-                if message["type"] == "message":
+            while True:
+                message = ps.get_message(timeout=5)
+                if message and message["type"] == "message":
                     self.wfile.write(f"data: {message['data']}\n\n".encode())
+                    self.wfile.flush()
+                else:
+                    # Heartbeat — detects broken connections
+                    self.wfile.write(b": heartbeat\n\n")
                     self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
             pass
@@ -357,11 +365,16 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
             return
 
-        subprocess.Popen(
+        global _oi_process
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "oi_analysis.log")
+        log_file = open(log_path, "w")
+        _oi_process = subprocess.Popen(
             [sys.executable, "-u", "-m", "oi.analyzer"],
             cwd=os.path.dirname(os.path.abspath(__file__)),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
         )
-        console.print("[bold cyan]OI Analysis started in subprocess[/bold cyan]")
+        console.print(f"[bold cyan]OI Analysis started in subprocess (PID {_oi_process.pid}) → {log_path}[/bold cyan]")
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -396,11 +409,16 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
             return
 
-        subprocess.Popen(
+        global _oi_process
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "oi_analysis.log")
+        log_file = open(log_path, "w")
+        _oi_process = subprocess.Popen(
             [sys.executable, "-u", "-m", "oi.analyzer", "--ticker", ticker, "--dtes", json.dumps(dtes)],
             cwd=os.path.dirname(os.path.abspath(__file__)),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
         )
-        console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes}) in subprocess[/bold cyan]")
+        console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes}) in subprocess (PID {_oi_process.pid}) → {log_path}[/bold cyan]")
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -454,46 +472,44 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         self.wfile.write(f"data: {json.dumps(connect_event)}\n\n".encode())
         self.wfile.flush()
 
-        # Subscribe to Redis and stream events
+        # Subscribe to Redis and stream events with heartbeat
         try:
-            for event in redis_stream.subscribe():
-                data = json.dumps(event)
-                self.wfile.write(f"data: {data}\n\n".encode())
-                self.wfile.flush()
+            ps = redis_stream.redis.pubsub()
+            ps.subscribe("zero_dte:events")
+            while True:
+                message = ps.get_message(timeout=5)
+                if message and message["type"] == "message":
+                    self.wfile.write(f"data: {message['data']}\n\n".encode())
+                    self.wfile.flush()
+                else:
+                    # Heartbeat — detects broken connections fast
+                    self.wfile.write(b": heartbeat\n\n")
+                    self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
-            # Normal disconnect - client closed tab or refreshed
             pass
+        finally:
+            try:
+                ps.close()
+            except Exception:
+                pass
 
     def log_message(self, format, *args):
         # Suppress default logging for cleaner output
         pass
 
 
-def _kill_stale_oi_processes():
-    """Kill any leftover oi.analyzer subprocesses from a previous server run."""
-    import signal
-    try:
-        # Find python processes running oi.analyzer (exclude ourselves)
-        result = subprocess.run(
-            ["pgrep", "-f", "oi.analyzer"],
-            capture_output=True, text=True,
-        )
-        pids = [int(p) for p in result.stdout.strip().split("\n") if p.strip()]
-        my_pid = os.getpid()
-        for pid in pids:
-            if pid != my_pid:
-                os.kill(pid, signal.SIGTERM)
-                console.print(f"[yellow]Terminated stale oi.analyzer process (PID {pid})[/yellow]")
-    except Exception:
-        pass  # pgrep not found or no processes — fine
+def _cleanup_oi_process():
+    """Terminate tracked OI subprocess if still running."""
+    global _oi_process
+    if _oi_process and _oi_process.poll() is None:
+        _oi_process.terminate()
+        console.print(f"[yellow]Terminated OI analysis subprocess (PID {_oi_process.pid})[/yellow]")
+        _oi_process = None
 
 
 def run_server(port: int = 5000):
     """Run the HTTP/SSE server with Redis"""
     global redis_stream
-
-    # Kill stale OI analysis subprocesses + reset status
-    _kill_stale_oi_processes()
 
     # Initialize Redis (history persists with TTL)
     try:
@@ -530,6 +546,7 @@ def run_server(port: int = 5000):
         server.serve_forever()
     except KeyboardInterrupt:
         console.print("\n[bold red]Shutting down server...[/bold red]")
+        _cleanup_oi_process()
         redis_stream.close()
         server.shutdown()
 
