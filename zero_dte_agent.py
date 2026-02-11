@@ -15,7 +15,9 @@ The agent will:
 """
 
 import json
+import sys
 import time
+import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from strands import Agent, tool
@@ -625,6 +627,14 @@ def run_zero_dte_agent():
         border_style="cyan"
     ))
 
+    # Start background market data poller (persistent MCP → Redis)
+    poller_proc = subprocess.Popen(
+        [sys.executable, "market_poller.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    console.print(f"[green]Market poller started (pid {poller_proc.pid})[/green]")
+
     # Track current state - loads from Redis (persists across restarts)
     current_mode = get_mode_override()
     current_position = get_position_context()
@@ -650,6 +660,9 @@ def run_zero_dte_agent():
             now_pt = datetime.now(pt_tz)
             if now_pt.hour >= market_close_hour:
                 console.print("\n[bold yellow]Market closed (1PM PT) - stopping agent[/bold yellow]")
+                poller_proc.terminate()
+                poller_proc.wait(timeout=5)
+                console.print("[green]Market poller stopped[/green]")
                 break
 
             # Check for changes in mode or position
@@ -724,6 +737,13 @@ def run_zero_dte_agent():
 
     except KeyboardInterrupt:
         console.print("\n[bold red]Stopping Zero-DTE Agent...[/bold red]")
+    finally:
+        poller_proc.terminate()
+        try:
+            poller_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            poller_proc.kill()
+        console.print("[green]Market poller stopped[/green]")
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ Two tools:
 
 import os
 import json
+import time
 import asyncio
 import logging
 from datetime import datetime
@@ -17,13 +18,22 @@ from typing import Dict, Optional
 from strands import tool
 from mcp import StdioServerParameters, stdio_client
 from strands.tools.mcp import MCPClient
-from config.settings import TWELVE_DATA_API_KEY
+from config.settings import TWELVE_DATA_API_KEY, POLLER_MAX_STALENESS
 from redis_stream import publish_event
+
+import redis as _redis_mod
 
 logger = logging.getLogger(__name__)
 
 # Twelve Data API key from environment
 TWELVEDATA_API_KEY = os.getenv("TWELVEDATA_API_KEY", TWELVE_DATA_API_KEY)
+
+# Redis client for cached market data reads
+try:
+    _redis_client = _redis_mod.Redis(host="localhost", port=6379, db=0, decode_responses=True)
+    _redis_client.ping()
+except Exception:
+    _redis_client = None
 
 
 def create_twelvedata_mcp():
@@ -67,6 +77,25 @@ async def fast_spy_check() -> str:
 
     Use for: Quick market read, trend confirmation, entry validation.
     """
+    # Try Redis cache first (populated by market_poller.py)
+    if _redis_client:
+        try:
+            cached = _redis_client.get("market:spy:data")
+            if cached:
+                data = json.loads(cached)
+                age = time.time() - data.get("fetch_ts", 0)
+                if age < POLLER_MAX_STALENESS:
+                    logger.debug(f"SPY cache hit (age: {age:.1f}s)")
+                    return cached  # Poller already published to UI
+        except Exception as e:
+            logger.debug(f"SPY cache read failed: {e}")
+
+    # Fallback to direct MCP
+    return await _fast_spy_check_mcp()
+
+
+async def _fast_spy_check_mcp() -> str:
+    """Direct MCP fetch for SPY — fallback when poller is down."""
     symbol = "SPY"
 
     try:
@@ -74,12 +103,10 @@ async def fast_spy_check() -> str:
         data = {
             "symbol": symbol,
             "timestamp": fetch_time.strftime("%Y-%m-%d %H:%M:%S"),
-            "fetch_ts": fetch_time.timestamp(),  # Unix timestamp for age calculation
+            "fetch_ts": fetch_time.timestamp(),
         }
 
         with create_twelvedata_mcp() as mcp:
-            # Fire ALL 7 MCP calls concurrently instead of sequentially
-            # This reduces data fetch from ~10-14s to ~2-3s (bounded by slowest call)
             quote, rsi, vwap, ema9, ema21, macd, ts = await asyncio.gather(
                 mcp.call_tool_async(
                     tool_use_id=f"q_{symbol}",
@@ -229,11 +256,31 @@ async def fast_mag7_scan() -> str:
 
     Use for: Cross-validation, breadth confirmation, divergence detection.
     """
+    # Try Redis cache first (populated by market_poller.py)
+    if _redis_client:
+        try:
+            cached = _redis_client.get("market:mag7:data")
+            if cached:
+                data = json.loads(cached)
+                age = time.time() - data.get("fetch_ts", 0)
+                if age < POLLER_MAX_STALENESS:
+                    logger.debug(f"Mag7 cache hit (age: {age:.1f}s)")
+                    return cached
+        except Exception as e:
+            logger.debug(f"Mag7 cache read failed: {e}")
+
+    # Fallback to direct MCP
+    return await _fast_mag7_scan_mcp()
+
+
+async def _fast_mag7_scan_mcp() -> str:
+    """Direct MCP fetch for Mag7 — fallback when poller is down."""
     symbols = ["SPY", "NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "META"]
 
     try:
         data = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "fetch_ts": datetime.now().timestamp(),
             "symbols": {},
             "summary": {
                 "bullish": 0,
@@ -243,8 +290,6 @@ async def fast_mag7_scan() -> str:
         }
 
         with create_twelvedata_mcp() as mcp:
-            # Fire ALL 7 quote requests concurrently instead of sequentially
-            # This reduces breadth scan from ~7-10s to ~1-2s
             results = await asyncio.gather(
                 *[
                     mcp.call_tool_async(
