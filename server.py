@@ -19,8 +19,8 @@ Usage:
 
 import json
 import os
-import subprocess
-import sys
+import threading
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler
@@ -50,8 +50,6 @@ console = Console()
 # Redis stream instance (reset session on server start)
 redis_stream: RedisStream = None
 
-# Track OI analysis subprocess so we can kill it on shutdown
-_oi_process = None
 
 # Default mode when not set in Redis (must match zero_dte_agent.py)
 DEFAULT_MODE = "fast"
@@ -365,16 +363,13 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
             return
 
-        global _oi_process
-        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "oi_analysis.log")
-        log_file = open(log_path, "w")
-        _oi_process = subprocess.Popen(
-            [sys.executable, "-u", "-m", "oi.analyzer"],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-        )
-        console.print(f"[bold cyan]OI Analysis started in subprocess (PID {_oi_process.pid}) → {log_path}[/bold cyan]")
+        def run_analysis():
+            from oi.analyzer import OIAnalyzer
+            analyzer = OIAnalyzer()
+            asyncio.run(analyzer.run_analysis())
+
+        threading.Thread(target=run_analysis, daemon=True).start()
+        console.print("[bold cyan]OI Analysis started in background[/bold cyan]")
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -409,16 +404,13 @@ class StreamingHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"error": "Analysis already running"}).encode())
             return
 
-        global _oi_process
-        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "oi_analysis.log")
-        log_file = open(log_path, "w")
-        _oi_process = subprocess.Popen(
-            [sys.executable, "-u", "-m", "oi.analyzer", "--ticker", ticker, "--dtes", json.dumps(dtes)],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-        )
-        console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes}) in subprocess (PID {_oi_process.pid}) → {log_path}[/bold cyan]")
+        def run():
+            from oi.analyzer import OIAnalyzer
+            analyzer = OIAnalyzer()
+            asyncio.run(analyzer.analyze_single_ticker(ticker, dtes))
+
+        threading.Thread(target=run, daemon=True).start()
+        console.print(f"[bold cyan]OI Analysis started for {ticker} (DTEs: {dtes})[/bold cyan]")
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -498,15 +490,6 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         pass
 
 
-def _cleanup_oi_process():
-    """Terminate tracked OI subprocess if still running."""
-    global _oi_process
-    if _oi_process and _oi_process.poll() is None:
-        _oi_process.terminate()
-        console.print(f"[yellow]Terminated OI analysis subprocess (PID {_oi_process.pid})[/yellow]")
-        _oi_process = None
-
-
 def run_server(port: int = 5000):
     """Run the HTTP/SSE server with Redis"""
     global redis_stream
@@ -546,7 +529,6 @@ def run_server(port: int = 5000):
         server.serve_forever()
     except KeyboardInterrupt:
         console.print("\n[bold red]Shutting down server...[/bold red]")
-        _cleanup_oi_process()
         redis_stream.close()
         server.shutdown()
 

@@ -20,7 +20,7 @@ from oi.delta_calculator import DeltaCalculator
 from oi.market_context import MarketContextProvider
 from oi.llm_analyzer import LLMAnalyzer
 from oi.clustering import ClusteringEngine
-from oi.memory import recall, store_episode
+from oi.memory import recall, recall_sentiment, recall_market_sentiment, store_episode
 
 logging.basicConfig(
     level=logging.INFO,
@@ -144,6 +144,9 @@ class OIAnalyzer:
             ticker_list = list(processed_tickers.keys())
             total_tickers = len(ticker_list)
 
+            # Recall overall market sentiment once (shared across all tickers)
+            market_sentiment = recall_market_sentiment()
+
             for i, ticker in enumerate(ticker_list):
                 self._check_cancelled()
 
@@ -168,11 +171,15 @@ class OIAnalyzer:
 
                 # Recall historical context from Bedrock Memory (once per ticker)
                 historical_context = recall(ticker)
+                # Combine per-ticker + market-wide sentiment
+                ticker_sentiment = recall_sentiment(ticker)
+                sentiment_context = ticker_sentiment + market_sentiment if (ticker_sentiment or market_sentiment) else None
 
                 # Per-DTE parallel analysis + synthesis
                 analysis = await self.llm_analyzer.analyze_ticker_full(
                     ticker, all_dte_data, market_context,
-                    historical_context if historical_context else None
+                    historical_context if historical_context else None,
+                    sentiment_context if sentiment_context else None,
                 )
                 analyses.append(analysis)
                 store_analysis_result(ticker, today, analysis)
@@ -308,9 +315,13 @@ class OIAnalyzer:
             # 4. LLM per-DTE + synthesis
             publish_progress(f"{ticker}: running LLM analysis...", 55)
             historical_context = recall(ticker)
+            ticker_sentiment = recall_sentiment(ticker)
+            market_sentiment = recall_market_sentiment()
+            sentiment_context = ticker_sentiment + market_sentiment if (ticker_sentiment or market_sentiment) else None
             analysis = await self.llm_analyzer.analyze_ticker_full(
                 ticker, processed, market_context,
-                historical_context if historical_context else None
+                historical_context if historical_context else None,
+                sentiment_context,
             )
 
             # 5. Store

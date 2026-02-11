@@ -238,16 +238,17 @@ Return ONLY valid JSON. No text before or after.
 
     # ── Synthesis ─────────────────────────────────────────────────────
 
-    def synthesize_ticker(self, ticker, dte_analyses, market_context=None, historical_context=None):
+    def synthesize_ticker(self, ticker, dte_analyses, market_context=None, historical_context=None, sentiment_context=None):
         """
         Synthesis LLM call: compare per-DTE structured results → overall verdict + trade.
         Receives compact structured JSON, not raw OI data. Small prompt.
         """
         try:
-            prompt = self._build_synthesis_prompt(ticker, dte_analyses, market_context, historical_context)
+            prompt = self._build_synthesis_prompt(ticker, dte_analyses, market_context, historical_context, sentiment_context)
             n_dtes = len(dte_analyses)
             n_facts = len(historical_context) if historical_context else 0
-            logger.info(f"{ticker}: synthesis prompt ~{len(prompt)} chars, {n_dtes} DTEs, {n_facts} memory facts")
+            n_sentiment = len(sentiment_context) if sentiment_context else 0
+            logger.info(f"{ticker}: synthesis prompt ~{len(prompt)} chars, {n_dtes} DTEs, {n_facts} memory facts, {n_sentiment} sentiment facts")
 
             t0 = time.time()
             response = self._call_bedrock(prompt, max_tokens=4000)
@@ -272,7 +273,7 @@ Return ONLY valid JSON. No text before or after.
                 "analysis_timestamp": datetime.now().isoformat(),
             }
 
-    def _build_synthesis_prompt(self, ticker, dte_analyses, market_context, historical_context=None):
+    def _build_synthesis_prompt(self, ticker, dte_analyses, market_context, historical_context=None, sentiment_context=None):
         """Build synthesis prompt from per-DTE structured results"""
         dte_block = json.dumps(dte_analyses, indent=2)
         vix_json = json.dumps(market_context, indent=2) if market_context else 'Not available'
@@ -338,6 +339,8 @@ GOOD: "Institutions are accumulating calls across all timeframes: 30 DTE shows $
 {vix_json}
 
 {self._build_memory_section(ticker, historical_context)}
+
+{self._build_sentiment_section(ticker, sentiment_context)}
 
 # OUTPUT FORMAT
 Return ONLY valid JSON. No text before or after.
@@ -417,7 +420,7 @@ RULES:
 
     # ── Full Orchestrator ─────────────────────────────────────────────
 
-    async def analyze_ticker_full(self, ticker, all_dte_data, market_context=None, historical_context=None):
+    async def analyze_ticker_full(self, ticker, all_dte_data, market_context=None, historical_context=None, sentiment_context=None):
         """
         Full per-DTE analysis pipeline:
         1. Run per-DTE LLM calls in parallel (asyncio.gather)
@@ -470,7 +473,7 @@ RULES:
 
             # Step 3: Synthesis
             logger.info(f"{ticker}: synthesizing {len(valid_analyses)} DTE results...")
-            synthesis = self.synthesize_ticker(ticker, valid_analyses, market_context, historical_context)
+            synthesis = self.synthesize_ticker(ticker, valid_analyses, market_context, historical_context, sentiment_context)
 
             if synthesis.get("status") == "error":
                 # Synthesis failed but we still have per-DTE results — return what we have
@@ -621,6 +624,22 @@ Compare today vs past days to answer:
 - Is direction consistent or reversing? (trend vs noise)
 - Are walls growing or shrinking? (building = real, fading = unwinding)
 - Did price respect past key levels?
+
+{facts}
+"""
+
+    def _build_sentiment_section(self, ticker, sentiment_context):
+        """Build social media sentiment section from market_sentiment memory"""
+        if not sentiment_context:
+            return ""
+
+        facts = "\n".join(f"- {fact}" for fact in sentiment_context)
+        return f"""# SOCIAL MEDIA SENTIMENT FOR {ticker}
+Crowd sentiment from X/Twitter posts
+This is a SECONDARY signal — use it to confirm or question OI-based thesis, not to override it.
+- Crowd bullish + OI bullish = higher conviction
+- Crowd bearish + OI bullish = potential contrarian setup (smart money vs crowd)
+- Crowd consensus is often wrong at extremes — extreme bullish sentiment can be a fade signal
 
 {facts}
 """

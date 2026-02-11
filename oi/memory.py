@@ -253,3 +253,132 @@ def recall(ticker, query=None):
         logger.warning(f"{ticker}: recall failed - {e}")
 
     return facts
+
+
+SENTIMENT_MEMORY_NAME = "market_sentiment"
+_sentiment_cache = {"checked": False, "id": None}
+
+
+def _get_sentiment_memory_id():
+    """Find the market_sentiment memory ID. Read-only — never creates the store."""
+    if _sentiment_cache["checked"]:
+        return _sentiment_cache["id"]
+
+    _sentiment_cache["checked"] = True
+    client = _get_memory_client()
+    control = _get_control_client()
+
+    try:
+        memories = client.list_memories()
+        for mem in memories:
+            mid = mem.get("id", "")
+            if not mid:
+                continue
+            # ID often starts with the memory name — check that before making an extra API call
+            if mid.startswith(SENTIMENT_MEMORY_NAME):
+                _sentiment_cache["id"] = mid
+                logger.info(f"Found sentiment memory: {mid}")
+                return mid
+            # Otherwise resolve name via get_memory (extra API call per entry)
+            try:
+                detail = control.get_memory(memoryId=mid)
+                name = detail.get("memory", detail).get("name", "")
+                if name == SENTIMENT_MEMORY_NAME:
+                    _sentiment_cache["id"] = mid
+                    logger.info(f"Found sentiment memory: {mid}")
+                    return mid
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug(f"Sentiment memory lookup failed: {e}")
+
+    logger.info("No market_sentiment memory found — sentiment plugin not configured")
+    return None
+
+
+def recall_sentiment(ticker):
+    """
+    Retrieve social media sentiment from market_sentiment memory (if it exists).
+    Returns list of fact strings, or empty list if sentiment plugin is not set up.
+    """
+    memory_id = _get_sentiment_memory_id()
+    if not memory_id:
+        return []
+
+    client = _get_memory_client()
+    facts = []
+
+    try:
+        t0 = time.time()
+        records = client.retrieve_memories(
+            memory_id=memory_id,
+            namespace=f"/summaries/sentiment/{ticker}/",
+            query=f"{ticker} sentiment direction confidence themes notable accounts",
+            top_k=3,
+        )
+
+        for record in records:
+            content = record.get("content", {})
+            if isinstance(content, dict):
+                text = content.get("text", "")
+            elif isinstance(content, str):
+                text = content
+            else:
+                text = str(content)
+            if text:
+                facts.append(text)
+
+        dur = time.time() - t0
+        if facts:
+            logger.info(f"{ticker}: recalled {len(facts)} sentiment facts ({dur:.1f}s)")
+        else:
+            logger.info(f"{ticker}: no sentiment facts ({dur:.1f}s)")
+
+    except Exception as e:
+        logger.warning(f"{ticker}: sentiment recall failed - {e}")
+
+    return facts
+
+
+def recall_market_sentiment():
+    """
+    Retrieve overall market sentiment from market_sentiment memory.
+    Returns list of fact strings, or empty list if not available.
+    """
+    memory_id = _get_sentiment_memory_id()
+    if not memory_id:
+        return []
+
+    client = _get_memory_client()
+    facts = []
+
+    try:
+        t0 = time.time()
+        records = client.retrieve_memories(
+            memory_id=memory_id,
+            namespace="/summaries/sentiment/MARKET/",
+            query="overall market sentiment risk appetite sector rotation macro themes",
+            top_k=3,
+        )
+
+        for record in records:
+            content = record.get("content", {})
+            if isinstance(content, dict):
+                text = content.get("text", "")
+            elif isinstance(content, str):
+                text = content
+            else:
+                text = str(content)
+            if text:
+                facts.append(text)
+
+        dur = time.time() - t0
+        if facts:
+            logger.info(f"MARKET: recalled {len(facts)} market sentiment facts ({dur:.1f}s)")
+        else:
+            logger.info(f"MARKET: no market sentiment facts ({dur:.1f}s)")
+
+    except Exception as e:
+        logger.warning(f"MARKET: market sentiment recall failed - {e}")
+
+    return facts
