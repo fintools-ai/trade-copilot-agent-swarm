@@ -86,7 +86,8 @@ async def fast_spy_check() -> str:
                 age = time.time() - data.get("fetch_ts", 0)
                 if age < POLLER_MAX_STALENESS:
                     logger.debug(f"SPY cache hit (age: {age:.1f}s)")
-                    return cached  # Poller already published to UI
+                    _publish_market_data(data)
+                    return cached
         except Exception as e:
             logger.debug(f"SPY cache read failed: {e}")
 

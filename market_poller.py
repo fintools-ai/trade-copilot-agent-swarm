@@ -26,7 +26,6 @@ from tools.fast_0dte_tools import (
     _calc_orb,
     _calc_vwap_sd,
     _calc_trama,
-    _publish_market_data,
 )
 from config.settings import POLLER_SPY_INTERVAL, POLLER_MAG7_INTERVAL
 
@@ -182,9 +181,6 @@ async def poll_spy(mcp, r):
         # Write to Redis
         json_str = json.dumps(data, indent=2)
         r.set(REDIS_KEY_SPY, json_str, ex=REDIS_TTL)
-
-        # Publish to UI
-        _publish_market_data(data)
 
         elapsed = time.time() - t0
         price = data.get("price", {}).get("current", "?")
