@@ -245,7 +245,7 @@
     }
 
     .chart-container {
-      height: 200px;
+      height: 160px;
       flex-shrink: 0;
       border-bottom: 1px solid var(--border);
       background: var(--bg);
@@ -288,10 +288,16 @@
     .reasoning-hdr .badge.exit { background: #221100; color: var(--accent-dim); }
 
     .reasoning-body {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--text);
-      line-height: 1.5;
+      line-height: 1.6;
       white-space: pre-wrap;
+    }
+
+    /* Latest reasoning is prominent */
+    .reasoning-item.latest .reasoning-body {
+      font-size: 12px;
+      color: #eee;
     }
 
     /* Markdown in reasoning */
@@ -925,14 +931,32 @@ function renderReasonings() {
 function renderMemory(d) {
   const panel = document.getElementById('memory-panel');
   const items = d.items || [];
-  document.getElementById('mem-count').textContent = items.length + ' items';
+  const query = d.search_query || '';
+  const cacheHit = d.cache_hit || false;
+  const storeId = d.store_id || '';
+  document.getElementById('mem-count').textContent = items.length + ' items' + (cacheHit ? ' (cached)' : '');
+
+  // Always show search context
+  let html = '';
+
+  // Status bar: what we searched for
+  html += `<div style="padding:4px 6px;margin-bottom:6px;background:var(--bg-1);border:1px solid var(--border);font-size:9px;">`;
+  html += `<div style="color:var(--text-dim);margin-bottom:2px;">SEARCH QUERY</div>`;
+  html += `<div style="color:var(--text);line-height:1.4;">${escapeHtml(query) || 'waiting for first cycle...'}</div>`;
+  if (storeId) {
+    html += `<div style="color:var(--text-dark);margin-top:3px;font-size:8px;">Store: ${escapeHtml(storeId.substring(0, 24))}... | Hash: ${d.labels_hash || '--'}${cacheHit ? ' | CACHE HIT' : ''}</div>`;
+  }
+  html += `</div>`;
 
   if (!items.length) {
-    panel.innerHTML = '<div class="mem-empty">No memories recalled — labels may be unchanged or no past trades match.</div>';
+    html += `<div class="mem-empty">No past trades match these conditions yet.<br><br>`;
+    html += `<span style="color:var(--text-muted);font-size:9px;">Memory builds as trades happen:<br>`;
+    html += `ENTRY → EXIT → outcome stored → recalled next time</span></div>`;
+    panel.innerHTML = html;
     return;
   }
 
-  panel.innerHTML = items.map(m => {
+  html += items.map(m => {
     const isRule = m.startsWith('[LEARNED RULE]');
     const isWin = m.includes('WIN');
     const isLoss = m.includes('LOSS');
@@ -944,6 +968,8 @@ function renderMemory(d) {
     const text = isRule ? m.replace('[LEARNED RULE] ', '') : m;
     return `<div class="mem-item ${cls}">${tag}${escapeHtml(text)}</div>`;
   }).join('');
+
+  panel.innerHTML = html;
 }
 
 // ── RENDER: POSITION ───────────────────────────────────
@@ -995,7 +1021,19 @@ function connect() {
 function handleEvent(msg) {
   const type = msg.type;
 
-  if (type === 'V2_STATE' && msg.signal) {
+  if (type === 'V2_PRICE_TICK' && msg.signal) {
+    // Lightweight price update from poller (every 1s)
+    const p = msg.signal;
+    updateChart(p.price);
+    document.getElementById('spy-price').textContent = '$' + p.price.toFixed(2);
+    const changeEl = document.getElementById('spy-change');
+    if (p.change_pct) {
+      const sign = p.change_pct >= 0 ? '+' : '';
+      changeEl.textContent = `${sign}${p.change_pct.toFixed(2)}%`;
+      changeEl.style.color = p.change_pct >= 0 ? 'var(--green)' : 'var(--red)';
+    }
+  }
+  else if (type === 'V2_STATE' && msg.signal) {
     renderState(msg.signal);
   }
   else if (type === 'V2_MEMORY' && msg.signal) {

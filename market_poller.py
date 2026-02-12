@@ -182,8 +182,22 @@ async def poll_spy(mcp, r):
         json_str = json.dumps(data, indent=2)
         r.set(REDIS_KEY_SPY, json_str, ex=REDIS_TTL)
 
+        # Publish lightweight price tick for UI chart
+        price_data = data.get("price", {})
+        if price_data.get("current"):
+            tick = json.dumps({
+                "type": "V2_PRICE_TICK",
+                "timestamp": data.get("timestamp", ""),
+                "signal": {
+                    "price": price_data["current"],
+                    "change": price_data.get("change", 0),
+                    "change_pct": price_data.get("change_pct", 0),
+                },
+            })
+            r.publish("zero_dte:events", tick)
+
         elapsed = time.time() - t0
-        price = data.get("price", {}).get("current", "?")
+        price = price_data.get("current", "?")
         logger.info(f"SPY poll: ${price} in {elapsed:.1f}s")
 
     except Exception as e:

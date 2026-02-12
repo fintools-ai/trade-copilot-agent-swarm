@@ -201,6 +201,9 @@ class TradingEngine:
             "items": memories or [],
             "count": len(memories or []),
             "labels_hash": state.labels_hash(),
+            "search_query": state.to_search_text(),
+            "cache_hit": (state.labels_hash() == self.memory._last_recall_hash) if memories else False,
+            "store_id": self.memory._memory_id or "",
         })
         if self.position:
             publish_event("V2_POSITION", "", {

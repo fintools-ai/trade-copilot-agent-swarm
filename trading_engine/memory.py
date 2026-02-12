@@ -1,11 +1,12 @@
 """
 Bedrock AgentCore v2 memory — the learning brain.
 
-Separate store from v1 (zero_dte_outcomes_v2). Uses boto3 data plane (camelCase).
+Uses MemoryClient SDK (snake_case) — same proven pattern as oi/memory.py.
+Separate store from v1 (zero_dte_outcomes_v2).
 
 Two namespaces:
-- /facts/trader/SPY/  — Episodic: individual trade outcomes with classified labels
-- /facts/patterns/SPY/ — Semantic: extracted rules/anti-patterns from daily consolidation
+- /facts/trader/SPY/         — Episodic: individual trade outcomes with classified labels
+- /summaries/patterns/SPY/   — Semantic: extracted rules/anti-patterns from daily consolidation
 
 Hash-cached recall: only queries AgentCore when classified labels actually change.
 """
@@ -14,11 +15,11 @@ import json
 import time
 import logging
 import threading
-import uuid
 import boto3
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from bedrock_agentcore.memory import MemoryClient
 from config.settings import AWS_REGION, ENGINE_MEMORY_NAME
 
 logger = logging.getLogger(__name__)
@@ -28,22 +29,22 @@ class MemoryStore:
     """Encapsulates all Bedrock AgentCore state — no module-level globals."""
 
     def __init__(self):
-        self._data_client = None
+        self._memory_client = None
         self._control_client = None
         self._memory_id = None
         self._last_recall_hash = None
         self._last_recall_result: list[str] = []
 
     @property
-    def data_client(self):
-        """boto3 data plane — camelCase params."""
-        if self._data_client is None:
-            self._data_client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
-        return self._data_client
+    def memory_client(self):
+        """MemoryClient SDK — snake_case params, handles events + retrieval."""
+        if self._memory_client is None:
+            self._memory_client = MemoryClient(region_name=AWS_REGION)
+        return self._memory_client
 
     @property
     def control_client(self):
-        """boto3 control plane — for create/list/get memory stores."""
+        """boto3 control plane — camelCase, for get_memory to resolve name→ID."""
         if self._control_client is None:
             self._control_client = boto3.client("bedrock-agentcore-control", region_name=AWS_REGION)
         return self._control_client
@@ -52,34 +53,52 @@ class MemoryStore:
         """
         Find or create the 'zero_dte_v2' memory store. Returns memoryId.
 
-        Strategy:
-        1. List memories via control plane
-        2. Match by name
-        3. If not found, create with semantic strategies
+        Strategy (matches oi/memory.py):
+        1. list_memories via MemoryClient (returns dicts with 'id' key, NO 'name')
+        2. For each, try ID prefix match, then get_memory for name check
+        3. If not found, create with create_memory_and_wait
+        4. If "already exists" error, retry listing
         """
         if self._memory_id is not None:
             return self._memory_id
 
+        client = self.memory_client
         control = self.control_client
 
-        # Step 1: List and find by name
+        # Step 1: List memories and resolve by name
         try:
-            response = control.list_memories()
-            memories = response.get("memories", response.get("memorySummaries", []))
+            memories = client.list_memories()
+            logger.info(f"v2 memory: list_memories returned {len(memories)} entries")
 
             for mem in memories:
-                name = mem.get("name", "")
-                mid = mem.get("memoryId", mem.get("id", ""))
-                if name == ENGINE_MEMORY_NAME and mid:
+                mid = mem.get("id", "")
+                if not mid:
+                    continue
+
+                # ID prefix match (IDs often start with the name)
+                if mid.startswith(ENGINE_MEMORY_NAME):
                     self._memory_id = mid
-                    logger.info(f"v2 memory: found existing store: {self._memory_id}")
+                    logger.info(f"v2 memory: found by ID prefix: {self._memory_id}")
                     return self._memory_id
+
+                # Try get_memory via control plane to check actual name
+                try:
+                    detail = control.get_memory(memoryId=mid)
+                    mem_detail = detail.get("memory", detail)
+                    name = mem_detail.get("name", "")
+                    if name == ENGINE_MEMORY_NAME:
+                        self._memory_id = mid
+                        logger.info(f"v2 memory: found by name lookup: {self._memory_id}")
+                        return self._memory_id
+                except Exception:
+                    pass
+
         except Exception as e:
             logger.warning(f"v2 memory: list_memories failed: {e}")
 
-        # Step 2: Create
+        # Step 2: Not found — create
         try:
-            response = control.create_memory(
+            result = client.create_memory_and_wait(
                 name=ENGINE_MEMORY_NAME,
                 description="0DTE v2 trading engine — trade outcomes + learned patterns",
                 strategies=[
@@ -94,31 +113,23 @@ class MemoryStore:
                         "namespaces": ["/facts/patterns/{actorId}/"],
                     }},
                 ],
-                eventExpiryDays=30,
+                event_expiry_days=30,
             )
-            self._memory_id = response.get("memoryId", response.get("id", ""))
+            # MemoryClient returns "id", not "memoryId"
+            self._memory_id = result.get("id") or result.get("memoryId", "")
             logger.info(f"v2 memory: created store: {self._memory_id}")
-
-            # Wait for ACTIVE status
-            for _ in range(30):
-                time.sleep(2)
-                status_resp = control.get_memory(memoryId=self._memory_id)
-                mem_detail = status_resp.get("memory", status_resp)
-                status = mem_detail.get("status", "")
-                if status == "ACTIVE":
-                    logger.info("v2 memory: store is ACTIVE")
-                    break
             return self._memory_id
 
         except Exception as e:
-            if "already exists" in str(e).lower() or "conflict" in str(e).lower():
+            if "already exists" in str(e).lower():
                 logger.warning("v2 memory: store already exists, retrying list...")
                 try:
-                    response = control.list_memories()
-                    memories = response.get("memories", response.get("memorySummaries", []))
+                    memories = client.list_memories()
                     for mem in memories:
-                        if mem.get("name") == ENGINE_MEMORY_NAME:
-                            self._memory_id = mem.get("memoryId", mem.get("id", ""))
+                        mid = mem.get("id", "")
+                        if mid and mid.startswith(ENGINE_MEMORY_NAME):
+                            self._memory_id = mid
+                            logger.info(f"v2 memory: found on retry: {self._memory_id}")
                             return self._memory_id
                 except Exception as e2:
                     logger.error(f"v2 memory: retry list failed: {e2}")
@@ -140,25 +151,27 @@ class MemoryStore:
         if not memory_id:
             return []
 
-        client = self.data_client
+        client = self.memory_client
         search_text = market_state.to_search_text()
         results = []
 
-        # Search trade outcomes
+        # Search trade outcomes (summaries namespace — auto-extracted by AgentCore)
         try:
             t0 = time.time()
-            response = client.retrieve_memory_records(
-                memoryId=memory_id,
-                namespace="/facts/trader/SPY/",
-                searchCriteria={
-                    "searchQuery": search_text,
-                    "topK": 5,
-                },
+            records = client.retrieve_memories(
+                memory_id=memory_id,
+                namespace="/summaries/trader/SPY/",
+                query=search_text,
+                top_k=5,
             )
-            for record in response.get("memoryRecordSummaries", []):
-                text = record.get("content", "")
-                if isinstance(text, dict):
-                    text = text.get("text", "")
+            for record in records:
+                content = record.get("content", {})
+                if isinstance(content, dict):
+                    text = content.get("text", "")
+                elif isinstance(content, str):
+                    text = content
+                else:
+                    text = str(content)
                 if text:
                     results.append(text)
             logger.info(f"v2 memory: recalled {len(results)} outcomes ({time.time()-t0:.1f}s)")
@@ -168,18 +181,20 @@ class MemoryStore:
         # Search learned patterns
         try:
             t0 = time.time()
-            response = client.retrieve_memory_records(
-                memoryId=memory_id,
-                namespace="/facts/patterns/SPY/",
-                searchCriteria={
-                    "searchQuery": search_text,
-                    "topK": 10,
-                },
+            records = client.retrieve_memories(
+                memory_id=memory_id,
+                namespace="/summaries/patterns/SPY/",
+                query=search_text,
+                top_k=10,
             )
-            for record in response.get("memoryRecordSummaries", []):
-                text = record.get("content", "")
-                if isinstance(text, dict):
-                    text = text.get("text", "")
+            for record in records:
+                content = record.get("content", {})
+                if isinstance(content, dict):
+                    text = content.get("text", "")
+                elif isinstance(content, str):
+                    text = content
+                else:
+                    text = str(content)
                 if text:
                     results.append(f"[LEARNED RULE] {text}")
             logger.info(f"v2 memory: recalled patterns ({time.time()-t0:.1f}s)")
@@ -229,6 +244,7 @@ class MemoryStore:
     def record_outcome(self, exit_signal: dict):
         """
         Compute WIN/LOSS, store to AgentCore with classified labels.
+        Uses MemoryClient.create_event (snake_case, messages as tuples).
         Runs in background thread — never blocks the main loop.
         """
         import redis
@@ -271,16 +287,14 @@ class MemoryStore:
             if not memory_id:
                 return
 
-            client = self.data_client
             t0 = time.time()
 
-            client.create_event(
-                memoryId=memory_id,
-                actorId="trader/SPY",
-                sessionId=f"trades-{today}",
-                eventTimestamp=now_pt,
-                payload=[{"content": {"text": content}}],
-                metadata={"result": result, "action": action, "session": entry.get("session", "")},
+            # MemoryClient: snake_case, messages as tuples
+            self.memory_client.create_event(
+                memory_id=memory_id,
+                actor_id="trader/SPY",
+                session_id=f"trades-{today}",
+                messages=[(content, "ASSISTANT")],
             )
 
             # Clear entry snapshot
@@ -303,42 +317,38 @@ class MemoryStore:
         threading.Thread(target=self.record_outcome, args=(exit_signal,), daemon=True).start()
 
     def store_patterns(self, patterns: list[str]):
-        """Store extracted patterns from daily consolidation into /facts/patterns/SPY/."""
+        """
+        Store extracted patterns from daily consolidation.
+        Uses create_event per pattern (MemoryClient auto-extracts into /facts/).
+        """
         memory_id = self.get_or_create_memory()
         if not memory_id:
             return
 
-        client = self.data_client
+        client = self.memory_client
         today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
-        records = []
+        stored = 0
         for i, pattern in enumerate(patterns):
-            records.append({
-                "requestIdentifier": f"pattern-{today}-{i}-{uuid.uuid4().hex[:8]}",
-                "namespaces": ["/facts/patterns/SPY/"],
-                "content": {"text": pattern},
-                "timestamp": datetime.now(ZoneInfo("America/Los_Angeles")),
-            })
+            try:
+                client.create_event(
+                    memory_id=memory_id,
+                    actor_id="patterns/SPY",
+                    session_id=f"consolidation-{today}",
+                    messages=[(pattern, "ASSISTANT")],
+                )
+                stored += 1
+            except Exception as e:
+                logger.warning(f"v2 memory: store pattern {i} failed: {e}")
 
-        if not records:
-            return
-
-        try:
-            t0 = time.time()
-            client.batch_create_memory_records(
-                memoryId=memory_id,
-                records=records,
-            )
-            dur = time.time() - t0
-            logger.info(f"v2 memory: stored {len(records)} patterns ({dur:.1f}s)")
+        if stored:
+            logger.info(f"v2 memory: stored {stored}/{len(patterns)} patterns")
             print(f"\n{'='*60}")
-            print(f" V2 PATTERNS STORED: {len(records)} rules")
+            print(f" V2 PATTERNS STORED: {stored} rules")
             print(f"{'='*60}")
             for p in patterns[:5]:
                 print(f"  - {p[:120]}")
             print(f"{'='*60}\n")
-        except Exception as e:
-            logger.error(f"v2 memory: store_patterns failed: {e}")
 
     def get_todays_outcomes(self) -> list[str]:
         """Retrieve today's trade outcomes from AgentCore for consolidation."""
@@ -346,23 +356,25 @@ class MemoryStore:
         if not memory_id:
             return []
 
-        client = self.data_client
+        client = self.memory_client
         today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
         try:
-            response = client.retrieve_memory_records(
-                memoryId=memory_id,
-                namespace="/facts/trader/SPY/",
-                searchCriteria={
-                    "searchQuery": f"OUTCOME trade on {today}",
-                    "topK": 20,
-                },
+            records = client.retrieve_memories(
+                memory_id=memory_id,
+                namespace="/summaries/trader/SPY/",
+                query=f"OUTCOME trade on {today}",
+                top_k=20,
             )
             outcomes = []
-            for record in response.get("memoryRecordSummaries", []):
-                text = record.get("content", "")
-                if isinstance(text, dict):
-                    text = text.get("text", "")
+            for record in records:
+                content = record.get("content", {})
+                if isinstance(content, dict):
+                    text = content.get("text", "")
+                elif isinstance(content, str):
+                    text = content
+                else:
+                    text = str(content)
                 if text and today in text:
                     outcomes.append(text)
             return outcomes
