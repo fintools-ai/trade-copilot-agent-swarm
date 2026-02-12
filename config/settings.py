@@ -34,6 +34,14 @@ POLLER_SPY_INTERVAL = int(os.getenv('POLLER_SPY_INTERVAL', '5'))
 POLLER_MAG7_INTERVAL = int(os.getenv('POLLER_MAG7_INTERVAL', '10'))
 POLLER_MAX_STALENESS = int(os.getenv('POLLER_MAX_STALENESS', '10'))
 
+# Trading Engine v2
+ENGINE_MODEL_ID = os.getenv('ENGINE_MODEL_ID', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')
+ENGINE_SCAN_INTERVAL = int(os.getenv('ENGINE_SCAN_INTERVAL', '10'))
+ENGINE_MONITOR_INTERVAL = int(os.getenv('ENGINE_MONITOR_INTERVAL', '7'))
+ENGINE_MEMORY_NAME = os.getenv('ENGINE_MEMORY_NAME', 'zero_dte_v2')
+ENGINE_MAX_TOKENS = int(os.getenv('ENGINE_MAX_TOKENS', '512'))
+CLASSIFIER_MODEL_ID = os.getenv('CLASSIFIER_MODEL_ID', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')
+
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
