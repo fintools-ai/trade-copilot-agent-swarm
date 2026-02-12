@@ -316,6 +316,64 @@ class MemoryStore:
         """Fire-and-forget outcome recording in background thread."""
         threading.Thread(target=self.record_outcome, args=(exit_signal,), daemon=True).start()
 
+    def record_wait_outcome(self, wait_snap: dict, current_price: float, missed_action: str, move: float):
+        """
+        Store missed opportunity in AgentCore — teaches the LLM what happens when it WAITs
+        on directional flow.
+
+        Content format:
+        MISSED_OPPORTUNITY: WAIT → should have been CALL | Flow LEAN_BUYING 1.3:1 | ...
+        Price at WAIT: $582.00 → moved to $583.50 (+$1.50) in ~30s
+        """
+        try:
+            memory_id = self.get_or_create_memory()
+            if not memory_id:
+                return
+
+            now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
+            today = now_pt.strftime("%Y-%m-%d")
+            abs_move = abs(move)
+            direction_word = "up" if move > 0 else "down"
+            wait_price = wait_snap.get("price", 0)
+
+            content = (
+                f"MISSED_OPPORTUNITY: WAIT → should have been {missed_action} | "
+                f"Flow {wait_snap.get('flow_direction')} {wait_snap.get('flow_ratio')}:1 | "
+                f"{wait_snap.get('session')}\n"
+                f"{wait_snap.get('labels', '')}\n"
+                f"Price at WAIT: ${wait_price:.2f} at {wait_snap.get('time')} → "
+                f"moved {direction_word} ${abs_move:.2f} to ${current_price:.2f} on {today}"
+            )
+
+            t0 = time.time()
+            self.memory_client.create_event(
+                memory_id=memory_id,
+                actor_id="trader/SPY",
+                session_id=f"trades-{today}",
+                messages=[(content, "ASSISTANT")],
+            )
+            dur = time.time() - t0
+
+            logger.info(f"v2 memory: stored MISSED {missed_action} +${abs_move:.2f} ({dur:.1f}s)")
+            print(f"\n{'='*60}")
+            print(f" V2 MISSED OPPORTUNITY STORED")
+            print(f"{'='*60}")
+            print(f"  WAIT → should have been {missed_action}")
+            print(f"  ${wait_price:.2f} → ${current_price:.2f} ({direction_word} ${abs_move:.2f})")
+            print(f"  Bedrock write: {dur:.1f}s")
+            print(f"{'='*60}\n")
+
+        except Exception as e:
+            logger.warning(f"v2 memory: record_wait_outcome failed: {e}")
+
+    def record_wait_outcome_async(self, wait_snap: dict, current_price: float, missed_action: str, move: float):
+        """Fire-and-forget missed opportunity recording in background thread."""
+        threading.Thread(
+            target=self.record_wait_outcome,
+            args=(wait_snap, current_price, missed_action, move),
+            daemon=True,
+        ).start()
+
     def store_patterns(self, patterns: list[str]):
         """
         Store extracted patterns from daily consolidation.

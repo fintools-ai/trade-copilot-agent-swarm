@@ -28,9 +28,11 @@ MEAN_REVERSION regime (medium ORB range, 62-67% of the time):
 - Don't chase breakouts — they are more likely to fail
 - LEAN flow + VWAP bounce = good MED conviction entry
 
-UNKNOWN regime (no ORB data yet, pre-market):
-- Trade more cautiously, reduce conviction
-- Wait for ORB to form before committing to direction
+UNKNOWN regime (no ORB data yet, first 15 min):
+- STRONG/BUYING flow → still trade, use MED conviction (don't wait for ORB)
+- LEAN flow → enter only with strong technical confirmation
+- MIXED flow → WAIT (no edge without regime context)
+- Think of UNKNOWN as "play it like mean-reversion until ORB says otherwise"
 </regime_awareness>
 
 <flow_levels>
@@ -230,10 +232,12 @@ Past outcomes and learned rules from similar market conditions:
 {items}
 
 Use these to calibrate confidence:
-- Multiple LOSS entries with similar labels → pattern is unreliable, increase WAIT threshold
+- OUTCOME: WIN/LOSS — actual trade results. Multiple LOSSes with similar labels → pattern is unreliable
+- MISSED_OPPORTUNITY — you said WAIT but price moved in the direction flow suggested. This means you were TOO cautious. Next time you see these conditions, ENTER instead of WAIT.
+- Multiple MISSes with LEAN flow → stop waiting on LEAN, enter with MED conviction
 - WIN entries required stronger flow → only enter on strong flow, not moderate
 - Losses in afternoon → be more cautious in midday/afternoon
-- Do NOT ignore this data — it represents actual results from past signals
+- Do NOT ignore this data — it represents actual results from past decisions
 </memory>"""
 
 
@@ -252,7 +256,7 @@ Current time: {time_str} (Pacific Time)
 </market_state>
 {memory_text}
 No active position. Analyze these labels and decide: CALL, PUT, or WAIT.
-Apply regime-aware strategy: {state.orb_regime.regime} means {"follow breakouts, don't fade" if state.orb_regime.regime == "TREND_CONTINUATION" else "fade extensions toward VWAP" if state.orb_regime.regime == "MEAN_REVERSION" else "trade cautiously until ORB forms"}.
+Apply regime-aware strategy: {state.orb_regime.regime} means {"follow breakouts, don't fade" if state.orb_regime.regime == "TREND_CONTINUATION" else "fade extensions toward VWAP" if state.orb_regime.regime == "MEAN_REVERSION" else "no ORB yet — still trade BUYING+ flow, be cautious with LEAN"}.
 Remember: LEAN_BUYING/LEAN_SELLING are directional signals — enter with MED conviction if confirmed by regime, technicals, or breadth. Only MIXED = WAIT."""
 
 

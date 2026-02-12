@@ -27,6 +27,7 @@ from config.settings import (
     ENGINE_MONITOR_INTERVAL,
     ENGINE_MAX_TOKENS,
     CLASSIFIER_MODEL_ID,
+    CLASSIFIER_ALWAYS_LLM,
 )
 from trading_engine.classifier import classify_all, classify_flow, _get_window, MarketState
 from trading_engine.prompts import (
@@ -146,11 +147,16 @@ class TradingEngine:
             logger.warning("No SPY data available, skipping cycle")
             return
 
+        # 0. EVALUATE WAIT OUTCOMES — did we miss a trade last cycle?
+        current_price = spy_data.get("price", 0)
+        if current_price:
+            self._evaluate_wait_outcome(current_price)
+
         # 2. CLASSIFY (~1ms Python, +600ms if borderline → Haiku)
         state = classify_all(flow_data, spy_data, mag7_data)
 
-        # Hybrid: if SPY flow is borderline, let Haiku reclassify
-        if state.flow.borderline:
+        # Hybrid: Haiku classifies flow (always if flag set, otherwise only borderline)
+        if CLASSIFIER_ALWAYS_LLM or state.flow.borderline:
             llm_direction = await self._classify_flow_llm(flow_data, "SPY")
             if llm_direction and llm_direction != state.flow.direction:
                 print(f"  [hybrid] Haiku reclassified SPY flow: {state.flow.direction} → {llm_direction}")
@@ -160,7 +166,7 @@ class TradingEngine:
         # Print classified labels
         print(f"\n[v2] Cycle #{self.cycle_count} — {state.timestamp}")
         print(f"  Regime: {state.orb_regime.regime} (ORB ${state.orb_regime.range_dollars} = {state.orb_regime.range_pct:.3f}%)")
-        haiku_tag = " [LLM-classified]" if not state.flow.borderline and state.flow.direction in ("LEAN_BUYING", "LEAN_SELLING", "BUYING", "SELLING") and 0.4 < state.flow.ratio < 2.5 else ""
+        haiku_tag = " [LLM]" if CLASSIFIER_ALWAYS_LLM or (not state.flow.borderline and state.flow.direction in ("LEAN_BUYING", "LEAN_SELLING", "BUYING", "SELLING") and 0.4 < state.flow.ratio < 2.5) else ""
         print(f"  Flow: {state.flow.direction} {state.flow.ratio}:1 net={state.flow.net} {state.flow.momentum}{haiku_tag}")
         print(f"  RSI: {state.tech.rsi_state} ({state.tech.rsi_value}) | VWAP: {state.tech.vwap_position}")
         print(f"  Breadth: {state.breadth.bias} ({state.breadth.aligned_count}/7)")
@@ -429,3 +435,74 @@ class TradingEngine:
             if new_conv and new_conv != self.position.get("conviction"):
                 print(f"  >>> Conviction: {self.position['conviction']} → {new_conv}")
                 self.position["conviction"] = new_conv
+
+        # WAIT — snapshot for missed opportunity tracking (only when flow is directional)
+        elif action == "WAIT" and not self.position:
+            flow_dir = state.flow.direction
+            if flow_dir not in ("MIXED",):
+                self._snapshot_wait(state)
+
+    # ── WAIT outcome tracking ─────────────────────────────────
+
+    WAIT_SNAPSHOT_KEY = "zero_dte_v2:wait_snapshot"
+    WAIT_MOVE_THRESHOLD = 0.50  # $0.50 SPY move = meaningful missed opportunity
+
+    def _snapshot_wait(self, state: MarketState):
+        """Capture price + labels when LLM says WAIT on directional flow."""
+        now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
+        snapshot = {
+            "price": state.price,
+            "flow_direction": state.flow.direction,
+            "flow_ratio": state.flow.ratio,
+            "labels": state.to_prompt_text(),
+            "labels_hash": state.labels_hash(),
+            "session": state.session,
+            "time": now_pt.strftime("%H:%M"),
+            "ts": time.time(),
+        }
+        # Only keep the most recent WAIT — overwrite previous
+        self.redis.setex(self.WAIT_SNAPSHOT_KEY, 300, json.dumps(snapshot))
+
+    def _evaluate_wait_outcome(self, current_price: float):
+        """
+        Check if a previous WAIT was a missed opportunity.
+        If price moved > threshold in the direction flow suggested, store as MISSED_OPPORTUNITY.
+        """
+        raw = self.redis.get(self.WAIT_SNAPSHOT_KEY)
+        if not raw:
+            return
+
+        snap = json.loads(raw)
+        wait_price = snap.get("price", 0)
+        if not wait_price:
+            return
+
+        move = current_price - wait_price
+        abs_move = abs(move)
+
+        # Not enough movement to matter
+        if abs_move < self.WAIT_MOVE_THRESHOLD:
+            return
+
+        flow_dir = snap.get("flow_direction", "")
+        # Determine if this was a missed opportunity
+        # BUYING flow + price went UP = missed CALL
+        # SELLING flow + price went DOWN = missed PUT
+        buying_flow = flow_dir in ("STRONG_BUYING", "BUYING", "LEAN_BUYING")
+        selling_flow = flow_dir in ("STRONG_SELLING", "SELLING", "LEAN_SELLING")
+
+        if buying_flow and move > 0:
+            missed_action = "CALL"
+        elif selling_flow and move < 0:
+            missed_action = "PUT"
+        else:
+            # Flow was wrong direction or market moved against flow — not a miss
+            self.redis.delete(self.WAIT_SNAPSHOT_KEY)
+            return
+
+        # Store missed opportunity in memory
+        self.memory.record_wait_outcome_async(snap, current_price, missed_action, move)
+        self.redis.delete(self.WAIT_SNAPSHOT_KEY)
+
+        direction_word = "up" if move > 0 else "down"
+        print(f"  [memory] MISSED {missed_action}: WAIT at ${wait_price:.2f}, price moved {direction_word} ${abs_move:.2f} to ${current_price:.2f}")
