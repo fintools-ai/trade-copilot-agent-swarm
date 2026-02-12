@@ -198,7 +198,10 @@
     .state-row .v { color: var(--text); }
     .state-row .v.strong-buy { color: var(--green); font-weight: bold; }
     .state-row .v.buy { color: var(--green-dim); }
+    .state-row .v.lean-buy { color: var(--green-dim); opacity: 0.7; }
     .state-row .v.sell { color: var(--red-dim); }
+    .state-row .v.lean-sell { color: var(--red-dim); opacity: 0.7; }
+    .state-row .v.strong-sell { color: var(--red); font-weight: bold; }
     .state-row .v.strong-sell { color: var(--red); font-weight: bold; }
     .state-row .v.mixed { color: var(--text-muted); }
     .state-row .v.bullish { color: var(--green-dim); }
@@ -245,7 +248,7 @@
     }
 
     .chart-container {
-      height: 160px;
+      height: 240px;
       flex-shrink: 0;
       border-bottom: 1px solid var(--border);
       background: var(--bg);
@@ -538,7 +541,7 @@
 
       <!-- CENTER: CHART + REASONING -->
       <div class="center-panel">
-        <div class="panel-hdr">SPY <span class="dim" id="chart-label">intraday</span></div>
+        <div class="panel-hdr">SPY <span class="dim" id="chart-label">30s candles + VWAP</span></div>
         <div class="chart-container" id="chart-container"></div>
         <div class="panel-hdr">Claude Reasoning <span class="dim" id="reasoning-count">0</span></div>
         <div class="reasoning-scroll" id="reasoning-scroll"></div>
@@ -598,8 +601,11 @@ const state = {
   chartData: [],
 };
 
-// ── CHART SETUP ────────────────────────────────────────
-let chart, lineSeries, entryLine, stopLine, targetLine;
+// ── CHART SETUP — 30s Candlesticks + VWAP overlay ─────
+const CANDLE_SEC = 30;
+let chart, candleSeries, vwapSeries, entryLine, stopLine, targetLine;
+let candleMap = {};
+let lastVwap = null;
 
 function initChart() {
   const container = document.getElementById('chart-container');
@@ -617,9 +623,11 @@ function initChart() {
       timeVisible: true,
       secondsVisible: false,
       borderColor: '#222',
+      rightOffset: 3,
     },
     rightPriceScale: {
       borderColor: '#222',
+      autoScale: true,
     },
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
@@ -628,56 +636,81 @@ function initChart() {
     },
   });
 
-  lineSeries = chart.addLineSeries({
-    color: '#ff6600',
-    lineWidth: 2,
+  candleSeries = chart.addCandlestickSeries({
+    upColor: '#00cc66',
+    downColor: '#ff3333',
+    borderUpColor: '#00cc66',
+    borderDownColor: '#ff3333',
+    wickUpColor: '#00cc6680',
+    wickDownColor: '#ff333380',
     priceLineVisible: true,
     lastValueVisible: true,
   });
 
-  // Resize handler
+  vwapSeries = chart.addLineSeries({
+    color: '#3399ff',
+    lineWidth: 1,
+    lineStyle: LightweightCharts.LineStyle.Dashed,
+    priceLineVisible: false,
+    lastValueVisible: false,
+  });
+
   new ResizeObserver(() => {
     chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
   }).observe(container);
 }
 
 function updateChart(price) {
-  if (!price || !lineSeries) return;
-  const now = Math.floor(Date.now() / 1000);
-  // Deduplicate — only add if time advanced
-  const last = state.chartData[state.chartData.length - 1];
-  if (last && last.time >= now) {
-    last.value = price;
-    lineSeries.update(last);
+  if (!price || !candleSeries) return;
+  const rawTime = Math.floor(Date.now() / 1000);
+  const candleTime = rawTime - (rawTime % CANDLE_SEC);
+
+  if (candleMap[candleTime]) {
+    const c = candleMap[candleTime];
+    c.high = Math.max(c.high, price);
+    c.low = Math.min(c.low, price);
+    c.close = price;
+    candleSeries.update(c);
   } else {
-    const pt = { time: now, value: price };
-    state.chartData.push(pt);
-    lineSeries.update(pt);
+    const c = { time: candleTime, open: price, high: price, low: price, close: price };
+    candleMap[candleTime] = c;
+    candleSeries.update(c);
+  }
+
+  // Update VWAP at same candle time
+  if (lastVwap) {
+    vwapSeries.update({ time: candleTime, value: lastVwap });
+  }
+}
+
+function updateVwapFromState(d) {
+  // Compute VWAP = price - price_vs_vwap
+  if (d.price && d.price_vs_vwap !== undefined) {
+    lastVwap = Math.round((d.price - d.price_vs_vwap) * 100) / 100;
   }
 }
 
 function updateChartMarkers(entry, stop, target) {
-  // Remove old price lines
-  if (entryLine) { lineSeries.removePriceLine(entryLine); entryLine = null; }
-  if (stopLine) { lineSeries.removePriceLine(stopLine); stopLine = null; }
-  if (targetLine) { lineSeries.removePriceLine(targetLine); targetLine = null; }
+  if (entryLine) { candleSeries.removePriceLine(entryLine); entryLine = null; }
+  if (stopLine) { candleSeries.removePriceLine(stopLine); stopLine = null; }
+  if (targetLine) { candleSeries.removePriceLine(targetLine); targetLine = null; }
 
   if (entry) {
-    entryLine = lineSeries.createPriceLine({
+    entryLine = candleSeries.createPriceLine({
       price: entry, color: '#3399ff', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'Entry',
     });
   }
   if (stop) {
-    stopLine = lineSeries.createPriceLine({
+    stopLine = candleSeries.createPriceLine({
       price: stop, color: '#ff4444', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'Stop',
     });
   }
   if (target) {
-    targetLine = lineSeries.createPriceLine({
+    targetLine = candleSeries.createPriceLine({
       price: target, color: '#00cc00', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'Target',
@@ -703,8 +736,10 @@ function renderMd(text) {
 
 function flowClass(dir) {
   if (dir.includes('STRONG_BUY')) return 'strong-buy';
+  if (dir === 'LEAN_BUYING') return 'lean-buy';
   if (dir.includes('BUYING')) return 'buy';
   if (dir.includes('STRONG_SELL')) return 'strong-sell';
+  if (dir === 'LEAN_SELLING') return 'lean-sell';
   if (dir.includes('SELLING')) return 'sell';
   return 'mixed';
 }
@@ -772,7 +807,7 @@ function renderState(d) {
 
   // LLM tag
   const llmSpan = document.getElementById('st-flow-llm');
-  if (d.flow_borderline === false && d.flow_ratio > 0.33 && d.flow_ratio < 3.0) {
+  if (d.flow_borderline === false && d.flow_ratio > 0.4 && d.flow_ratio < 2.5) {
     llmSpan.innerHTML = '<span class="llm-tag">LLM</span>';
   } else {
     llmSpan.innerHTML = '';
@@ -823,7 +858,8 @@ function renderState(d) {
   }
   tickerDiv.innerHTML = tickerHtml;
 
-  // Update chart
+  // Update chart + VWAP overlay
+  updateVwapFromState(d);
   updateChart(d.price);
 }
 

@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 
 @dataclass
 class FlowLabel:
-    direction: str  # STRONG_BUYING, BUYING, MIXED, SELLING, STRONG_SELLING
+    direction: str  # STRONG_BUYING, BUYING, LEAN_BUYING, MIXED, LEAN_SELLING, SELLING, STRONG_SELLING
     ratio: float  # bid_lifts / bid_drops
     net: int  # bid_lifts - bid_drops
     momentum: str  # ACCELERATING, STEADY, FADING (5s vs 60s comparison)
@@ -41,21 +41,23 @@ def _get_window(ticker_data: dict, window: str) -> dict:
     return windows.get(window, {})
 
 
-# Tier 1 thresholds — clear-cut cases handled by Python
-_STRONG_BUY_RATIO = 3.0
-_STRONG_SELL_RATIO = 0.33
-_CLEAR_MIXED_LO = 0.9
-_CLEAR_MIXED_HI = 1.1
-# Borderline zone: ratio between these ranges → LLM decides
-# 1.1–1.5 (weak buying?), 0.7–0.9 (weak selling?), 1.5–3.0 (buying or strong?)
+# Tier 1 thresholds — wider directional bands, narrow MIXED zone
+_STRONG_BUY_RATIO = 2.5   # was 3.0 — strong buying is 2.5:1+
+_BUY_RATIO = 1.5          # clear buying
+_LEAN_BUY_RATIO = 1.15    # lean buying (was lumped into MIXED!)
+_LEAN_SELL_RATIO = 0.85    # lean selling
+_SELL_RATIO = 0.65         # clear selling
+_STRONG_SELL_RATIO = 0.4   # was 0.33 — strong selling is 0.4:1-
+# True MIXED: 0.85-1.15 ratio — genuinely balanced, no edge
+# Borderline: only the narrow gaps between tiers → LLM decides
 
 
 def classify_flow(flow_data: dict, symbol: str = "SPY") -> FlowLabel:
     """
     Classify order flow direction from WindowMetrics.
 
-    Tier 1: Python handles obvious cases (ratio > 3.0, < 0.33, 0.9-1.1)
-    Borderline cases (ratio 1.1-3.0 or 0.33-0.9) are flagged for LLM reclassification.
+    7 levels: STRONG_BUYING > BUYING > LEAN_BUYING > MIXED > LEAN_SELLING > SELLING > STRONG_SELLING
+    Tier 1 (Python): handles clear cases. Borderline gaps flagged for Haiku.
     """
     ticker_data = flow_data.get(symbol, {})
     if not ticker_data:
@@ -73,36 +75,41 @@ def classify_flow(flow_data: dict, symbol: str = "SPY") -> FlowLabel:
     net = bid_lifts - bid_drops
     ratio = bid_lifts / max(bid_drops, 1)
 
-    # Tier 1: clear-cut classification
+    # Tier 1: classify by ratio bands
     borderline = False
-    if ratio >= _STRONG_BUY_RATIO and net > 50:
+    if ratio >= _STRONG_BUY_RATIO and net > 30:
         direction = "STRONG_BUYING"
-    elif ratio <= _STRONG_SELL_RATIO and net < -50:
+    elif ratio >= _BUY_RATIO:
+        direction = "BUYING"
+    elif ratio >= _LEAN_BUY_RATIO:
+        direction = "LEAN_BUYING"
+    elif ratio <= _STRONG_SELL_RATIO and net < -30:
         direction = "STRONG_SELLING"
-    elif _CLEAR_MIXED_LO <= ratio <= _CLEAR_MIXED_HI:
-        direction = "MIXED"
+    elif ratio <= _SELL_RATIO:
+        direction = "SELLING"
+    elif ratio <= _LEAN_SELL_RATIO:
+        direction = "LEAN_SELLING"
     else:
-        # Borderline zone — Python makes a best guess, LLM can override
+        # True MIXED: ratio 0.85-1.15
+        direction = "MIXED"
+
+    # Flag borderline cases at tier boundaries for Haiku override
+    if direction in ("LEAN_BUYING", "LEAN_SELLING") or \
+       (direction == "MIXED" and (ratio < 0.9 or ratio > 1.1)):
         borderline = True
-        if ratio > 1.5:
-            direction = "BUYING"
-        elif ratio < 0.7:
-            direction = "SELLING"
-        else:
-            direction = "MIXED"
 
     # Momentum from 5s vs 60s trend
     w5 = _get_window(ticker_data, "5s")
     r5 = w5.get("bid_lifts", 0) / max(w5.get("bid_drops", 1), 1)
 
-    if direction in ("STRONG_BUYING", "BUYING"):
+    if direction in ("STRONG_BUYING", "BUYING", "LEAN_BUYING"):
         if r5 > ratio * 1.2:
             momentum = "ACCELERATING"
         elif r5 < ratio * 0.6:
             momentum = "FADING"
         else:
             momentum = "STEADY"
-    elif direction in ("STRONG_SELLING", "SELLING"):
+    elif direction in ("STRONG_SELLING", "SELLING", "LEAN_SELLING"):
         if r5 < ratio * 0.8:
             momentum = "ACCELERATING"
         elif r5 > ratio * 1.4:
@@ -323,8 +330,8 @@ def classify_mag7(mag7_data: dict, flow_data: dict) -> BreadthLabel:
             price_dir = "FLAT"
 
         flow_label = classify_flow(flow_data, sym)
-        flow_dir = "BUYING" if flow_label.direction in ("STRONG_BUYING", "BUYING") else \
-                   "SELLING" if flow_label.direction in ("STRONG_SELLING", "SELLING") else "MIXED"
+        flow_dir = "BUYING" if flow_label.direction in ("STRONG_BUYING", "BUYING", "LEAN_BUYING") else \
+                   "SELLING" if flow_label.direction in ("STRONG_SELLING", "SELLING", "LEAN_SELLING") else "MIXED"
 
         aligned = (price_dir == "UP" and flow_dir == "BUYING") or \
                   (price_dir == "DOWN" and flow_dir == "SELLING") or \

@@ -4,9 +4,9 @@ Bedrock AgentCore v2 memory — the learning brain.
 Uses MemoryClient SDK (snake_case) — same proven pattern as oi/memory.py.
 Separate store from v1 (zero_dte_outcomes_v2).
 
-Two namespaces:
-- /facts/trader/SPY/         — Episodic: individual trade outcomes with classified labels
-- /summaries/patterns/SPY/   — Semantic: extracted rules/anti-patterns from daily consolidation
+Two namespaces (both semanticMemoryStrategy → both use /facts/ prefix):
+- /facts/trader/SPY/         — Trade outcomes with classified labels
+- /facts/patterns/SPY/       — Extracted rules/anti-patterns from daily consolidation
 
 Hash-cached recall: only queries AgentCore when classified labels actually change.
 """
@@ -155,12 +155,12 @@ class MemoryStore:
         search_text = market_state.to_search_text()
         results = []
 
-        # Search trade outcomes (summaries namespace — auto-extracted by AgentCore)
+        # Search trade outcomes (facts namespace — matches semanticMemoryStrategy config)
         try:
             t0 = time.time()
             records = client.retrieve_memories(
                 memory_id=memory_id,
-                namespace="/summaries/trader/SPY/",
+                namespace="/facts/trader/SPY/",
                 query=search_text,
                 top_k=5,
             )
@@ -178,12 +178,12 @@ class MemoryStore:
         except Exception as e:
             logger.warning(f"v2 memory: outcome recall failed: {e}")
 
-        # Search learned patterns
+        # Search learned patterns (facts/patterns namespace — matches 2nd semanticMemoryStrategy)
         try:
             t0 = time.time()
             records = client.retrieve_memories(
                 memory_id=memory_id,
-                namespace="/summaries/patterns/SPY/",
+                namespace="/facts/patterns/SPY/",
                 query=search_text,
                 top_k=10,
             )
@@ -362,7 +362,7 @@ class MemoryStore:
         try:
             records = client.retrieve_memories(
                 memory_id=memory_id,
-                namespace="/summaries/trader/SPY/",
+                namespace="/facts/trader/SPY/",
                 query=f"OUTCOME trade on {today}",
                 top_k=20,
             )

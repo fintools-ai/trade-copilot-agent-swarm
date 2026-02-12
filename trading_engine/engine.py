@@ -160,8 +160,8 @@ class TradingEngine:
         # Print classified labels
         print(f"\n[v2] Cycle #{self.cycle_count} — {state.timestamp}")
         print(f"  Regime: {state.orb_regime.regime} (ORB ${state.orb_regime.range_dollars} = {state.orb_regime.range_pct:.3f}%)")
-        print(f"  Flow: {state.flow.direction} {state.flow.ratio}:1 {state.flow.momentum}" +
-              (" [LLM-classified]" if not state.flow.borderline and state.flow.ratio > 0.33 and state.flow.ratio < 3.0 else ""))
+        haiku_tag = " [LLM-classified]" if not state.flow.borderline and state.flow.direction in ("LEAN_BUYING", "LEAN_SELLING", "BUYING", "SELLING") and 0.4 < state.flow.ratio < 2.5 else ""
+        print(f"  Flow: {state.flow.direction} {state.flow.ratio}:1 net={state.flow.net} {state.flow.momentum}{haiku_tag}")
         print(f"  RSI: {state.tech.rsi_state} ({state.tech.rsi_value}) | VWAP: {state.tech.vwap_position}")
         print(f"  Breadth: {state.breadth.bias} ({state.breadth.aligned_count}/7)")
         if state.breadth.divergent_tickers:
@@ -262,6 +262,7 @@ class TradingEngine:
             body = json.dumps({
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": ENGINE_MAX_TOKENS,
+                "temperature": 0,
                 "system": SYSTEM_PROMPT,
                 "messages": [
                     {"role": "user", "content": user_prompt}
@@ -293,9 +294,10 @@ class TradingEngine:
         loop = asyncio.get_event_loop()
         ticker_data = flow_data.get(symbol, {})
         w60 = _get_window(ticker_data, "60s")
+        w5 = _get_window(ticker_data, "5s")
 
         def _invoke():
-            user_text = build_flow_classifier_prompt(w60)
+            user_text = build_flow_classifier_prompt(w60, w5)
             response = self.bedrock.converse(
                 modelId=CLASSIFIER_MODEL_ID,
                 system=[
@@ -305,7 +307,7 @@ class TradingEngine:
                 messages=[
                     {"role": "user", "content": [{"text": user_text}]}
                 ],
-                inferenceConfig={"maxTokens": 100, "temperature": 0},
+                inferenceConfig={"maxTokens": 200, "temperature": 0},
             )
             text = response["output"]["message"]["content"][0]["text"]
             parsed = json.loads(text)
