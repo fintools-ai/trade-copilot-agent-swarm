@@ -193,6 +193,21 @@ class TradingEngine:
 
         # 8. PUBLISH TO UI
         mode = "monitor" if self.position else "scan"
+        total = time.time() - t0
+
+        # Structured events for v2 engine dashboard
+        publish_event("V2_STATE", "", self._state_to_dict(state))
+        publish_event("V2_MEMORY", "", {
+            "items": memories or [],
+            "count": len(memories or []),
+            "labels_hash": state.labels_hash(),
+        })
+        if self.position:
+            publish_event("V2_POSITION", "", {
+                "active": True, **self.position,
+            })
+
+        # Legacy events (v1 terminal compatibility)
         publish_event(
             "AGENT_QUESTION",
             f"[v2] {mode} cycle #{self.cycle_count}",
@@ -201,10 +216,9 @@ class TradingEngine:
         publish_event(
             "SWARM_RESPONSE",
             response_text + f"\n\n---\n*[v2 Engine | {latency:.1f}s]*",
-            signal_data,
+            {**signal_data, "cycle": self.cycle_count, "total_time": round(total, 1)},
         )
 
-        total = time.time() - t0
         print(f"  Signal: {signal_data.get('action', '?')} | {signal_data.get('conviction', '?')} | {latency:.1f}s LLM | {total:.1f}s total")
 
     async def _fetch_data(self) -> tuple[dict, dict, dict]:
@@ -304,6 +318,58 @@ class TradingEngine:
             logger.warning(f"Haiku flow classification failed: {e}")
             return None
 
+    def _state_to_dict(self, state: MarketState) -> dict:
+        """Convert MarketState to a flat dict for SSE publishing."""
+        return {
+            "price": state.price,
+            "timestamp": state.timestamp,
+            "session": state.session,
+            # ORB Regime
+            "regime": state.orb_regime.regime,
+            "regime_confidence": state.orb_regime.confidence,
+            "orb_range": state.orb_regime.range_dollars,
+            "orb_pct": state.orb_regime.range_pct,
+            "orb_direction": state.orb_regime.direction,
+            # Flow
+            "flow_direction": state.flow.direction,
+            "flow_ratio": state.flow.ratio,
+            "flow_net": state.flow.net,
+            "flow_momentum": state.flow.momentum,
+            "flow_borderline": state.flow.borderline,
+            "flow_bid_lifts": state.flow.bid_lifts_60,
+            "flow_bid_drops": state.flow.bid_drops_60,
+            "flow_ask_lifts": state.flow.ask_lifts_60,
+            "flow_ask_drops": state.flow.ask_drops_60,
+            "flow_bid_vol": state.flow.bid_vol_60,
+            "flow_ask_vol": state.flow.ask_vol_60,
+            # Technicals
+            "rsi_state": state.tech.rsi_state,
+            "rsi_value": state.tech.rsi_value,
+            "vwap_position": state.tech.vwap_position,
+            "price_vs_vwap": state.tech.price_vs_vwap,
+            "ema_cross": state.tech.ema_cross,
+            "macd_state": state.tech.macd_state,
+            "macd_histogram": state.tech.macd_histogram,
+            "orb_status": state.tech.orb_status,
+            # Breadth
+            "breadth_bias": state.breadth.bias,
+            "breadth_aligned": state.breadth.aligned_count,
+            "breadth_divergent": state.breadth.divergent_tickers,
+            "breadth_tickers": [
+                {
+                    "symbol": t.symbol,
+                    "price_dir": t.price_direction,
+                    "change_pct": t.change_pct,
+                    "flow_dir": t.flow.direction,
+                    "flow_ratio": t.flow.ratio,
+                    "flow_net": t.flow.net,
+                    "aligned": t.aligned,
+                    "divergent": t.divergent,
+                }
+                for t in state.breadth.per_ticker
+            ],
+        }
+
     def _parse_signal(self, response_text: str) -> dict:
         """Extract JSON signal from the last line of response."""
         lines = response_text.strip().split("\n")
@@ -337,11 +403,17 @@ class TradingEngine:
                 "entry_time": state.timestamp,
             }
             self.memory.record_entry(signal_data, state)
+            publish_event("V2_POSITION", "", {"active": True, "event": "ENTRY", **self.position})
             print(f"  >>> ENTERED {action} @ ${signal_data.get('entry')}")
 
         # EXIT — close position
         elif action == "EXIT" and self.position:
             signal_data["price"] = signal_data.get("price", state.price)
+            publish_event("V2_POSITION", "", {
+                "active": False, "event": "EXIT",
+                "exit_price": signal_data.get("price"),
+                **self.position,
+            })
             self.memory.record_outcome_async(signal_data)
             print(f"  >>> EXITED {self.position['action']} @ ${signal_data.get('price')}")
             self.position = None
