@@ -6,7 +6,7 @@ Separate store from v1 (zero_dte_outcomes_v2).
 
 Two namespaces (both semanticMemoryStrategy → both use /facts/ prefix):
 - /facts/trader/SPY/         — Trade outcomes + missed opportunities
-- /facts/patterns/SPY/       — Extracted rules from daily consolidation
+- All records (outcomes, missed opps, learned rules) in /facts/trader/SPY/
 
 CRITICAL DESIGN DECISION:
 - WRITES use batch_create_memory_records (boto3 data plane, camelCase)
@@ -87,7 +87,7 @@ class MemoryStore:
                     {"semanticMemoryStrategy": {
                         "name": "trade_memory",
                         "description": "Trade outcomes, missed opportunities, and learned patterns",
-                        "namespaces": ["/facts/{actorId}/", "/facts/patterns/{actorId}/"],
+                        "namespaces": ["/facts/{actorId}/"],
                     }},
                 ],
                 event_expiry_days=30,
@@ -212,7 +212,7 @@ class MemoryStore:
                 memory_id=memory_id,
                 namespace="/facts/trader/SPY/",
                 query=search_text,
-                top_k=5,
+                top_k=10,
             )
             for record in records:
                 text = self._extract_text(record)
@@ -224,23 +224,18 @@ class MemoryStore:
             logger.warning(f"v2 memory: outcome recall failed: {e}")
 
         # Search learned patterns
-        # Namespace: /facts/patterns/SPY/ (strategy /facts/patterns/{actorId}/ with actorId=SPY)
-        try:
-            t0 = time.time()
-            records = client.retrieve_memories(
-                memory_id=memory_id,
-                namespace="/facts/patterns/SPY/",
-                query=search_text,
-                top_k=10,
-            )
-            for record in records:
-                text = self._extract_text(record)
-                if text:
-                    results.append(f"[LEARNED RULE] {text}")
-            dur = time.time() - t0
-            logger.info(f"v2 memory: recalled {len(results)} total incl patterns ({dur:.1f}s)")
-        except Exception as e:
-            logger.warning(f"v2 memory: pattern recall failed: {e}")
+        # Learned rules are in the same namespace, prefixed with [LEARNED RULE] in content.
+        # They're already included in the search above since everything is in /facts/trader/SPY/.
+        # Tag any results that look like learned rules.
+        tagged = []
+        for r in results:
+            if r.startswith("[LEARNED RULE]") or r.startswith("OUTCOME:") or r.startswith("MISSED_OPPORTUNITY:"):
+                tagged.append(r)
+            elif "IF " in r and " → " in r:
+                tagged.append(f"[LEARNED RULE] {r}")
+            else:
+                tagged.append(r)
+        results = tagged
 
         self._last_recall_hash = current_hash
         self._last_recall_result = results
@@ -395,17 +390,15 @@ class MemoryStore:
     def store_patterns(self, patterns: list[str]):
         """
         Store extracted patterns from daily consolidation.
-        Writes DIRECTLY to /facts/patterns/SPY/ (immediately searchable).
-
-        actor_id="SPY" so namespace resolves to /facts/patterns/SPY/
-        (NOT actor_id="patterns/SPY" which would create /facts/patterns/patterns/SPY/).
+        Writes DIRECTLY to /facts/trader/SPY/ (same namespace as outcomes).
+        Content is prefixed with rule text so semantic search finds it.
         """
         today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
         stored = 0
         for i, pattern in enumerate(patterns):
             record_id = f"pattern-{today}-{i}"
-            dur = self._write_record("/facts/patterns/SPY/", pattern, record_id)
+            dur = self._write_record("/facts/trader/SPY/", f"[LEARNED RULE] {pattern}", record_id)
             if dur is not None:
                 stored += 1
 
@@ -455,7 +448,7 @@ class MemoryStore:
 
         result = {"memory_id": memory_id, "namespaces": {}}
 
-        for ns in ["/facts/trader/SPY/", "/facts/patterns/SPY/"]:
+        for ns in ["/facts/trader/SPY/"]:
             try:
                 records = self.data_client.list_memory_records(
                     memoryId=memory_id,
