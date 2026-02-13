@@ -19,13 +19,15 @@ from zoneinfo import ZoneInfo
 import boto3
 import redis
 import requests
+from strands import Agent
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 
 from config.settings import (
     AWS_REGION,
     ENGINE_MODEL_ID,
     ENGINE_SCAN_INTERVAL,
     ENGINE_MONITOR_INTERVAL,
-    ENGINE_MAX_TOKENS,
+    ENGINE_CONVERSATION_WINDOW,
     CLASSIFIER_MODEL_ID,
     CLASSIFIER_ALWAYS_LLM,
 )
@@ -34,6 +36,7 @@ from trading_engine.prompts import (
     SYSTEM_PROMPT, build_scan_prompt, build_monitor_prompt,
     FLOW_CLASSIFIER_SYSTEM, build_flow_classifier_prompt,
 )
+from trading_engine.tools import create_engine_tools
 from trading_engine.memory import MemoryStore
 from trading_engine.consolidator import consolidate
 from redis_stream import publish_event
@@ -57,6 +60,12 @@ class TradingEngine:
         self.poller_proc = None
         self._shutdown = asyncio.Event()
 
+        # Strands Agent state
+        self.agent = None  # Created once, persists all day with conversation history
+        self._current_state = None  # Set before each agent call (MarketState)
+        self._current_memories = None  # Set before each agent call (list[str])
+        self._wait_streak = 0  # Consecutive WAIT count
+
     async def run(self):
         """Main loop: start poller, run cycles until market close, then consolidate."""
         pt_tz = ZoneInfo("America/Los_Angeles")
@@ -76,6 +85,9 @@ class TradingEngine:
         # Initialize memory store (background, don't block)
         asyncio.get_event_loop().run_in_executor(None, self.memory.get_or_create_memory)
 
+        # Create Strands Agent (persistent conversation history)
+        self._create_agent()
+
         # Wait for first poller data
         print("[v2] Waiting for market data...")
         for _ in range(30):
@@ -83,8 +95,8 @@ class TradingEngine:
                 break
             await asyncio.sleep(1)
 
-        print(f"[v2] Engine started — model: {ENGINE_MODEL_ID}")
-        publish_event("ENGINE_STATUS", "v2 engine started", {"version": "v2"})
+        print(f"[v2] Agent created — model: {ENGINE_MODEL_ID}, window: {ENGINE_CONVERSATION_WINDOW}")
+        publish_event("ENGINE_STATUS", "v2 engine started", {"version": "v2", "agent": True})
 
         try:
             while not self._shutdown.is_set():
@@ -176,28 +188,38 @@ class TradingEngine:
         # 3. RECALL (hash-cached)
         memories = await asyncio.get_event_loop().run_in_executor(None, self.memory.recall, state)
 
-        # 4. BUILD PROMPT
+        # 4. STORE STATE + MEMORIES on engine instance (tools read these)
+        self._current_state = state
+        self._current_memories = memories
+
+        # 5. BUILD PROMPT (data inline + wait streak warning)
         if self.position:
             user_prompt = build_monitor_prompt(state, self.position, memories)
         else:
-            user_prompt = build_scan_prompt(state, memories)
+            user_prompt = build_scan_prompt(state, memories, wait_streak=self._wait_streak)
 
-        # 5. SYNTHESIZE (Claude Sonnet 4.5)
+        # 6. SYNTHESIZE (Strands Agent with conversation history)
         query_start_ts = time.time()
-        response_text = await self._call_claude(user_prompt)
+        response_text = await self._invoke_agent(user_prompt)
         latency = time.time() - query_start_ts
 
         if not response_text:
             return
 
-        # 6. PARSE SIGNAL
+        # 7. PARSE SIGNAL
         signal_data = self._parse_signal(response_text)
         signal_data["latency"] = round(latency, 1)
 
-        # 7. ACT
+        # 8. TRACK WAIT STREAK
+        if signal_data.get("action") == "WAIT":
+            self._wait_streak += 1
+        else:
+            self._wait_streak = 0
+
+        # 9. ACT
         self._act(signal_data, state, response_text)
 
-        # 8. PUBLISH TO UI
+        # 10. PUBLISH TO UI
         mode = "monitor" if self.position else "scan"
         total = time.time() - t0
 
@@ -225,10 +247,11 @@ class TradingEngine:
         publish_event(
             "SWARM_RESPONSE",
             response_text + f"\n\n---\n*[v2 Engine | {latency:.1f}s]*",
-            {**signal_data, "cycle": self.cycle_count, "total_time": round(total, 1)},
+            {**signal_data, "cycle": self.cycle_count, "total_time": round(total, 1), "wait_streak": self._wait_streak},
         )
 
-        print(f"  Signal: {signal_data.get('action', '?')} | {signal_data.get('conviction', '?')} | {latency:.1f}s LLM | {total:.1f}s total")
+        streak_tag = f" | streak={self._wait_streak}" if self._wait_streak >= 2 else ""
+        print(f"  Signal: {signal_data.get('action', '?')} | {signal_data.get('conviction', '?')} | {latency:.1f}s LLM | {total:.1f}s total{streak_tag}")
 
     async def _fetch_data(self) -> tuple[dict, dict, dict]:
         """Fetch order flow, SPY data, and Mag7 data in parallel."""
@@ -260,36 +283,39 @@ class TradingEngine:
 
         return flow_data, spy_data, mag7_data
 
-    async def _call_claude(self, user_prompt: str) -> str:
-        """Call Claude Sonnet 4.5 via Bedrock invoke_model."""
+    def _create_agent(self):
+        """Create the persistent Strands Agent with tools and sliding window history."""
+        tools = create_engine_tools(self)
+        self.agent = Agent(
+            model=ENGINE_MODEL_ID,
+            system_prompt=SYSTEM_PROMPT,
+            tools=tools,
+            conversation_manager=SlidingWindowConversationManager(
+                window_size=ENGINE_CONVERSATION_WINDOW,
+                should_truncate_results=True,
+            ),
+        )
+        logger.info(f"Strands Agent created — model: {ENGINE_MODEL_ID}, window: {ENGINE_CONVERSATION_WINDOW}")
+
+    async def _invoke_agent(self, user_prompt: str) -> str:
+        """Call the Strands Agent from the async event loop via run_in_executor.
+
+        The agent has conversation history from previous cycles and tools
+        to access market state, memory, and position. Data is also provided
+        inline in the prompt so the agent usually makes 0 tool calls (single LLM round-trip).
+        """
         loop = asyncio.get_event_loop()
 
-        def _invoke():
-            body = json.dumps({
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": ENGINE_MAX_TOKENS,
-                "temperature": 0,
-                "system": SYSTEM_PROMPT,
-                "messages": [
-                    {"role": "user", "content": user_prompt}
-                ],
-            })
-
-            response = self.bedrock.invoke_model(
-                modelId=ENGINE_MODEL_ID,
-                contentType="application/json",
-                accept="application/json",
-                body=body,
-            )
-
-            result = json.loads(response["body"].read())
-            return result["content"][0]["text"]
+        def _call():
+            result = self.agent(user_prompt)
+            # Strands Agent returns an AgentResult; extract the text
+            return str(result)
 
         try:
-            return await loop.run_in_executor(None, _invoke)
+            return await loop.run_in_executor(None, _call)
         except Exception as e:
-            logger.error(f"Claude call failed: {e}")
-            print(f"  [v2] Claude error: {e}")
+            logger.error(f"Agent call failed: {e}")
+            print(f"  [v2] Agent error: {e}")
             return ""
 
     async def _classify_flow_llm(self, flow_data: dict, symbol: str) -> str:

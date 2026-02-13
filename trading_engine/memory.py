@@ -1,12 +1,20 @@
 """
 Bedrock AgentCore v2 memory — the learning brain.
 
-Uses MemoryClient SDK (snake_case) — same proven pattern as oi/memory.py.
+Uses MemoryClient SDK (snake_case) for retrieval + boto3 data plane for writes.
 Separate store from v1 (zero_dte_outcomes_v2).
 
 Two namespaces (both semanticMemoryStrategy → both use /facts/ prefix):
-- /facts/trader/SPY/         — Trade outcomes with classified labels
-- /facts/patterns/SPY/       — Extracted rules/anti-patterns from daily consolidation
+- /facts/trader/SPY/         — Trade outcomes + missed opportunities
+- /facts/patterns/SPY/       — Extracted rules from daily consolidation
+
+CRITICAL DESIGN DECISION:
+- WRITES use batch_create_memory_records (boto3 data plane, camelCase)
+  Records are IMMEDIATELY searchable — no 60s async extraction delay.
+- READS use retrieve_memories (MemoryClient SDK, snake_case)
+  Semantic search over records in the target namespace.
+- create_event is NOT used — it triggers async extraction that takes 60+ seconds,
+  meaning records were never available for the next cycle (10s interval).
 
 Hash-cached recall: only queries AgentCore when classified labels actually change.
 """
@@ -15,6 +23,7 @@ import json
 import time
 import logging
 import threading
+import uuid
 import boto3
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -31,13 +40,14 @@ class MemoryStore:
     def __init__(self):
         self._memory_client = None
         self._control_client = None
+        self._data_client = None
         self._memory_id = None
         self._last_recall_hash = None
         self._last_recall_result: list[str] = []
 
     @property
     def memory_client(self):
-        """MemoryClient SDK — snake_case params, handles events + retrieval."""
+        """MemoryClient SDK — snake_case params, for retrieval."""
         if self._memory_client is None:
             self._memory_client = MemoryClient(region_name=AWS_REGION)
         return self._memory_client
@@ -49,56 +59,28 @@ class MemoryStore:
             self._control_client = boto3.client("bedrock-agentcore-control", region_name=AWS_REGION)
         return self._control_client
 
+    @property
+    def data_client(self):
+        """boto3 data plane — camelCase, for batch_create_memory_records (immediate writes)."""
+        if self._data_client is None:
+            self._data_client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
+        return self._data_client
+
     def get_or_create_memory(self) -> str:
         """
         Find or create the 'zero_dte_v2' memory store. Returns memoryId.
 
-        Strategy (matches oi/memory.py):
-        1. list_memories via MemoryClient (returns dicts with 'id' key, NO 'name')
-        2. For each, try ID prefix match, then get_memory for name check
-        3. If not found, create with create_memory_and_wait
-        4. If "already exists" error, retry listing
+        Uses create_or_get_memory (idempotent) — returns existing if name matches,
+        creates if not found. Falls back to list + name lookup if that fails.
         """
         if self._memory_id is not None:
             return self._memory_id
 
         client = self.memory_client
-        control = self.control_client
 
-        # Step 1: List memories and resolve by name
+        # Try idempotent create_or_get_memory first
         try:
-            memories = client.list_memories()
-            logger.info(f"v2 memory: list_memories returned {len(memories)} entries")
-
-            for mem in memories:
-                mid = mem.get("id", "")
-                if not mid:
-                    continue
-
-                # ID prefix match (IDs often start with the name)
-                if mid.startswith(ENGINE_MEMORY_NAME):
-                    self._memory_id = mid
-                    logger.info(f"v2 memory: found by ID prefix: {self._memory_id}")
-                    return self._memory_id
-
-                # Try get_memory via control plane to check actual name
-                try:
-                    detail = control.get_memory(memoryId=mid)
-                    mem_detail = detail.get("memory", detail)
-                    name = mem_detail.get("name", "")
-                    if name == ENGINE_MEMORY_NAME:
-                        self._memory_id = mid
-                        logger.info(f"v2 memory: found by name lookup: {self._memory_id}")
-                        return self._memory_id
-                except Exception:
-                    pass
-
-        except Exception as e:
-            logger.warning(f"v2 memory: list_memories failed: {e}")
-
-        # Step 2: Not found — create
-        try:
-            result = client.create_memory_and_wait(
+            result = client.create_or_get_memory(
                 name=ENGINE_MEMORY_NAME,
                 description="0DTE v2 trading engine — trade outcomes + learned patterns",
                 strategies=[
@@ -115,28 +97,101 @@ class MemoryStore:
                 ],
                 event_expiry_days=30,
             )
-            # MemoryClient returns "id", not "memoryId"
             self._memory_id = result.get("id") or result.get("memoryId", "")
-            logger.info(f"v2 memory: created store: {self._memory_id}")
+            logger.info(f"v2 memory: store ready: {self._memory_id}")
+            print(f"[v2] Memory store ready: {self._memory_id[:20]}...")
             return self._memory_id
 
         except Exception as e:
-            if "already exists" in str(e).lower():
-                logger.warning("v2 memory: store already exists, retrying list...")
+            logger.warning(f"v2 memory: create_or_get_memory failed: {e}, falling back to list")
+
+        # Fallback: list + name lookup via control plane
+        try:
+            control = self.control_client
+            memories = client.list_memories()
+            logger.info(f"v2 memory: list_memories returned {len(memories)} entries")
+
+            for mem in memories:
+                mid = mem.get("id", "")
+                if not mid:
+                    continue
+                if mid.startswith(ENGINE_MEMORY_NAME):
+                    self._memory_id = mid
+                    logger.info(f"v2 memory: found by ID prefix: {self._memory_id}")
+                    return self._memory_id
                 try:
-                    memories = client.list_memories()
-                    for mem in memories:
-                        mid = mem.get("id", "")
-                        if mid and mid.startswith(ENGINE_MEMORY_NAME):
-                            self._memory_id = mid
-                            logger.info(f"v2 memory: found on retry: {self._memory_id}")
-                            return self._memory_id
-                except Exception as e2:
-                    logger.error(f"v2 memory: retry list failed: {e2}")
-            else:
-                logger.error(f"v2 memory: create failed: {e}")
+                    detail = control.get_memory(memoryId=mid)
+                    mem_detail = detail.get("memory", detail)
+                    name = mem_detail.get("name", "")
+                    if name == ENGINE_MEMORY_NAME:
+                        self._memory_id = mid
+                        logger.info(f"v2 memory: found by name lookup: {self._memory_id}")
+                        return self._memory_id
+                except Exception:
+                    pass
+
+        except Exception as e:
+            logger.error(f"v2 memory: fallback list failed: {e}")
 
         return self._memory_id
+
+    def _write_record(self, namespace: str, content: str, record_id: str = None):
+        """
+        Write a memory record DIRECTLY via batch_create_memory_records.
+
+        Records are immediately searchable — no async extraction delay.
+        This bypasses the create_event → extraction pipeline which takes 60+ seconds.
+        """
+        memory_id = self.get_or_create_memory()
+        if not memory_id:
+            logger.warning("v2 memory: no memory_id, skipping write")
+            return
+
+        if not record_id:
+            record_id = str(uuid.uuid4())
+
+        try:
+            t0 = time.time()
+            self.data_client.batch_create_memory_records(
+                memoryId=memory_id,
+                records=[{
+                    "requestIdentifier": record_id,
+                    "namespaces": [namespace],
+                    "content": {"text": content},
+                    "timestamp": datetime.now(ZoneInfo("America/Los_Angeles")),
+                }],
+            )
+            dur = time.time() - t0
+            logger.info(f"v2 memory: wrote record to {namespace} ({dur:.1f}s)")
+            return dur
+        except Exception as e:
+            logger.error(f"v2 memory: batch_create_memory_records failed: {e}")
+            # Fallback: try create_event (async, but at least stores the data)
+            try:
+                logger.info("v2 memory: falling back to create_event")
+                today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
+                # Extract actor_id from namespace: /facts/trader/SPY/ → trader/SPY
+                parts = namespace.strip("/").split("/")
+                actor_id = "/".join(parts[1:]) if len(parts) > 1 else "trader/SPY"
+                self.memory_client.create_event(
+                    memory_id=memory_id,
+                    actor_id=actor_id,
+                    session_id=f"trades-{today}",
+                    messages=[(content, "ASSISTANT")],
+                )
+                logger.info("v2 memory: fallback create_event succeeded (async extraction, 60s+ delay)")
+            except Exception as e2:
+                logger.error(f"v2 memory: fallback create_event also failed: {e2}")
+            return None
+
+    def _extract_text(self, record: dict) -> str:
+        """Extract text content from a memory record (handles both dict and str content)."""
+        content = record.get("content", {})
+        if isinstance(content, dict):
+            return content.get("text", "")
+        elif isinstance(content, str):
+            return content
+        return str(content) if content else ""
 
     def recall(self, market_state) -> list[str]:
         """
@@ -155,7 +210,7 @@ class MemoryStore:
         search_text = market_state.to_search_text()
         results = []
 
-        # Search trade outcomes (facts namespace — matches semanticMemoryStrategy config)
+        # Search trade outcomes
         try:
             t0 = time.time()
             records = client.retrieve_memories(
@@ -165,20 +220,16 @@ class MemoryStore:
                 top_k=5,
             )
             for record in records:
-                content = record.get("content", {})
-                if isinstance(content, dict):
-                    text = content.get("text", "")
-                elif isinstance(content, str):
-                    text = content
-                else:
-                    text = str(content)
+                text = self._extract_text(record)
                 if text:
                     results.append(text)
-            logger.info(f"v2 memory: recalled {len(results)} outcomes ({time.time()-t0:.1f}s)")
+            dur = time.time() - t0
+            logger.info(f"v2 memory: recalled {len(results)} outcomes ({dur:.1f}s)")
         except Exception as e:
             logger.warning(f"v2 memory: outcome recall failed: {e}")
 
-        # Search learned patterns (facts/patterns namespace — matches 2nd semanticMemoryStrategy)
+        # Search learned patterns
+        # Namespace: /facts/patterns/SPY/ (strategy /facts/patterns/{actorId}/ with actorId=SPY)
         try:
             t0 = time.time()
             records = client.retrieve_memories(
@@ -188,16 +239,11 @@ class MemoryStore:
                 top_k=10,
             )
             for record in records:
-                content = record.get("content", {})
-                if isinstance(content, dict):
-                    text = content.get("text", "")
-                elif isinstance(content, str):
-                    text = content
-                else:
-                    text = str(content)
+                text = self._extract_text(record)
                 if text:
                     results.append(f"[LEARNED RULE] {text}")
-            logger.info(f"v2 memory: recalled patterns ({time.time()-t0:.1f}s)")
+            dur = time.time() - t0
+            logger.info(f"v2 memory: recalled {len(results)} total incl patterns ({dur:.1f}s)")
         except Exception as e:
             logger.warning(f"v2 memory: pattern recall failed: {e}")
 
@@ -243,9 +289,8 @@ class MemoryStore:
 
     def record_outcome(self, exit_signal: dict):
         """
-        Compute WIN/LOSS, store to AgentCore with classified labels.
-        Uses MemoryClient.create_event (snake_case, messages as tuples).
-        Runs in background thread — never blocks the main loop.
+        Compute WIN/LOSS, write DIRECTLY to AgentCore (immediately searchable).
+        Uses batch_create_memory_records (boto3 data plane) — NOT create_event.
         """
         import redis
         r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
@@ -272,7 +317,6 @@ class MemoryStore:
             now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
             today = now_pt.strftime("%Y-%m-%d")
 
-            # Content with classified labels (not raw numbers)
             pnl = abs(exit_price - entry_price)
             pnl_sign = "+" if result == "WIN" else "-"
             content = (
@@ -283,30 +327,19 @@ class MemoryStore:
                 f"Exit: ${exit_price} at {now_pt.strftime('%H:%M')} on {today}"
             )
 
-            memory_id = self.get_or_create_memory()
-            if not memory_id:
-                return
-
-            t0 = time.time()
-
-            # MemoryClient: snake_case, messages as tuples
-            self.memory_client.create_event(
-                memory_id=memory_id,
-                actor_id="trader/SPY",
-                session_id=f"trades-{today}",
-                messages=[(content, "ASSISTANT")],
-            )
+            record_id = f"outcome-{action}-{today}-{now_pt.strftime('%H%M')}"
+            dur = self._write_record("/facts/trader/SPY/", content, record_id)
 
             # Clear entry snapshot
             r.delete("zero_dte_v2:entry_snapshot")
 
-            dur = time.time() - t0
-            logger.info(f"v2 memory: stored {result} {action} ${entry_price}→${exit_price} ({dur:.1f}s)")
+            dur_str = f"{dur:.1f}s" if dur else "fallback"
+            logger.info(f"v2 memory: stored {result} {action} ${entry_price}→${exit_price} ({dur_str})")
             print(f"\n{'='*60}")
             print(f" V2 OUTCOME STORED: {result}")
             print(f"{'='*60}")
             print(f"  {action} ${entry_price} → ${exit_price} ({pnl_sign}${pnl:.2f})")
-            print(f"  Bedrock write: {dur:.1f}s")
+            print(f"  Bedrock write: {dur_str}")
             print(f"{'='*60}\n")
 
         except Exception as e:
@@ -318,18 +351,13 @@ class MemoryStore:
 
     def record_wait_outcome(self, wait_snap: dict, current_price: float, missed_action: str, move: float):
         """
-        Store missed opportunity in AgentCore — teaches the LLM what happens when it WAITs
-        on directional flow.
+        Store missed opportunity DIRECTLY in AgentCore (immediately searchable).
 
         Content format:
         MISSED_OPPORTUNITY: WAIT → should have been CALL | Flow LEAN_BUYING 1.3:1 | ...
-        Price at WAIT: $582.00 → moved to $583.50 (+$1.50) in ~30s
+        Price at WAIT: $582.00 → moved to $583.50 (+$1.50)
         """
         try:
-            memory_id = self.get_or_create_memory()
-            if not memory_id:
-                return
-
             now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
             today = now_pt.strftime("%Y-%m-%d")
             abs_move = abs(move)
@@ -345,22 +373,17 @@ class MemoryStore:
                 f"moved {direction_word} ${abs_move:.2f} to ${current_price:.2f} on {today}"
             )
 
-            t0 = time.time()
-            self.memory_client.create_event(
-                memory_id=memory_id,
-                actor_id="trader/SPY",
-                session_id=f"trades-{today}",
-                messages=[(content, "ASSISTANT")],
-            )
-            dur = time.time() - t0
+            record_id = f"missed-{missed_action}-{today}-{now_pt.strftime('%H%M%S')}"
+            dur = self._write_record("/facts/trader/SPY/", content, record_id)
 
-            logger.info(f"v2 memory: stored MISSED {missed_action} +${abs_move:.2f} ({dur:.1f}s)")
+            dur_str = f"{dur:.1f}s" if dur else "fallback"
+            logger.info(f"v2 memory: stored MISSED {missed_action} +${abs_move:.2f} ({dur_str})")
             print(f"\n{'='*60}")
             print(f" V2 MISSED OPPORTUNITY STORED")
             print(f"{'='*60}")
             print(f"  WAIT → should have been {missed_action}")
             print(f"  ${wait_price:.2f} → ${current_price:.2f} ({direction_word} ${abs_move:.2f})")
-            print(f"  Bedrock write: {dur:.1f}s")
+            print(f"  Bedrock write: {dur_str}")
             print(f"{'='*60}\n")
 
         except Exception as e:
@@ -377,27 +400,19 @@ class MemoryStore:
     def store_patterns(self, patterns: list[str]):
         """
         Store extracted patterns from daily consolidation.
-        Uses create_event per pattern (MemoryClient auto-extracts into /facts/).
-        """
-        memory_id = self.get_or_create_memory()
-        if not memory_id:
-            return
+        Writes DIRECTLY to /facts/patterns/SPY/ (immediately searchable).
 
-        client = self.memory_client
+        actor_id="SPY" so namespace resolves to /facts/patterns/SPY/
+        (NOT actor_id="patterns/SPY" which would create /facts/patterns/patterns/SPY/).
+        """
         today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
 
         stored = 0
         for i, pattern in enumerate(patterns):
-            try:
-                client.create_event(
-                    memory_id=memory_id,
-                    actor_id="patterns/SPY",
-                    session_id=f"consolidation-{today}",
-                    messages=[(pattern, "ASSISTANT")],
-                )
+            record_id = f"pattern-{today}-{i}"
+            dur = self._write_record("/facts/patterns/SPY/", pattern, record_id)
+            if dur is not None:
                 stored += 1
-            except Exception as e:
-                logger.warning(f"v2 memory: store pattern {i} failed: {e}")
 
         if stored:
             logger.info(f"v2 memory: stored {stored}/{len(patterns)} patterns")
@@ -426,16 +441,39 @@ class MemoryStore:
             )
             outcomes = []
             for record in records:
-                content = record.get("content", {})
-                if isinstance(content, dict):
-                    text = content.get("text", "")
-                elif isinstance(content, str):
-                    text = content
-                else:
-                    text = str(content)
+                text = self._extract_text(record)
                 if text and today in text:
                     outcomes.append(text)
             return outcomes
         except Exception as e:
             logger.warning(f"v2 memory: get_todays_outcomes failed: {e}")
             return []
+
+    def verify_memory(self) -> dict:
+        """
+        Diagnostic: check what records actually exist in each namespace.
+        Call this to debug recall issues.
+        """
+        memory_id = self.get_or_create_memory()
+        if not memory_id:
+            return {"error": "no memory_id"}
+
+        result = {"memory_id": memory_id, "namespaces": {}}
+
+        for ns in ["/facts/trader/SPY/", "/facts/patterns/SPY/"]:
+            try:
+                records = self.data_client.list_memory_records(
+                    memoryId=memory_id,
+                    namespace=ns,
+                )
+                summaries = records.get("memoryRecordSummaries", [])
+                result["namespaces"][ns] = {
+                    "count": len(summaries),
+                    "samples": [
+                        s.get("content", "")[:100] for s in summaries[:3]
+                    ],
+                }
+            except Exception as e:
+                result["namespaces"][ns] = {"error": str(e)}
+
+        return result

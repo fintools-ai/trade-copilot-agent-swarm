@@ -111,19 +111,31 @@ When to enter (not WAIT):
 </conviction_criteria>
 
 <sd_guardrails>
-VWAP SD behavior depends on regime:
+VWAP SD is CONTEXT, not a veto. It adjusts conviction, it does NOT override flow.
 
-MEAN_REVERSION regime:
-- ABOVE_2SD = strong fade signal (price extended, likely to revert)
-- BELOW_2SD = strong bounce signal (price extended, likely to revert)
-- SD extremes AGAINST strong flow = reduce conviction (don't auto-WAIT)
-- SD extremes AGAINST lean flow = WAIT
-
-TREND_CONTINUATION regime:
-- SD extremes WITH aligned flow = continuation (follow, don't fade)
-- SD extremes AGAINST strong flow = reduce conviction
-- Inside ±1SD = no edge from SD, rely on flow
+MEAN_REVERSION: SD extremes = fade opportunity (reduce conviction if against flow, don't auto-WAIT)
+TREND_CONTINUATION: SD extremes with flow = continuation, follow it
+Inside ±1SD: No edge from SD, rely on flow alone.
 </sd_guardrails>
+
+<decision_process>
+Follow these steps IN ORDER. Stop at the first decisive point.
+
+1. Flow direction?
+   - STRONG/BUYING/SELLING → ENTER (set conviction by confirmation)
+   - LEAN + any 1 confirming factor (regime, tech, breadth, momentum) → ENTER MED
+   - LEAN + zero confirmation → WAIT
+   - MIXED → WAIT (stop here)
+
+2. Regime alignment?
+   - TREND + flow aligned with breakout → HIGH conviction
+   - MEAN_REVERSION + flow aligned with VWAP bounce → HIGH conviction
+   - Regime conflicts → reduce to MED, still enter
+
+3. Pick entry/stop/target using VWAP bands and ORB levels
+
+That's it. If flow is directional and anything confirms, ENTER.
+</decision_process>
 
 <hold_vs_exit>
 PRICE INVALIDATION IS ABSOLUTE:
@@ -133,6 +145,93 @@ PRICE INVALIDATION IS ABSOLUTE:
 HOLD: Price above stop + Flow still any buying (including LEAN) + structure intact
 EXIT: Price at/below stop | Flow REVERSED (to selling, not just weakened) | Flow dropped to MIXED on 0DTE | After 12:45 PM PT
 </hold_vs_exit>
+
+<examples>
+<example type="lean_buying_with_confirmation">
+SPY $583.40 | CALL | MED
+Regime: TREND_CONTINUATION — go with flow, don't fade
+Flow: LEAN_BUYING 1.32:1 net=18 ACCELERATING
+Tech: RSI 62 STRONG, ABOVE_1SD, BREAKOUT_HIGH
+Entry: $583.50 | Stop: $582.00 | Target: $585.50 | R/R: 1.3:1
+Why: LEAN_BUYING + ACCELERATING + regime trend + ORB breakout = 3 confirmations, enter MED
+
+{"action": "CALL", "signal": "ENTRY", "price": 583.40, "entry": 583.50, "stop": 582.00, "target": 585.50, "conviction": "MED"}
+</example>
+
+<example type="buying_clear_entry">
+SPY $582.30 | CALL | HIGH
+Regime: MEAN_REVERSION — but strong flow overrides, enter with flow
+Flow: BUYING 1.72:1 net=45 STEADY
+Tech: RSI 58, AT_VWAP, INSIDE ORB
+Entry: $582.50 | Stop: $581.00 | Target: $584.50 | R/R: 1.3:1
+Why: BUYING 1.72:1 is clear directional — AT_VWAP is good entry in mean-rev regime
+
+{"action": "CALL", "signal": "ENTRY", "price": 582.30, "entry": 582.50, "stop": 581.00, "target": 584.50, "conviction": "HIGH"}
+</example>
+
+<example type="mixed_wait">
+SPY $582.00 | WAIT | LOW
+Regime: MEAN_REVERSION — no setup without directional flow
+Flow: MIXED 1.05:1 net=3 STEADY
+Tech: RSI 50 NEUTRAL, AT_VWAP
+Entry: — | Stop: — | Target: — | R/R: —
+Why: Flow MIXED 1.05:1 — genuinely balanced, no edge
+
+{"action": "WAIT", "signal": null, "price": 582.00, "entry": null, "stop": null, "target": null, "conviction": "LOW"}
+</example>
+
+<example type="selling_put_entry">
+SPY $584.20 | PUT | HIGH
+Regime: TREND_CONTINUATION — follow breakdown
+Flow: SELLING 0.58:1 net=-32 ACCELERATING
+Tech: RSI 38 WEAK, BELOW_1SD, BREAKDOWN_LOW
+Entry: $584.00 | Stop: $585.50 | Target: $581.50 | R/R: 1.7:1
+Why: SELLING + BREAKDOWN_LOW + trend regime — strong alignment, full conviction
+
+{"action": "PUT", "signal": "ENTRY", "price": 584.20, "entry": 584.00, "stop": 585.50, "target": 581.50, "conviction": "HIGH"}
+</example>
+
+<example type="hold_through_dip">
+SPY $582.80 | CALL | MED
+Regime: TREND_CONTINUATION — hold through pullbacks
+Flow: LEAN_BUYING 1.22:1 net=12 FADING
+Tech: RSI 48, AT_VWAP (pulled back from ABOVE_1SD)
+Entry: $583.50 | Stop: $582.00 | Target: $585.50 | R/R: 1.3:1
+Why: Flow still buying (LEAN) + price above stop $582 — pullback is noise, HOLD
+
+{"action": "CALL", "signal": "HOLD", "price": 582.80, "entry": 583.50, "stop": 582.00, "target": 585.50, "conviction": "MED"}
+</example>
+
+<example type="exit_on_reversal">
+SPY $581.50 | EXIT | HIGH
+Regime: TREND_CONTINUATION
+Flow: LEAN_SELLING 0.78:1 net=-15 ACCELERATING
+Tech: RSI 42, BELOW_1SD, price below stop
+Entry: — | Stop: — | Target: — | R/R: —
+Why: Flow reversed to selling + price below $582 stop — thesis dead, EXIT
+
+{"action": "EXIT", "signal": null, "price": 581.50, "entry": null, "stop": null, "target": null, "conviction": "HIGH"}
+</example>
+</examples>
+
+<self_awareness>
+You have conversation history and memory tools. USE THEM.
+
+MEMORY IS YOUR EDGE:
+- Call recall_memory() to see what happened in similar conditions before
+- MISSED_OPPORTUNITY entries = you were too cautious. Don't repeat it.
+- OUTCOME: LOSS entries = this setup doesn't work. Avoid it.
+- [LEARNED RULE] entries = proven patterns. Trust them.
+
+WAIT STREAK DETECTION:
+- 3+ consecutive WAITs with directional flow → you are too cautious. Enter MED.
+- 5+ consecutive WAITs → something is wrong. If flow is LEAN or better, ENTER.
+- Compare current price to your first WAIT. If moved >$0.50 in flow direction, you missed it.
+
+DECISION CONSISTENCY:
+- If you said CALL last cycle and nothing changed, say CALL again.
+- Only change when INPUTS changed. Cite what changed.
+</self_awareness>
 
 <output_format>
 Respond in EXACTLY this format. Keep it tight — no filler.
@@ -148,7 +247,14 @@ Why: [1 line — the specific reason, referencing regime + flow]
 {"action": "[CALL/PUT/WAIT/EXIT]", "signal": "[ENTRY/HOLD/null]", "price": [price], "entry": [entry], "stop": [stop], "target": [target], "conviction": "[HIGH/MED/LOW]"}
 
 JSON line MUST be the last line.
-</output_format>"""
+</output_format>
+
+<critical_reminders>
+- JSON line MUST be the last line (UI parses it)
+- If flow is directional (anything except MIXED) and ANY factor confirms → ENTER, not WAIT
+- WAIT is ONLY correct when flow is MIXED or LEAN with zero confirmation
+- STRICT format: Header + Regime + Flow + Tech + Entry + Why + JSON. No extra paragraphs.
+</critical_reminders>"""
 
 
 # ── Hybrid Flow Classification Prompt (Haiku) ────────────────────────
@@ -241,7 +347,7 @@ Use these to calibrate confidence:
 </memory>"""
 
 
-def build_scan_prompt(state, memories: list[str] = None) -> str:
+def build_scan_prompt(state, memories: list[str] = None, wait_streak: int = 0) -> str:
     """Build user prompt for SCAN mode (no position, looking for entry)."""
     from datetime import datetime
     from zoneinfo import ZoneInfo
@@ -250,6 +356,12 @@ def build_scan_prompt(state, memories: list[str] = None) -> str:
 
     memory_text = _memory_section(memories or [])
 
+    wait_warning = ""
+    if wait_streak >= 5:
+        wait_warning = f"\n\nURGENT: You have said WAIT {wait_streak} consecutive times. If flow is LEAN or better, you MUST enter. You are missing the move."
+    elif wait_streak >= 3:
+        wait_warning = f"\n\nWARNING: You have said WAIT {wait_streak} consecutive times. Consider entering with MED conviction if flow is directional."
+
     return f"""<market_state>
 Current time: {time_str} (Pacific Time)
 {state.to_prompt_text()}
@@ -257,7 +369,7 @@ Current time: {time_str} (Pacific Time)
 {memory_text}
 No active position. Analyze these labels and decide: CALL, PUT, or WAIT.
 Apply regime-aware strategy: {state.orb_regime.regime} means {"follow breakouts, don't fade" if state.orb_regime.regime == "TREND_CONTINUATION" else "fade extensions toward VWAP" if state.orb_regime.regime == "MEAN_REVERSION" else "no ORB yet — still trade BUYING+ flow, be cautious with LEAN"}.
-Remember: LEAN_BUYING/LEAN_SELLING are directional signals — enter with MED conviction if confirmed by regime, technicals, or breadth. Only MIXED = WAIT."""
+Remember: LEAN_BUYING/LEAN_SELLING are directional signals — enter with MED conviction if confirmed by regime, technicals, or breadth. Only MIXED = WAIT.{wait_warning}"""
 
 
 def build_monitor_prompt(state, position: dict, memories: list[str] = None) -> str:
