@@ -85,14 +85,9 @@ class MemoryStore:
                 description="0DTE v2 trading engine — trade outcomes + learned patterns",
                 strategies=[
                     {"semanticMemoryStrategy": {
-                        "name": "trade_outcomes",
-                        "description": "Individual 0DTE trade outcomes with classified market labels",
-                        "namespaces": ["/facts/{actorId}/"],
-                    }},
-                    {"semanticMemoryStrategy": {
-                        "name": "learned_patterns",
-                        "description": "Extracted trading rules and anti-patterns from daily consolidation",
-                        "namespaces": ["/facts/patterns/{actorId}/"],
+                        "name": "trade_memory",
+                        "description": "Trade outcomes, missed opportunities, and learned patterns",
+                        "namespaces": ["/facts/{actorId}/", "/facts/patterns/{actorId}/"],
                     }},
                 ],
                 event_expiry_days=30,
