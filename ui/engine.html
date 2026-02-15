@@ -240,7 +240,7 @@
       vertical-align: middle;
     }
 
-    /* ── CENTER: REASONING + CHART ─────────────────── */
+    /* ── CENTER: CHART + REASONING ─────────────────── */
     .center-panel {
       display: flex;
       flex-direction: column;
@@ -248,10 +248,9 @@
     }
 
     .chart-container {
-      height: 240px;
       flex-shrink: 0;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
+      background: #000;
+      position: relative;
     }
 
     .reasoning-scroll {
@@ -539,11 +538,27 @@
         </div>
       </div>
 
-      <!-- CENTER: CHART + REASONING -->
+      <!-- CENTER: CHART + PRICE TICKER -->
       <div class="center-panel">
-        <div class="panel-hdr">SPY <span class="dim" id="chart-label">30s candles + VWAP</span></div>
-        <div class="chart-container" id="chart-container"></div>
-        <div class="panel-hdr">Claude Reasoning <span class="dim" id="reasoning-count">0</span></div>
+        <!-- Price Ticker Bar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#0a0a0a;border-bottom:1px solid #222;">
+          <div style="display:flex;align-items:baseline;gap:12px;">
+            <span style="font-size:20px;font-weight:600;color:#fff;" id="spy-price">$--</span>
+            <span style="font-size:14px;font-weight:500;" id="spy-change">--</span>
+            <span style="font-size:11px;color:#666;margin-left:8px;" id="chart-label">30s candles</span>
+          </div>
+          <div style="display:flex;gap:16px;font-size:11px;color:#888;">
+            <div><span style="color:#3399ff;">━━</span> VWAP</div>
+            <div><span style="color:#00cc66;">▲</span> Entry</div>
+            <div><span style="color:#ffaa00;">▼</span> Exit</div>
+          </div>
+        </div>
+        
+        <!-- Chart Container -->
+        <div class="chart-container" id="chart-container" style="height:320px;"></div>
+        
+        <!-- Reasoning Section -->
+        <div class="panel-hdr" style="margin-top:8px;">Claude Reasoning <span class="dim" id="reasoning-count">0</span></div>
         <div class="reasoning-scroll" id="reasoning-scroll"></div>
       </div>
 
@@ -612,27 +627,41 @@ function initChart() {
   chart = LightweightCharts.createChart(container, {
     layout: {
       background: { color: '#000' },
-      textColor: '#888',
-      fontSize: 10,
+      textColor: '#999',
+      fontSize: 11,
     },
     grid: {
-      vertLines: { color: '#111' },
-      horzLines: { color: '#111' },
+      vertLines: { color: '#0f0f0f' },
+      horzLines: { color: '#0f0f0f' },
     },
     timeScale: {
       timeVisible: true,
       secondsVisible: false,
-      borderColor: '#222',
-      rightOffset: 3,
+      borderColor: '#1a1a1a',
+      rightOffset: 5,
+      barSpacing: 8,
     },
     rightPriceScale: {
-      borderColor: '#222',
+      borderColor: '#1a1a1a',
       autoScale: true,
+      scaleMargins: {
+        top: 0.1,
+        bottom: 0.1,
+      },
     },
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
-      vertLine: { color: '#333', style: LightweightCharts.LineStyle.Dotted },
-      horzLine: { color: '#333', style: LightweightCharts.LineStyle.Dotted },
+      vertLine: { color: '#444', style: LightweightCharts.LineStyle.Dotted, width: 1 },
+      horzLine: { color: '#444', style: LightweightCharts.LineStyle.Dotted, width: 1 },
+    },
+    handleScroll: {
+      mouseWheel: true,
+      pressedMouseMove: true,
+    },
+    handleScale: {
+      axisPressedMouseMove: true,
+      mouseWheel: true,
+      pinch: true,
     },
   });
 
@@ -649,10 +678,12 @@ function initChart() {
 
   vwapSeries = chart.addLineSeries({
     color: '#3399ff',
-    lineWidth: 1,
-    lineStyle: LightweightCharts.LineStyle.Dashed,
+    lineWidth: 2,
+    lineStyle: LightweightCharts.LineStyle.Solid,
     priceLineVisible: false,
-    lastValueVisible: false,
+    lastValueVisible: true,
+    crosshairMarkerVisible: true,
+    crosshairMarkerRadius: 4,
   });
 
   new ResizeObserver(() => {
@@ -680,6 +711,37 @@ function updateChart(price) {
   // Update VWAP at same candle time
   if (lastVwap) {
     vwapSeries.update({ time: candleTime, value: lastVwap });
+  }
+
+  // Persist to localStorage (keep last 100 candles)
+  try {
+    const candles = Object.values(candleMap).sort((a, b) => a.time - b.time).slice(-100);
+    localStorage.setItem('chart_candles', JSON.stringify(candles));
+    if (lastVwap) {
+      localStorage.setItem('chart_vwap', lastVwap.toString());
+    }
+  } catch (e) {
+    console.warn('Failed to persist chart data:', e);
+  }
+}
+
+function loadChartFromStorage() {
+  try {
+    const stored = localStorage.getItem('chart_candles');
+    if (stored) {
+      const candles = JSON.parse(stored);
+      candles.forEach(c => {
+        candleMap[c.time] = c;
+        candleSeries.update(c);
+      });
+      console.log(`Loaded ${candles.length} candles from storage`);
+    }
+    const vwap = localStorage.getItem('chart_vwap');
+    if (vwap) {
+      lastVwap = parseFloat(vwap);
+    }
+  } catch (e) {
+    console.warn('Failed to load chart data:', e);
   }
 }
 
@@ -715,6 +777,54 @@ function updateChartMarkers(entry, stop, target) {
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'Target',
     });
+  }
+}
+
+let chartMarkers = [];
+
+function addChartMarker(price, type, action, time) {
+  if (!candleSeries) return;  // Safety check
+  
+  const rawTime = Math.floor(Date.now() / 1000);
+  let candleTime = rawTime - (rawTime % CANDLE_SEC);
+  
+  // Offset by a few seconds to prevent overlapping markers at same candle
+  // Entry gets +5s, Exit gets +10s within the same 30s candle
+  if (type === 'ENTRY') {
+    candleTime += 5;
+  } else if (type === 'EXIT') {
+    candleTime += 10;
+  }
+  
+  const marker = {
+    time: candleTime,
+    position: type === 'ENTRY' ? 'belowBar' : 'aboveBar',
+    color: type === 'ENTRY' ? (action === 'CALL' ? '#00cc66' : '#ff3333') : '#ffaa00',
+    shape: type === 'ENTRY' ? 'arrowUp' : 'arrowDown',
+    text: `${type === 'ENTRY' ? '▲' : '▼'} ${action} $${price.toFixed(2)}`,  // Simpler text
+  };
+  
+  chartMarkers.push(marker);
+  candleSeries.setMarkers(chartMarkers);
+  
+  // Persist markers
+  try {
+    localStorage.setItem('chart_markers', JSON.stringify(chartMarkers.slice(-20)));  // Keep last 20
+  } catch (e) {
+    console.warn('Failed to persist markers:', e);
+  }
+}
+
+function loadMarkersFromStorage() {
+  try {
+    const stored = localStorage.getItem('chart_markers');
+    if (stored && candleSeries) {  // Check if candleSeries exists
+      chartMarkers = JSON.parse(stored);
+      candleSeries.setMarkers(chartMarkers);
+      console.log(`Loaded ${chartMarkers.length} markers from storage`);
+    }
+  } catch (e) {
+    console.warn('Failed to load markers:', e);
   }
 }
 
@@ -1077,6 +1187,16 @@ function handleEvent(msg) {
   }
   else if (type === 'V2_POSITION' && msg.signal) {
     renderPosition(msg.signal);
+    
+    // Add entry/exit markers on chart
+    const d = msg.signal;
+    if (d.event === 'ENTRY' && d.entry) {
+      addChartMarker(d.entry, 'ENTRY', d.action, new Date().toLocaleTimeString('en-US', {hour12: false}));
+      updateChartMarkers(d.entry, d.stop, d.target);
+    } else if (d.event === 'EXIT' && d.exit_price) {
+      addChartMarker(d.exit_price, 'EXIT', d.action, new Date().toLocaleTimeString('en-US', {hour12: false}));
+      updateChartMarkers(null, null, null);  // Clear lines
+    }
   }
   else if (type === 'SWARM_RESPONSE') {
     const sig = msg.signal || {};
@@ -1109,6 +1229,8 @@ async function loadHistory() {
 
 // ── INIT ───────────────────────────────────────────────
 initChart();
+loadChartFromStorage();  // Load persisted candles
+loadMarkersFromStorage();  // Load entry/exit markers
 connect();
 loadHistory();
 updateClock();

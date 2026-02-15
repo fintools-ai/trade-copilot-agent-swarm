@@ -38,7 +38,8 @@ from trading_engine.prompts import (
 )
 from trading_engine.tools import create_engine_tools
 from trading_engine.memory import MemoryStore
-from trading_engine.consolidator import consolidate
+from trading_engine.trade_logger import TradeLogger
+from trading_engine.post_exit_analyzer import PostExitAnalyzer
 from redis_stream import publish_event
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,8 @@ class TradingEngine:
         self.redis = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
         self.bedrock = boto3.client("bedrock-runtime", region_name=AWS_REGION)
         self.memory = MemoryStore()
+        self.trade_logger = TradeLogger()
+        self.post_exit_analyzer = PostExitAnalyzer(self.redis, self.bedrock, self.memory)
         self.position = None  # Active position dict or None
         self.cycle_count = 0
         self.poller_proc = None
@@ -102,7 +105,7 @@ class TradingEngine:
             while not self._shutdown.is_set():
                 # Stop after market close
                 now_pt = datetime.now(pt_tz)
-                if now_pt.hour >= 13:
+                if now_pt.hour >= 14:
                     print("[v2] Market closed (1PM PT) — stopping")
                     break
 
@@ -129,13 +132,6 @@ class TradingEngine:
             logger.error(f"Engine error: {e}")
             print(f"[v2] Engine error: {e}")
         finally:
-            # End of day: consolidate
-            try:
-                print("[v2] Running end-of-day consolidation...")
-                await consolidate(self.memory)
-            except Exception as e:
-                logger.warning(f"Consolidation error: {e}")
-
             self._cleanup()
 
     def _cleanup(self):
@@ -191,6 +187,23 @@ class TradingEngine:
         # 4. STORE STATE + MEMORIES on engine instance (tools read these)
         self._current_state = state
         self._current_memories = memories
+        
+        # Log memory influence
+        if memories:
+            has_post_exit = any("POST_EXIT_ANALYSIS" in m for m in memories)
+            has_post_wait = any("POST_WAIT_ANALYSIS" in m for m in memories)
+            has_missed = any("MISSED_OPPORTUNITY" in m for m in memories)
+            
+            influences = []
+            if has_post_exit:
+                influences.append("📊 Post-Exit Lessons")
+            if has_post_wait:
+                influences.append("⏸️  Post-Wait Lessons")
+            if has_missed:
+                influences.append("⚠️  Missed Opportunities")
+            
+            if influences:
+                logger.info(f"🧠 Agent has access to: {', '.join(influences)}")
 
         # 5. BUILD PROMPT (data inline + wait streak warning)
         if self.position:
@@ -209,6 +222,15 @@ class TradingEngine:
         # 7. PARSE SIGNAL
         signal_data = self._parse_signal(response_text)
         signal_data["latency"] = round(latency, 1)
+        
+        # Log if decision was influenced by memory
+        action = signal_data.get("action")
+        conviction = signal_data.get("conviction", "")
+        if memories and action != "WAIT":
+            # Check if agent mentioned memory in reasoning
+            if "memory" in response_text.lower() or "learned" in response_text.lower() or "past" in response_text.lower():
+                logger.info(f"🎯 MEMORY-INFLUENCED DECISION: {action} {conviction}")
+                logger.info(f"   Agent reasoning referenced past experiences")
 
         # 8. TRACK WAIT STREAK
         if signal_data.get("action") == "WAIT":
@@ -309,6 +331,8 @@ class TradingEngine:
         def _call():
             result = self.agent(user_prompt)
             # Strands Agent returns an AgentResult; extract the text
+            print(result)
+            print("====")
             return str(result)
 
         try:
@@ -440,18 +464,27 @@ class TradingEngine:
                 "entry_time": state.timestamp,
             }
             self.memory.record_entry(signal_data, state)
+            self.trade_logger.log_entry(signal_data, state)  # Log to JSONL
             publish_event("V2_POSITION", "", {"active": True, "event": "ENTRY", **self.position})
             print(f"  >>> ENTERED {action} @ ${signal_data.get('entry')}")
 
         # EXIT — close position
         elif action == "EXIT" and self.position:
             signal_data["price"] = signal_data.get("price", state.price)
+            
+            # Get entry snapshot for trade logger and post-exit analysis
+            entry_snapshot = self.redis.get("zero_dte_v2:entry_snapshot")
+            if entry_snapshot:
+                entry_data = json.loads(entry_snapshot)
+                self.trade_logger.log_exit(signal_data, entry_data)  # Log to JSONL
+                self.post_exit_analyzer.start_tracking(signal_data, entry_data)  # Start 5-min tracking
+            
             publish_event("V2_POSITION", "", {
                 "active": False, "event": "EXIT",
                 "exit_price": signal_data.get("price"),
                 **self.position,
             })
-            self.memory.record_outcome_async(signal_data)
+            self.memory.record_outcome_async(signal_data, state, response_text)
             print(f"  >>> EXITED {self.position['action']} @ ${signal_data.get('price')}")
             self.position = None
 
@@ -462,11 +495,17 @@ class TradingEngine:
                 print(f"  >>> Conviction: {self.position['conviction']} → {new_conv}")
                 self.position["conviction"] = new_conv
 
-        # WAIT — snapshot for missed opportunity tracking (only when flow is directional)
+        # WAIT — snapshot for missed opportunity tracking
         elif action == "WAIT" and not self.position:
             flow_dir = state.flow.direction
-            if flow_dir not in ("MIXED",):
-                self._snapshot_wait(state)
+            print(f"  >>> WAIT signal | Flow: {flow_dir}")
+            print(f"  >>> Starting post-WAIT tracking")
+            self._snapshot_wait(state)
+            # Start post-WAIT tracking for all WAIT signals
+            self.post_exit_analyzer.start_wait_tracking(
+                wait_signal={"price": signal_data.get("price", 0)},
+                market_state={"flow": flow_dir}
+            )
 
     # ── WAIT outcome tracking ─────────────────────────────────
 
@@ -485,6 +524,7 @@ class TradingEngine:
             "session": state.session,
             "time": now_pt.strftime("%H:%M"),
             "ts": time.time(),
+            "wait_nlp": self.memory._state_to_nlp(state),
         }
         # Only keep the most recent WAIT — overwrite previous
         self.redis.setex(self.WAIT_SNAPSHOT_KEY, 300, json.dumps(snapshot))
@@ -503,6 +543,10 @@ class TradingEngine:
         if not wait_price:
             return
 
+        # Handle current_price - could be float or dict
+        if isinstance(current_price, dict):
+            current_price = current_price.get('current', 0)
+            
         move = current_price - wait_price
         abs_move = abs(move)
 

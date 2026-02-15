@@ -198,7 +198,7 @@ def store_episode(ticker, analysis, market_context=None):
             memory_id=memory_id,
             actor_id=f"ticker/{ticker}",
             session_id=f"analysis-{today}",
-            messages=[(content, "ASSISTANT")],
+            messages=[(content, "USER")],
         )
         logger.info(f"{ticker}: stored episode ({direction} {confidence}%) ({time.time()-t0:.1f}s)")
     except Exception as e:

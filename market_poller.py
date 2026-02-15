@@ -55,12 +55,78 @@ async def poll_spy(mcp, r):
             "fetch_ts": fetch_time.timestamp(),
         }
 
-        quote, rsi, vwap, ema9, ema21, macd, ts = await asyncio.gather(
-            mcp.call_tool_async(
-                tool_use_id=f"q_{symbol}",
-                name="GetQuote",
-                arguments={"params": {"symbol": symbol}},
-            ),
+        # Only fetch quote for fast 1s updates
+        quote = await mcp.call_tool_async(
+            tool_use_id=f"q_{symbol}",
+            name="GetQuote",
+            arguments={"params": {"symbol": symbol}},
+        )
+
+        # Process Quote
+        if not isinstance(quote, Exception) and quote and quote.get("status") == "success":
+            q = _parse(quote)
+            if q:
+                data["price"] = {
+                    "current": float(q.get("close", 0)),
+                    "open": float(q.get("open", 0)),
+                    "high": float(q.get("high", 0)),
+                    "low": float(q.get("low", 0)),
+                    "prev_close": float(q.get("previous_close", 0)),
+                    "change": float(q.get("change", 0)),
+                    "change_pct": float(q.get("percent_change", 0)),
+                }
+                data["volume"] = {
+                    "current": int(q.get("volume", 0)),
+                    "average": int(q.get("average_volume", 0)),
+                }
+                if data["volume"]["average"] > 0:
+                    data["volume"]["ratio"] = round(
+                        data["volume"]["current"] / data["volume"]["average"], 2
+                    )
+
+        # Get existing data from Redis to preserve technicals
+        existing = r.get(REDIS_KEY_SPY)
+        if existing:
+            existing_data = json.loads(existing)
+            # Preserve technical indicators from previous poll
+            for key in ["rsi", "vwap", "price_vs_vwap", "ema_9", "ema_21", "macd", "orb_high", "orb_low", "orb_range", "orb_direction", "trama"]:
+                if key in existing_data:
+                    data[key] = existing_data[key]
+
+        # Write to Redis
+        r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)
+
+        # Publish price tick for UI updates
+        price_data = data.get("price", {})
+        if price_data.get("current"):
+            tick = json.dumps({
+                "type": "V2_PRICE_TICK",
+                "timestamp": data.get("timestamp", ""),
+                "signal": {
+                    "price": price_data["current"],
+                    "change": price_data.get("change", 0),
+                    "change_pct": price_data.get("change_pct", 0),
+                },
+            })
+            r.publish("zero_dte:events", tick)
+        r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)
+
+        elapsed = time.time() - t0
+        price_data = data.get("price", {})
+        price = price_data.get("current", "?")
+        logger.info(f"SPY poll: ${price} in {elapsed:.1f}s")
+
+    except Exception as e:
+        logger.error(f"SPY poll error: {e}")
+
+
+async def poll_spy_technicals(mcp, r):
+    """Poll SPY technical indicators (slower, run every 5-10s)."""
+    symbol = "SPY"
+    t0 = time.time()
+
+    try:
+        rsi, vwap, ema9, ema21, macd, ts = await asyncio.gather(
             mcp.call_tool_async(
                 tool_use_id=f"rsi_{symbol}",
                 name="GetTimeSeriesRsi",
@@ -94,27 +160,12 @@ async def poll_spy(mcp, r):
             return_exceptions=True,
         )
 
-        # Process Quote
-        if not isinstance(quote, Exception) and quote and quote.get("status") == "success":
-            q = _parse(quote)
-            if q:
-                data["price"] = {
-                    "current": float(q.get("close", 0)),
-                    "open": float(q.get("open", 0)),
-                    "high": float(q.get("high", 0)),
-                    "low": float(q.get("low", 0)),
-                    "prev_close": float(q.get("previous_close", 0)),
-                    "change": float(q.get("change", 0)),
-                    "change_pct": float(q.get("percent_change", 0)),
-                }
-                data["volume"] = {
-                    "current": int(q.get("volume", 0)),
-                    "average": int(q.get("average_volume", 0)),
-                }
-                if data["volume"]["average"] > 0:
-                    data["volume"]["ratio"] = round(
-                        data["volume"]["current"] / data["volume"]["average"], 2
-                    )
+        # Get existing data
+        existing = r.get(REDIS_KEY_SPY)
+        if not existing:
+            return
+        
+        data = json.loads(existing)
 
         # Process RSI
         if not isinstance(rsi, Exception) and rsi and rsi.get("status") == "success":
@@ -160,7 +211,10 @@ async def poll_spy(mcp, r):
             if t and "values" in t:
                 orb = _calc_orb(t["values"])
                 if orb:
-                    data["orb"] = orb
+                    data["orb_high"] = orb.get("high", 0)
+                    data["orb_low"] = orb.get("low", 0)
+                    data["orb_range"] = orb.get("range", 0)
+                    data["orb_direction"] = orb.get("direction", "")
 
                 trama = _calc_trama(t["values"])
                 if trama:
@@ -178,30 +232,14 @@ async def poll_spy(mcp, r):
                         data["vwap_minus_1"] = vwap_sd["minus_1"]
                         data["vwap_minus_2"] = vwap_sd["minus_2"]
 
-        # Write to Redis
-        json_str = json.dumps(data, indent=2)
-        r.set(REDIS_KEY_SPY, json_str, ex=REDIS_TTL)
-
-        # Publish lightweight price tick for UI chart
-        price_data = data.get("price", {})
-        if price_data.get("current"):
-            tick = json.dumps({
-                "type": "V2_PRICE_TICK",
-                "timestamp": data.get("timestamp", ""),
-                "signal": {
-                    "price": price_data["current"],
-                    "change": price_data.get("change", 0),
-                    "change_pct": price_data.get("change_pct", 0),
-                },
-            })
-            r.publish("zero_dte:events", tick)
+        # Write updated data back to Redis
+        r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)
 
         elapsed = time.time() - t0
-        price = price_data.get("current", "?")
-        logger.info(f"SPY poll: ${price} in {elapsed:.1f}s")
+        logger.info(f"SPY technicals updated in {elapsed:.1f}s")
 
     except Exception as e:
-        logger.error(f"SPY poll error: {e}")
+        logger.error(f"SPY technicals error: {e}")
 
 
 async def poll_mag7(mcp, r):
@@ -305,13 +343,14 @@ async def run(spy_interval: int, mag7_interval: int):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, shutdown_event.set)
 
-    logger.info(f"Starting poller: SPY every {spy_interval}s, Mag7 every {mag7_interval}s")
+    logger.info(f"Starting poller: SPY quote every {spy_interval}s, SPY technicals every 10s, Mag7 every {mag7_interval}s")
 
     with create_twelvedata_mcp() as mcp:
         logger.info("MCP client connected (persistent)")
 
         await asyncio.gather(
             _loop(poll_spy, spy_interval, mcp, r, shutdown_event),
+            _loop(poll_spy_technicals, 10, mcp, r, shutdown_event),  # Technicals every 10s
             _loop(poll_mag7, mag7_interval, mcp, r, shutdown_event),
             _heartbeat(r, shutdown_event),
         )

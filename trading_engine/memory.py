@@ -1,22 +1,20 @@
 """
 Bedrock AgentCore v2 memory — the learning brain.
 
-Uses MemoryClient SDK (snake_case) for retrieval + boto3 data plane for writes.
-Separate store from v1 (zero_dte_outcomes_v2).
+WRITES: batch_create_memory_records (boto3 data plane, camelCase)
+  - Records stored EXACTLY as written — no LLM extraction or rewriting
+  - Immediately searchable via semantic embeddings
+  - Each trade outcome / missed opportunity / post-trade lesson is a separate record
 
-Two namespaces (both semanticMemoryStrategy → both use /facts/ prefix):
-- /facts/trader/SPY/         — Trade outcomes + missed opportunities
-- All records (outcomes, missed opps, learned rules) in /facts/trader/SPY/
+READS: retrieve_memories (MemoryClient SDK, snake_case)
+  - Semantic search over records in /facts/trader/SPY/
+  - Hash-cached: only queries AgentCore when classified labels change
 
-CRITICAL DESIGN DECISION:
-- WRITES use batch_create_memory_records (boto3 data plane, camelCase)
-  Records are IMMEDIATELY searchable — no 60s async extraction delay.
-- READS use retrieve_memories (MemoryClient SDK, snake_case)
-  Semantic search over records in the target namespace.
-- create_event is NOT used — it triggers async extraction that takes 60+ seconds,
-  meaning records were never available for the next cycle (10s interval).
-
-Hash-cached recall: only queries AgentCore when classified labels actually change.
+Namespace: /facts/trader/SPY/ — all record types in one namespace
+  - OUTCOME: WIN/LOSS trade results with flow metrics and labels
+  - MISSED_OPPORTUNITY: WAITs where price moved in flow direction
+  - POST_EXIT_ANALYSIS: 5-min post-exit LLM analysis (early/good/neutral)
+  - POST_WAIT_ANALYSIS: 5-min post-wait LLM analysis (missed/good/neutral)
 """
 
 import json
@@ -90,7 +88,7 @@ class MemoryStore:
                         "namespaces": ["/facts/{actorId}/"],
                     }},
                 ],
-                event_expiry_days=30,
+                event_expiry_days=365,
             )
             self._memory_id = result.get("id") or result.get("memoryId", "")
             logger.info(f"v2 memory: store ready: {self._memory_id}")
@@ -132,10 +130,9 @@ class MemoryStore:
 
     def _write_record(self, namespace: str, content: str, record_id: str = None):
         """
-        Write a memory record DIRECTLY via batch_create_memory_records.
-
-        Records are immediately searchable — no async extraction delay.
-        This bypasses the create_event → extraction pipeline which takes 60+ seconds.
+        Write directly via batch_create_memory_records (boto3 data plane).
+        Records are immediately searchable — no async extraction, no LLM rewriting.
+        Content is stored exactly as written.
         """
         memory_id = self.get_or_create_memory()
         if not memory_id:
@@ -150,34 +147,87 @@ class MemoryStore:
             self.data_client.batch_create_memory_records(
                 memoryId=memory_id,
                 records=[{
-                    "requestIdentifier": record_id,
-                    "namespaces": [namespace],
-                    "content": {"text": content},
-                    "timestamp": datetime.now(ZoneInfo("America/Los_Angeles")),
+                    'requestIdentifier': record_id,
+                    'namespaces': [namespace],
+                    'content': {'text': content},
+                    'timestamp': datetime.now(ZoneInfo("America/Los_Angeles")),
                 }],
             )
             dur = time.time() - t0
-            logger.info(f"v2 memory: wrote record to {namespace} ({dur:.1f}s)")
+            logger.info(f"v2 memory: wrote record to {namespace} ({dur:.1f}s, immediate)")
             return dur
         except Exception as e:
             logger.error(f"v2 memory: batch_create_memory_records failed: {e}")
-            # Fallback: try create_event (async, but at least stores the data)
-            try:
-                logger.info("v2 memory: falling back to create_event")
-                today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
-                # Extract actor_id from namespace: /facts/trader/SPY/ → trader/SPY
-                parts = namespace.strip("/").split("/")
-                actor_id = "/".join(parts[1:]) if len(parts) > 1 else "trader/SPY"
-                self.memory_client.create_event(
-                    memory_id=memory_id,
-                    actor_id=actor_id,
-                    session_id=f"trades-{today}",
-                    messages=[(content, "ASSISTANT")],
-                )
-                logger.info("v2 memory: fallback create_event succeeded (async extraction, 60s+ delay)")
-            except Exception as e2:
-                logger.error(f"v2 memory: fallback create_event also failed: {e2}")
             return None
+
+    def _state_to_nlp(self, market_state) -> str:
+        """Convert a MarketState to natural language for semantic search matching."""
+        f = market_state.flow
+        t = market_state.tech
+        orb = market_state.orb_regime
+        b = market_state.breadth
+
+        # Flow
+        flow_dir = f.direction.lower().replace("_", " ")
+        vol_ratio = round(f.bid_vol_60 / max(f.ask_vol_60, 1), 2)
+        flow_text = (
+            f"{flow_dir} flow with {f.ratio}:1 ratio "
+            f"({f.bid_lifts_60} lifts vs {f.bid_drops_60} drops, volume ratio {vol_ratio}:1), "
+            f"{f.momentum.lower()} momentum"
+        )
+
+        # RSI
+        rsi_text = f"RSI {t.rsi_state.lower()} at {t.rsi_value}"
+
+        # VWAP
+        vwap_map = {
+            "ABOVE_2SD": "price extended above VWAP by 2 standard deviations",
+            "ABOVE_1SD": "price above VWAP by 1 standard deviation",
+            "AT_VWAP": "price near VWAP",
+            "BELOW_1SD": "price below VWAP by 1 standard deviation",
+            "BELOW_2SD": "price extended below VWAP by 2 standard deviations",
+        }
+        vwap_text = vwap_map.get(t.vwap_position, t.vwap_position)
+
+        # Regime
+        regime_text = orb.regime.lower().replace("_", " ")
+
+        # Breadth
+        breadth_text = f"Mag7 breadth {b.bias.lower().replace('_', ' ')} with {b.aligned_count}/7 aligned"
+
+        return (
+            f"{flow_text}. "
+            f"{rsi_text}, {vwap_text}. "
+            f"In {regime_text} regime during {market_state.session} session. "
+            f"{breadth_text}."
+        )
+
+    def _flow_metrics_to_nlp(self, flow_metrics: dict) -> str:
+        """Convert a stored flow_metrics dict to natural language."""
+        ratio = flow_metrics.get("ratio", 0)
+        lifts = flow_metrics.get("bid_lifts", 0)
+        drops = flow_metrics.get("bid_drops", 0)
+        vol_ratio = flow_metrics.get("vol_ratio", 0)
+
+        if ratio >= 2.5:
+            direction = "strong buying"
+        elif ratio >= 1.5:
+            direction = "buying"
+        elif ratio >= 1.1:
+            direction = "lean buying"
+        elif ratio <= 0.4:
+            direction = "strong selling"
+        elif ratio <= 0.65:
+            direction = "selling"
+        elif ratio <= 0.9:
+            direction = "lean selling"
+        else:
+            direction = "mixed"
+
+        return (
+            f"{direction} flow with {ratio}:1 ratio "
+            f"({lifts} lifts vs {drops} drops, volume ratio {vol_ratio}:1)"
+        )
 
     def _extract_text(self, record: dict) -> str:
         """Extract text content from a memory record (handles both dict and str content)."""
@@ -188,10 +238,63 @@ class MemoryStore:
             return content
         return str(content) if content else ""
 
+    def _build_recall_queries(self, market_state) -> list[tuple[str, str]]:
+        """Build targeted NLP queries from current market state.
+
+        Returns list of (query_text, label) tuples for multi-query recall.
+        Each query targets a different type of insight.
+        """
+        flow_dir = market_state.flow.direction
+        session = market_state.session
+        regime = market_state.orb_regime.regime
+
+        # Determine implied direction from flow
+        if "BUYING" in flow_dir:
+            action = "CALL"
+            flow_desc = f"{flow_dir.lower().replace('_', ' ')} flow"
+        elif "SELLING" in flow_dir:
+            action = "PUT"
+            flow_desc = f"{flow_dir.lower().replace('_', ' ')} flow"
+        else:
+            action = None
+            flow_desc = "mixed flow"
+
+        queries = []
+
+        if action:
+            # Query 1: Past trade outcomes with similar entry conditions
+            queries.append((
+                f"{action} trade entries with {flow_desc} in {session} session {regime.lower().replace('_', ' ')} regime",
+                "outcomes",
+            ))
+            # Query 2: Missed opportunities from WAITing on similar flow
+            queries.append((
+                f"missed opportunity WAIT with {flow_desc} in {session} that should have been {action}",
+                "missed",
+            ))
+            # Query 3: Exit timing lessons for similar positions
+            queries.append((
+                f"post exit analysis lesson {action} position with {flow_desc} exit timing",
+                "lessons",
+            ))
+        else:
+            # MIXED flow — search for times MIXED was right vs wrong
+            queries.append((
+                f"WAIT on mixed flow in {session} session outcome",
+                "outcomes",
+            ))
+            queries.append((
+                f"post wait analysis mixed flow {session} good wait or missed opportunity",
+                "missed",
+            ))
+
+        return queries
+
     def recall(self, market_state) -> list[str]:
         """
-        Hash-cached recall: only query AgentCore when classified labels change.
-        Returns list of text strings (past outcomes + learned rules).
+        Multi-query recall: 3 targeted NLP queries for diverse memory types.
+        Hash-cached — only queries AgentCore when classified labels change.
+        Returns list of text strings (outcomes + missed opportunities + lessons).
         """
         current_hash = market_state.labels_hash()
         if current_hash == self._last_recall_hash and self._last_recall_result:
@@ -202,51 +305,87 @@ class MemoryStore:
             return []
 
         client = self.memory_client
-        search_text = market_state.to_search_text()
+        queries = self._build_recall_queries(market_state)
         results = []
+        seen = set()  # Deduplicate across queries
 
-        # Search trade outcomes
-        try:
-            t0 = time.time()
-            records = client.retrieve_memories(
-                memory_id=memory_id,
-                namespace="/facts/trader/SPY/",
-                query=search_text,
-                top_k=10,
-            )
-            for record in records:
-                text = self._extract_text(record)
-                if text:
-                    results.append(text)
-            dur = time.time() - t0
-            logger.info(f"v2 memory: recalled {len(results)} outcomes ({dur:.1f}s)")
-        except Exception as e:
-            logger.warning(f"v2 memory: outcome recall failed: {e}")
+        logger.info("=" * 80)
+        logger.info("🔍 BEDROCK MEMORY RECALL — MULTI-QUERY SEARCH")
+        logger.info("=" * 80)
 
-        # Search learned patterns
-        # Learned rules are in the same namespace, prefixed with [LEARNED RULE] in content.
-        # They're already included in the search above since everything is in /facts/trader/SPY/.
-        # Tag any results that look like learned rules.
-        tagged = []
-        for r in results:
-            if r.startswith("[LEARNED RULE]") or r.startswith("OUTCOME:") or r.startswith("MISSED_OPPORTUNITY:"):
-                tagged.append(r)
-            elif "IF " in r and " → " in r:
-                tagged.append(f"[LEARNED RULE] {r}")
-            else:
-                tagged.append(r)
-        results = tagged
+        MIN_RELEVANCE_SCORE = 0.3  # Drop records below this cosine similarity
+
+        t0 = time.time()
+        for query_text, label in queries:
+            logger.info(f"📝 [{label}] {query_text}")
+            try:
+                records = client.retrieve_memories(
+                    memory_id=memory_id,
+                    namespace="/facts/trader/SPY/",
+                    query=query_text,
+                    top_k=10,
+                )
+                count = 0
+                skipped = 0
+                for record in records:
+                    score = record.get("score", 1.0)
+                    if score < MIN_RELEVANCE_SCORE:
+                        skipped += 1
+                        continue
+                    text = self._extract_text(record)
+                    if text and text not in seen:
+                        seen.add(text)
+                        results.append(text)
+                        count += 1
+                if skipped:
+                    logger.info(f"  ✅ [{label}] {count} relevant records (dropped {skipped} below {MIN_RELEVANCE_SCORE} score)")
+                else:
+                    logger.info(f"  ✅ [{label}] {count} unique records")
+            except Exception as e:
+                logger.warning(f"  ❌ [{label}] failed: {e}")
+
+        dur = time.time() - t0
+        logger.info(f"✅ Total: {len(results)} records in {dur:.1f}s")
 
         self._last_recall_hash = current_hash
         self._last_recall_result = results
 
         if results:
-            print(f"\n{'='*60}")
-            print(f" V2 MEMORY — RECALLED {len(results)} ITEMS")
-            print(f"{'='*60}")
+            # Count memory types
+            outcomes = sum(1 for r in results if "OUTCOME:" in r and "POST_" not in r)
+            missed = sum(1 for r in results if "MISSED_OPPORTUNITY:" in r)
+            post_exit = sum(1 for r in results if "POST_EXIT_ANALYSIS:" in r)
+            post_wait = sum(1 for r in results if "POST_WAIT_ANALYSIS:" in r)
+
+            logger.info("=" * 80)
+            logger.info("🧠 MEMORY RECALL RESULTS")
+            logger.info("=" * 80)
+            logger.info(f"📊 TOTAL: {len(results)} items | Outcomes: {outcomes} | Missed: {missed} | Post-Exit: {post_exit} | Post-Wait: {post_wait}")
+            logger.info("=" * 80)
+            for i, r in enumerate(results, 1):
+                logger.info(f"  [{i}] {r[:200]}")
+            logger.info("=" * 80)
+
+            print(f"\n{'='*80}")
+            print(f"🧠 MEMORY RECALL — {len(results)} ITEMS FROM BEDROCK")
+            print(f"{'='*80}")
+            print(f"📊 Outcomes: {outcomes} | Missed: {missed} | Post-Exit: {post_exit} | Post-Wait: {post_wait}")
+            print(f"{'='*80}")
             for i, r in enumerate(results[:5], 1):
-                print(f"  {i}. {r[:200]}")
-            print(f"{'='*60}\n")
+                if "OUTCOME:" in r and "POST_" not in r:
+                    prefix = "📈"
+                elif "MISSED" in r:
+                    prefix = "❌"
+                elif "POST_EXIT" in r:
+                    prefix = "📊"
+                elif "POST_WAIT" in r:
+                    prefix = "⏸️ "
+                else:
+                    prefix = "📝"
+                print(f"  {prefix} [{i}] {r[:150]}")
+            if len(results) > 5:
+                print(f"  ... and {len(results) - 5} more")
+            print(f"{'='*80}\n")
 
         return results
 
@@ -256,6 +395,18 @@ class MemoryStore:
         r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
 
         now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
+        
+        # Extract raw order flow metrics for learning
+        flow_metrics = {
+            "bid_lifts": market_state.flow.bid_lifts_60,
+            "bid_drops": market_state.flow.bid_drops_60,
+            "ratio": round(market_state.flow.ratio, 2),
+            "net": market_state.flow.net,
+            "bid_vol": market_state.flow.bid_vol_60,
+            "ask_vol": market_state.flow.ask_vol_60,
+            "vol_ratio": round(market_state.flow.bid_vol_60 / max(market_state.flow.ask_vol_60, 1), 2),
+        }
+        
         snapshot = {
             "action": signal.get("action"),
             "conviction": signal.get("conviction"),
@@ -266,6 +417,8 @@ class MemoryStore:
             "session": market_state.session,
             "labels": market_state.to_prompt_text(),
             "labels_hash": market_state.labels_hash(),
+            "flow_metrics": flow_metrics,
+            "entry_nlp": self._state_to_nlp(market_state),
         }
 
         r.setex("zero_dte_v2:entry_snapshot", 3600, json.dumps(snapshot))
@@ -274,13 +427,22 @@ class MemoryStore:
         print(f" V2 ENTRY CAPTURED")
         print(f"{'='*60}")
         print(f"  {snapshot['action']} @ ${snapshot['entry_price']} | {snapshot['conviction']}")
-        print(f"  Labels: {snapshot['labels'][:150]}")
+        print(f"  Flow: {flow_metrics['ratio']}:1 (lifts={flow_metrics['bid_lifts']}, drops={flow_metrics['bid_drops']}, vol={flow_metrics['vol_ratio']}:1)")
+        print(f"  Labels: {snapshot['labels'][:100]}")
         print(f"{'='*60}\n")
 
-    def record_outcome(self, exit_signal: dict):
+    def _extract_exit_reason(self, response_text: str) -> str:
+        """Extract the 'Why:' line from agent response for outcome recording."""
+        for line in response_text.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("Why:"):
+                return stripped[4:].strip()
+        return ""
+
+    def record_outcome(self, exit_signal: dict, exit_state=None, response_text: str = ""):
         """
-        Compute WIN/LOSS, write DIRECTLY to AgentCore (immediately searchable).
-        Uses batch_create_memory_records (boto3 data plane) — NOT create_event.
+        Compute WIN/LOSS with full context — entry AND exit conditions.
+        Writes directly via batch_create_memory_records (immediately searchable).
         """
         import redis
         r = redis.Redis(host="localhost", port=6379, db=0, decode_responses=True)
@@ -292,7 +454,14 @@ class MemoryStore:
                 return
 
             entry = json.loads(raw)
-            exit_price = exit_signal.get("price", 0)
+
+            # Handle price - could be float or dict with 'current' key
+            exit_price_raw = exit_signal.get("price", 0)
+            if isinstance(exit_price_raw, dict):
+                exit_price = exit_price_raw.get("current", 0)
+            else:
+                exit_price = exit_price_raw
+
             entry_price = entry.get("entry_price", 0)
             action = entry.get("action", "")
 
@@ -309,13 +478,50 @@ class MemoryStore:
 
             pnl = abs(exit_price - entry_price)
             pnl_sign = "+" if result == "WIN" else "-"
-            content = (
+
+            # Calculate hold duration
+            entry_time = entry.get("entry_time", "")
+            exit_time = now_pt.strftime("%H:%M")
+            duration = ""
+            if entry_time:
+                try:
+                    e_h, e_m = map(int, entry_time.split(":"))
+                    x_h, x_m = map(int, exit_time.split(":"))
+                    mins = (x_h * 60 + x_m) - (e_h * 60 + e_m)
+                    duration = f" ({mins}min hold)"
+                except (ValueError, TypeError):
+                    pass
+
+            # NLP-friendly entry context
+            entry_nlp = entry.get("entry_nlp", "")
+            if not entry_nlp:
+                # Fallback for snapshots taken before NLP was added
+                flow_metrics = entry.get("flow_metrics", {})
+                entry_nlp = f"{self._flow_metrics_to_nlp(flow_metrics)} during {entry.get('session', 'unknown')} session."
+
+            # NLP-friendly exit context
+            exit_nlp = ""
+            if exit_state:
+                exit_nlp = f"Exited when conditions shifted to {self._state_to_nlp(exit_state)}"
+
+            # Agent's exit reasoning
+            exit_reason = self._extract_exit_reason(response_text)
+
+            # Build NLP content — structured header + natural language body
+            lines = [
                 f"OUTCOME: {result} {pnl_sign}${pnl:.2f} | {action} | "
-                f"{entry.get('conviction')} conviction | {entry.get('session')}\n"
-                f"{entry.get('labels', '')}\n"
-                f"Entry: ${entry_price} at {entry.get('entry_time')} → "
-                f"Exit: ${exit_price} at {now_pt.strftime('%H:%M')} on {today}"
+                f"{entry.get('conviction')} conviction | {entry.get('session')}",
+                f"Entered on {entry_nlp}",
+            ]
+            if exit_nlp:
+                lines.append(exit_nlp)
+            if exit_reason:
+                lines.append(f"Exit reason: {exit_reason}")
+            lines.append(
+                f"Held for {duration.strip(' ()')  if duration else '?'} from "
+                f"${entry_price:.2f} to ${exit_price:.2f} on {today}."
             )
+            content = "\n".join(lines)
 
             record_id = f"outcome-{action}-{today}-{now_pt.strftime('%H%M')}"
             dur = self._write_record("/facts/trader/SPY/", content, record_id)
@@ -328,24 +534,29 @@ class MemoryStore:
             print(f"\n{'='*60}")
             print(f" V2 OUTCOME STORED: {result}")
             print(f"{'='*60}")
-            print(f"  {action} ${entry_price} → ${exit_price} ({pnl_sign}${pnl:.2f})")
+            print(f"  {action} ${entry_price:.2f} → ${exit_price:.2f} ({pnl_sign}${pnl:.2f}){duration}")
+            if exit_nlp:
+                print(f"  {exit_nlp[:120]}")
+            if exit_reason:
+                print(f"  Why: {exit_reason}")
             print(f"  Bedrock write: {dur_str}")
             print(f"{'='*60}\n")
 
         except Exception as e:
             logger.warning(f"v2 memory: record_outcome failed: {e}")
 
-    def record_outcome_async(self, exit_signal: dict):
+    def record_outcome_async(self, exit_signal: dict, exit_state=None, response_text: str = ""):
         """Fire-and-forget outcome recording in background thread."""
-        threading.Thread(target=self.record_outcome, args=(exit_signal,), daemon=True).start()
+        threading.Thread(
+            target=self.record_outcome,
+            args=(exit_signal, exit_state, response_text),
+            daemon=True,
+        ).start()
 
     def record_wait_outcome(self, wait_snap: dict, current_price: float, missed_action: str, move: float):
         """
         Store missed opportunity DIRECTLY in AgentCore (immediately searchable).
-
-        Content format:
-        MISSED_OPPORTUNITY: WAIT → should have been CALL | Flow LEAN_BUYING 1.3:1 | ...
-        Price at WAIT: $582.00 → moved to $583.50 (+$1.50)
+        NLP format for better semantic search matching.
         """
         try:
             now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
@@ -354,13 +565,19 @@ class MemoryStore:
             direction_word = "up" if move > 0 else "down"
             wait_price = wait_snap.get("price", 0)
 
+            # Use pre-computed NLP if available, else build from raw fields
+            wait_nlp = wait_snap.get("wait_nlp", "")
+            if not wait_nlp:
+                flow_dir = wait_snap.get("flow_direction", "MIXED").lower().replace("_", " ")
+                flow_ratio = wait_snap.get("flow_ratio", 0)
+                session = wait_snap.get("session", "unknown")
+                wait_nlp = f"{flow_dir} flow with {flow_ratio}:1 ratio during {session} session"
+
             content = (
-                f"MISSED_OPPORTUNITY: WAIT → should have been {missed_action} | "
-                f"Flow {wait_snap.get('flow_direction')} {wait_snap.get('flow_ratio')}:1 | "
-                f"{wait_snap.get('session')}\n"
-                f"{wait_snap.get('labels', '')}\n"
-                f"Price at WAIT: ${wait_price:.2f} at {wait_snap.get('time')} → "
-                f"moved {direction_word} ${abs_move:.2f} to ${current_price:.2f} on {today}"
+                f"MISSED_OPPORTUNITY: WAIT should have been {missed_action} | {wait_snap.get('session')}\n"
+                f"Said WAIT at ${wait_price:.2f} with {wait_nlp}.\n"
+                f"Price moved {direction_word} ${abs_move:.2f} to ${current_price:.2f} on {today} at {wait_snap.get('time', '?')}. "
+                f"Should have entered {missed_action}."
             )
 
             record_id = f"missed-{missed_action}-{today}-{now_pt.strftime('%H%M%S')}"
@@ -386,56 +603,6 @@ class MemoryStore:
             args=(wait_snap, current_price, missed_action, move),
             daemon=True,
         ).start()
-
-    def store_patterns(self, patterns: list[str]):
-        """
-        Store extracted patterns from daily consolidation.
-        Writes DIRECTLY to /facts/trader/SPY/ (same namespace as outcomes).
-        Content is prefixed with rule text so semantic search finds it.
-        """
-        today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
-
-        stored = 0
-        for i, pattern in enumerate(patterns):
-            record_id = f"pattern-{today}-{i}"
-            dur = self._write_record("/facts/trader/SPY/", f"[LEARNED RULE] {pattern}", record_id)
-            if dur is not None:
-                stored += 1
-
-        if stored:
-            logger.info(f"v2 memory: stored {stored}/{len(patterns)} patterns")
-            print(f"\n{'='*60}")
-            print(f" V2 PATTERNS STORED: {stored} rules")
-            print(f"{'='*60}")
-            for p in patterns[:5]:
-                print(f"  - {p[:120]}")
-            print(f"{'='*60}\n")
-
-    def get_todays_outcomes(self) -> list[str]:
-        """Retrieve today's trade outcomes from AgentCore for consolidation."""
-        memory_id = self.get_or_create_memory()
-        if not memory_id:
-            return []
-
-        client = self.memory_client
-        today = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d")
-
-        try:
-            records = client.retrieve_memories(
-                memory_id=memory_id,
-                namespace="/facts/trader/SPY/",
-                query=f"OUTCOME trade on {today}",
-                top_k=20,
-            )
-            outcomes = []
-            for record in records:
-                text = self._extract_text(record)
-                if text and today in text:
-                    outcomes.append(text)
-            return outcomes
-        except Exception as e:
-            logger.warning(f"v2 memory: get_todays_outcomes failed: {e}")
-            return []
 
     def verify_memory(self) -> dict:
         """

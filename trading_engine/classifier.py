@@ -41,13 +41,13 @@ def _get_window(ticker_data: dict, window: str) -> dict:
     return windows.get(window, {})
 
 
-# Tier 1 thresholds — wider directional bands, narrow MIXED zone
-_STRONG_BUY_RATIO = 2.5   # was 3.0 — strong buying is 2.5:1+
+# Tier 1 thresholds — tighter MIXED zone to catch more directional signals
+_STRONG_BUY_RATIO = 2.5   # strong buying is 2.5:1+
 _BUY_RATIO = 1.5          # clear buying
-_LEAN_BUY_RATIO = 1.15    # lean buying (was lumped into MIXED!)
-_LEAN_SELL_RATIO = 0.85    # lean selling
-_SELL_RATIO = 0.65         # clear selling
-_STRONG_SELL_RATIO = 0.4   # was 0.33 — strong selling is 0.4:1-
+_LEAN_BUY_RATIO = 1.10    # lean buying (tightened from 1.15)
+_LEAN_SELL_RATIO = 0.90   # lean selling (tightened from 0.85)
+_SELL_RATIO = 0.65        # clear selling
+_STRONG_SELL_RATIO = 0.4  # strong selling is 0.4:1-
 # True MIXED: 0.85-1.15 ratio — genuinely balanced, no edge
 # Borderline: only the narrow gaps between tiers → LLM decides
 
@@ -90,7 +90,7 @@ def classify_flow(flow_data: dict, symbol: str = "SPY") -> FlowLabel:
     elif ratio <= _LEAN_SELL_RATIO:
         direction = "LEAN_SELLING"
     else:
-        # True MIXED: ratio 0.85-1.15
+        # True MIXED: ratio 0.90-1.10 (tightened zone)
         direction = "MIXED"
 
     # Flag borderline cases at tier boundaries for Haiku override
@@ -243,10 +243,10 @@ def classify_orb_regime(spy_data: dict) -> OrbRegime:
 
     Thresholds are %-based to be robust across SPY price levels.
     """
-    orb = spy_data.get("orb", {})
-    orb_high = orb.get("high", 0)
-    orb_low = orb.get("low", 0)
-    orb_range = orb.get("range", 0)
+    # Read ORB data (stored as flat keys in Redis)
+    orb_high = spy_data.get("orb_high", 0)
+    orb_low = spy_data.get("orb_low", 0)
+    orb_range = spy_data.get("orb_range", 0)
     price = spy_data.get("price", {}).get("current", 0)
 
     if not orb_high or not orb_low or not price:
