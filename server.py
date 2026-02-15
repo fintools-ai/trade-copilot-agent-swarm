@@ -91,6 +91,9 @@ class StreamingHandler(SimpleHTTPRequestHandler):
         elif self.path == "/engine":
             self.path = "/engine.html"
             super().do_GET()
+        elif self.path == "/engine-v2":
+            self.path = "/engine_v2.html"
+            super().do_GET()
         else:
             super().do_GET()
 
@@ -518,7 +521,8 @@ def run_server(port: int = 5000):
 ║                                                          ║
 ║  UI v1:   http://localhost:{port}                          ║
 ║  UI v2:   http://localhost:{port}/v2  [green](Bloomberg-style)[/green]     ║
-║  Engine:  http://localhost:{port}/engine [cyan](v2 dashboard)[/cyan]  ║
+║  Engine:  http://localhost:{port}/engine [cyan](v2 debug)[/cyan]       ║
+║  Trader:  http://localhost:{port}/engine-v2 [green](copy-trader)[/green] ║
 ║  SSE:     http://localhost:{port}/stream                   ║
 ║                                                          ║
 ║  [yellow]History persists (8hr TTL)[/yellow]                            ║

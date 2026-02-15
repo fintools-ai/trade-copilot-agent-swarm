@@ -246,7 +246,7 @@ class TradingEngine:
         total = time.time() - t0
 
         # Structured events for v2 engine dashboard
-        publish_event("V2_STATE", "", self._state_to_dict(state))
+        publish_event("V2_STATE", "", self._state_to_dict(state, spy_data))
         publish_event("V2_MEMORY", "", {
             "items": memories or [],
             "count": len(memories or []),
@@ -379,9 +379,9 @@ class TradingEngine:
             logger.warning(f"Haiku flow classification failed: {e}")
             return None
 
-    def _state_to_dict(self, state: MarketState) -> dict:
+    def _state_to_dict(self, state: MarketState, spy_data: dict = None) -> dict:
         """Convert MarketState to a flat dict for SSE publishing."""
-        return {
+        d = {
             "price": state.price,
             "timestamp": state.timestamp,
             "session": state.session,
@@ -430,6 +430,17 @@ class TradingEngine:
                 for t in state.breadth.per_ticker
             ],
         }
+        if spy_data:
+            d["vwap_raw"] = spy_data.get("vwap", 0)
+            d["vwap_plus_1"] = spy_data.get("vwap_plus_1", 0)
+            d["vwap_plus_2"] = spy_data.get("vwap_plus_2", 0)
+            d["vwap_minus_1"] = spy_data.get("vwap_minus_1", 0)
+            d["vwap_minus_2"] = spy_data.get("vwap_minus_2", 0)
+            d["ema_9"] = spy_data.get("ema_9", 0)
+            d["ema_21"] = spy_data.get("ema_21", 0)
+            d["orb_high"] = spy_data.get("orb_high", 0)
+            d["orb_low"] = spy_data.get("orb_low", 0)
+        return d
 
     def _parse_signal(self, response_text: str) -> dict:
         """Extract JSON signal from the last line of response."""
