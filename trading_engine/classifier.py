@@ -19,9 +19,15 @@ from zoneinfo import ZoneInfo
 
 # ── Flow Classification ──────────────────────────────────────────────
 
+FLOW_DIRECTIONS = [
+    "STRONG_BUYING", "BUYING", "LEAN_BUYING",
+    "MIXED",
+    "LEAN_SELLING", "SELLING", "STRONG_SELLING",
+]
+
 @dataclass
 class FlowLabel:
-    direction: str  # STRONG_BUYING, BUYING, LEAN_BUYING, MIXED, LEAN_SELLING, SELLING, STRONG_SELLING
+    direction: str  # one of FLOW_DIRECTIONS
     ratio: float  # bid_lifts / bid_drops
     net: int  # bid_lifts - bid_drops
     momentum: str  # ACCELERATING, STEADY, FADING (5s vs 60s comparison)

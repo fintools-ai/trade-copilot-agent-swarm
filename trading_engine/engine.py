@@ -31,7 +31,7 @@ from config.settings import (
     CLASSIFIER_MODEL_ID,
     CLASSIFIER_ALWAYS_LLM,
 )
-from trading_engine.classifier import classify_all, classify_flow, _get_window, MarketState
+from trading_engine.classifier import classify_all, classify_flow, _get_window, MarketState, FLOW_DIRECTIONS
 from trading_engine.prompts import (
     SYSTEM_PROMPT, build_scan_prompt, build_monitor_prompt,
     FLOW_CLASSIFIER_SYSTEM, build_flow_classifier_prompt,
@@ -363,11 +363,33 @@ class TradingEngine:
                 messages=[
                     {"role": "user", "content": [{"text": user_text}]}
                 ],
-                inferenceConfig={"maxTokens": 200, "temperature": 0},
+                outputConfig={
+                    "textFormat": {
+                        "type": "json_schema",
+                        "structure": {
+                            "jsonSchema": {
+                                "schema": json.dumps({
+                                    "type": "object",
+                                    "properties": {
+                                        "direction": {
+                                            "type": "string",
+                                            "enum": FLOW_DIRECTIONS,
+                                        },
+                                        "reasoning": {"type": "string"},
+                                    },
+                                    "required": ["direction", "reasoning"],
+                                    "additionalProperties": False,
+                                }),
+                                "name": "flow_classification",
+                                "description": "Classify order flow direction",
+                            }
+                        }
+                    }
+                },
+                inferenceConfig={"maxTokens": 2000, "temperature": 0},
             )
-            text = response["output"]["message"]["content"][0]["text"]
-            parsed = json.loads(text)
-            return parsed.get("direction", "")
+            parsed = json.loads(response["output"]["message"]["content"][0]["text"])
+            return parsed["direction"]
 
         try:
             t0 = time.time()

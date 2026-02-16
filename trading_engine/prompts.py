@@ -258,8 +258,7 @@ These are the HARD cases — the ones you exist to solve:
 → {"direction": "BUYING", "reasoning": "1.29:1 lift ratio is borderline LEAN, but ask retreat 2.2:1 is strong signal — sellers pulling offers fast. Volume 1.6x. 5s accelerating at 1.8:1. Multiple secondaries upgrade this from LEAN to BUYING."}
 </borderline_examples>
 
-Output ONLY a JSON object: {"direction": "...", "reasoning": "..."}
-No other text."""
+Respond with your direction and reasoning. Output is schema-constrained to valid JSON."""
 
 
 def _memory_section(memories: list[str]) -> str:
