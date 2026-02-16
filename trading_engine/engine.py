@@ -20,20 +20,20 @@ import boto3
 import redis
 import requests
 from strands import Agent
-from strands.agent.conversation_manager import SlidingWindowConversationManager
+from strands.agent.conversation_manager import SummarizingConversationManager
 
 from config.settings import (
     AWS_REGION,
     ENGINE_MODEL_ID,
     ENGINE_SCAN_INTERVAL,
     ENGINE_MONITOR_INTERVAL,
-    ENGINE_CONVERSATION_WINDOW,
     CLASSIFIER_MODEL_ID,
     CLASSIFIER_ALWAYS_LLM,
 )
 from trading_engine.classifier import classify_all, classify_flow, _get_window, MarketState, FLOW_DIRECTIONS
 from trading_engine.prompts import (
-    SYSTEM_PROMPT, build_scan_prompt, build_monitor_prompt,
+    SYSTEM_PROMPT, ENGINE_SUMMARIZATION_PROMPT,
+    build_scan_prompt, build_monitor_prompt,
     FLOW_CLASSIFIER_SYSTEM, build_flow_classifier_prompt,
 )
 from trading_engine.tools import create_engine_tools
@@ -97,7 +97,7 @@ class TradingEngine:
                 break
             await asyncio.sleep(1)
 
-        logger.info("[STARTUP] Agent created — model: %s, window: %s", ENGINE_MODEL_ID, ENGINE_CONVERSATION_WINDOW)
+        logger.info("[STARTUP] Agent created — model: %s, summarizing context manager", ENGINE_MODEL_ID)
         publish_event("ENGINE_STATUS", "v2 engine started", {"version": "v2", "agent": True})
 
         try:
@@ -325,18 +325,19 @@ class TradingEngine:
         return flow_data, spy_data, mag7_data
 
     def _create_agent(self):
-        """Create the persistent Strands Agent with tools and sliding window history."""
+        """Create the persistent Strands Agent with tools and summarizing context manager."""
         tools = create_engine_tools(self)
         self.agent = Agent(
             model=ENGINE_MODEL_ID,
             system_prompt=SYSTEM_PROMPT,
             tools=tools,
-            conversation_manager=SlidingWindowConversationManager(
-                window_size=ENGINE_CONVERSATION_WINDOW,
-                should_truncate_results=True,
+            conversation_manager=SummarizingConversationManager(
+                summary_ratio=0.4,
+                preserve_recent_messages=10,
+                summarization_system_prompt=ENGINE_SUMMARIZATION_PROMPT,
             ),
         )
-        logger.info("[STARTUP] Strands Agent created — model: %s, window: %s", ENGINE_MODEL_ID, ENGINE_CONVERSATION_WINDOW)
+        logger.info("[STARTUP] Strands Agent created — model: %s, summarizing (ratio=0.4, preserve=10)", ENGINE_MODEL_ID)
 
     async def _invoke_agent(self, user_prompt: str) -> str:
         """Call the Strands Agent from the async event loop via run_in_executor.

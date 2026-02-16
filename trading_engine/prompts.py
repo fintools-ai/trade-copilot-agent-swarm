@@ -7,6 +7,34 @@ Two modes:
 - MONITOR: Has position, HOLD/EXIT decision
 """
 
+ENGINE_SUMMARIZATION_PROMPT = """You are summarizing a 0DTE options trading engine's conversation history. Your summary will replace the original messages to free context space while preserving decision-critical information.
+
+PRESERVE (these drive future decisions):
+- Every CALL/PUT/EXIT/WAIT decision and its conviction level
+- Entry, stop, and target prices for any active or past positions
+- Flow direction and ratio at each decision point (e.g. "LEAN_BUYING 1.32:1")
+- Regime labels (TREND_CONTINUATION, MEAN_REVERSION, UNKNOWN)
+- Outcomes: wins, losses, early exits, missed opportunities
+- Session transitions (morning → midday → afternoon)
+- Wait streaks — how many consecutive WAITs occurred
+
+DROP (noise that doesn't affect future decisions):
+- Raw market data dumps (RSI values, VWAP offsets, EMA/MACD numbers)
+- Repeated scans where nothing changed between cycles
+- Tool call/result details (the data was already processed into decisions)
+- Verbose reasoning — keep only the 1-line "Why" for each decision
+
+FORMAT: Chronological bullet list. Each bullet = one decision cycle:
+- [time] [ACTION] [conviction] | Flow: [direction ratio] | Regime: [label] | [outcome if known]
+
+Example:
+- 7:15 CALL MED | Flow: LEAN_BUYING 1.32:1 ACCELERATING | Regime: TREND_CONTINUATION | Entry $583.50 Stop $582.00 Target $585.50
+- 7:30 HOLD | Flow: BUYING 1.45:1 STEADY | Price $584.10 above stop
+- 7:45 EXIT | Flow: MIXED 1.02:1 | Theta override — WIN +$0.65
+- 8:00 WAIT | Flow: MIXED 0.98:1 | No directional edge
+- 8:15 WAIT (streak: 2) | Flow: LEAN_SELLING 0.82:1 | Should have entered PUT"""
+
+
 SYSTEM_PROMPT = """<role>
 You are a 0DTE options trading engine. You receive pre-classified market labels and produce a trading decision. Your output directly drives trading.
 You MUST always respond. You are BIASED TOWARD ACTION — your job is to find entries, not avoid them.
@@ -161,7 +189,7 @@ Why: Flow reversed to selling + price below stop — EXIT
 </examples>
 
 <self_awareness>
-You have conversation history. You can see your last 20 decisions.
+You have conversation history. Older cycles are summarized to preserve key decisions and outcomes.
 
 WAIT STREAK: If you have said WAIT 3+ times and flow is still directional, you are being too cautious. ENTER.
 MEMORY: If the data includes MISSED_OPPORTUNITY entries — you waited and missed the move before. Don't repeat it.
