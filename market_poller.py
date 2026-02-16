@@ -114,10 +114,10 @@ async def poll_spy(mcp, r):
         elapsed = time.time() - t0
         price_data = data.get("price", {})
         price = price_data.get("current", "?")
-        logger.info(f"SPY poll: ${price} in {elapsed:.1f}s")
+        logger.info("[SPY] Price poll: $%s in %.1fs", price, elapsed)
 
     except Exception as e:
-        logger.error(f"SPY poll error: {e}")
+        logger.error("[SPY] Price poll failed: %s", e)
 
 
 async def poll_spy_technicals(mcp, r):
@@ -236,10 +236,10 @@ async def poll_spy_technicals(mcp, r):
         r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)
 
         elapsed = time.time() - t0
-        logger.info(f"SPY technicals updated in {elapsed:.1f}s")
+        logger.info("[SPY] Technicals updated in %.1fs", elapsed)
 
     except Exception as e:
-        logger.error(f"SPY technicals error: {e}")
+        logger.error("[SPY] Technicals fetch failed: %s", e)
 
 
 async def poll_mag7(mcp, r):
@@ -295,10 +295,10 @@ async def poll_mag7(mcp, r):
         r.set(REDIS_KEY_MAG7, json_str, ex=REDIS_TTL)
 
         elapsed = time.time() - t0
-        logger.info(f"Mag7 poll: {len(data['symbols'])} symbols in {elapsed:.1f}s")
+        logger.info("[MAG7] Polled %d symbols in %.1fs", len(data["symbols"]), elapsed)
 
     except Exception as e:
-        logger.error(f"Mag7 poll error: {e}")
+        logger.error("[MAG7] Poll failed: %s", e)
 
 
 async def _loop(fn, interval, mcp, r, shutdown_event):
@@ -316,7 +316,7 @@ async def _loop(fn, interval, mcp, r, shutdown_event):
             except asyncio.TimeoutError:
                 pass  # Normal: timeout means we should poll again
         else:
-            logger.warning(f"{fn.__name__} took {elapsed:.1f}s > {interval}s interval, skipping sleep")
+            logger.warning("[POLLER] %s took %.1fs > %ss interval, skipping sleep", fn.__name__, elapsed, interval)
 
 
 async def _heartbeat(r, shutdown_event):
@@ -334,7 +334,7 @@ async def run(spy_interval: int, mag7_interval: int):
     """Main poller loop. Opens MCP client once, runs poll loops concurrently."""
     r = _get_redis()
     r.ping()
-    logger.info("Redis connected")
+    logger.info("[POLLER] Redis connected")
 
     shutdown_event = asyncio.Event()
 
@@ -343,10 +343,10 @@ async def run(spy_interval: int, mag7_interval: int):
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, shutdown_event.set)
 
-    logger.info(f"Starting poller: SPY quote every {spy_interval}s, SPY technicals every 10s, Mag7 every {mag7_interval}s")
+    logger.info("[POLLER] Starting: SPY quote every %ss, SPY technicals every 10s, Mag7 every %ss", spy_interval, mag7_interval)
 
     with create_twelvedata_mcp() as mcp:
-        logger.info("MCP client connected (persistent)")
+        logger.info("[MCP] Client connected (persistent)")
 
         await asyncio.gather(
             _loop(poll_spy, spy_interval, mcp, r, shutdown_event),
@@ -357,7 +357,7 @@ async def run(spy_interval: int, mag7_interval: int):
 
     # Cleanup status on exit
     r.delete(REDIS_KEY_STATUS)
-    logger.info("Poller stopped")
+    logger.info("[POLLER] Stopped")
 
 
 def main():

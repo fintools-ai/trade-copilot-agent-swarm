@@ -82,8 +82,7 @@ class TradingEngine:
         self.poller_proc = subprocess.Popen(
             [sys.executable, "market_poller.py"],
         )
-        logger.info(f"Market poller started (pid {self.poller_proc.pid})")
-        print(f"[v2] Market poller started (pid {self.poller_proc.pid})")
+        logger.info("[STARTUP] Market poller started (pid %s)", self.poller_proc.pid)
 
         # Initialize memory store (background, don't block)
         asyncio.get_event_loop().run_in_executor(None, self.memory.get_or_create_memory)
@@ -92,13 +91,13 @@ class TradingEngine:
         self._create_agent()
 
         # Wait for first poller data
-        print("[v2] Waiting for market data...")
+        logger.info("[STARTUP] Waiting for market data...")
         for _ in range(30):
             if self.redis.exists(REDIS_KEY_SPY):
                 break
             await asyncio.sleep(1)
 
-        print(f"[v2] Agent created — model: {ENGINE_MODEL_ID}, window: {ENGINE_CONVERSATION_WINDOW}")
+        logger.info("[STARTUP] Agent created — model: %s, window: %s", ENGINE_MODEL_ID, ENGINE_CONVERSATION_WINDOW)
         publish_event("ENGINE_STATUS", "v2 engine started", {"version": "v2", "agent": True})
 
         try:
@@ -106,14 +105,14 @@ class TradingEngine:
                 # Stop after market close
                 now_pt = datetime.now(pt_tz)
                 if now_pt.hour >= 14:
-                    print("[v2] Market closed (1PM PT) — stopping")
+                    logger.info("[STARTUP] Market closed (1PM PT) — stopping")
                     break
 
                 # Wait for market open
                 if now_pt.hour < 6 or (now_pt.hour == 6 and now_pt.minute < 30):
                     open_time = now_pt.replace(hour=6, minute=30, second=0)
                     wait_secs = (open_time - now_pt).total_seconds()
-                    print(f"[v2] Market opens in {wait_secs/60:.0f}min, waiting...")
+                    logger.info("[STARTUP] Market opens in %.0fmin, waiting...", wait_secs/60)
                     try:
                         await asyncio.wait_for(self._shutdown.wait(), timeout=min(wait_secs, 60))
                     except asyncio.TimeoutError:
@@ -129,8 +128,7 @@ class TradingEngine:
                     pass
 
         except Exception as e:
-            logger.error(f"Engine error: {e}")
-            print(f"[v2] Engine error: {e}")
+            logger.error("[ERROR] Engine fatal: %s", e, exc_info=True)
         finally:
             self._cleanup()
 
@@ -142,7 +140,7 @@ class TradingEngine:
                 self.poller_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 self.poller_proc.kill()
-            print("[v2] Market poller stopped")
+            logger.info("[STARTUP] Market poller stopped")
 
     async def cycle(self):
         """Single engine cycle: Fetch → Classify → Recall → Synthesize → Act"""
@@ -152,8 +150,12 @@ class TradingEngine:
         # 1. FETCH (parallel)
         flow_data, spy_data, mag7_data = await self._fetch_data()
         if not spy_data:
-            logger.warning("No SPY data available, skipping cycle")
+            logger.warning("[FETCH] No SPY data available, skipping cycle")
             return
+        logger.info("[FETCH] flow=%s spy=%s mag7=%s",
+                    "OK" if flow_data else "EMPTY",
+                    "OK" if spy_data else "EMPTY",
+                    "OK" if mag7_data else "EMPTY")
 
         # 0. EVALUATE WAIT OUTCOMES — did we miss a trade last cycle?
         current_price = spy_data.get("price", 0)
@@ -167,19 +169,18 @@ class TradingEngine:
         if CLASSIFIER_ALWAYS_LLM or state.flow.borderline:
             llm_direction = await self._classify_flow_llm(flow_data, "SPY")
             if llm_direction and llm_direction != state.flow.direction:
-                print(f"  [hybrid] Haiku reclassified SPY flow: {state.flow.direction} → {llm_direction}")
+                logger.info("[HAIKU] Reclassified SPY flow: %s -> %s", state.flow.direction, llm_direction)
                 state.flow.direction = llm_direction
                 state.flow.borderline = False
 
-        # Print classified labels
-        print(f"\n[v2] Cycle #{self.cycle_count} — {state.timestamp}")
-        print(f"  Regime: {state.orb_regime.regime} (ORB ${state.orb_regime.range_dollars} = {state.orb_regime.range_pct:.3f}%)")
-        haiku_tag = " [LLM]" if CLASSIFIER_ALWAYS_LLM or (not state.flow.borderline and state.flow.direction in ("LEAN_BUYING", "LEAN_SELLING", "BUYING", "SELLING") and 0.4 < state.flow.ratio < 2.5) else ""
-        print(f"  Flow: {state.flow.direction} {state.flow.ratio}:1 net={state.flow.net} {state.flow.momentum}{haiku_tag}")
-        print(f"  RSI: {state.tech.rsi_state} ({state.tech.rsi_value}) | VWAP: {state.tech.vwap_position}")
-        print(f"  Breadth: {state.breadth.bias} ({state.breadth.aligned_count}/7)")
-        if state.breadth.divergent_tickers:
-            print(f"  Divergent: {', '.join(state.breadth.divergent_tickers)}")
+        # Log classified labels
+        haiku_tag = " [HAIKU]" if CLASSIFIER_ALWAYS_LLM or (not state.flow.borderline and state.flow.direction in ("LEAN_BUYING", "LEAN_SELLING", "BUYING", "SELLING") and 0.4 < state.flow.ratio < 2.5) else ""
+        logger.info("═══ CYCLE #%d | %s ═══════════════════════════════════", self.cycle_count, state.timestamp)
+        logger.info("[CLASSIFY] Regime: %s (ORB $%s = %.3f%%)", state.orb_regime.regime, state.orb_regime.range_dollars, state.orb_regime.range_pct)
+        logger.info("[CLASSIFY] Flow: %s %.2f:1 net=%d %s%s", state.flow.direction, state.flow.ratio, state.flow.net, state.flow.momentum, haiku_tag)
+        logger.info("[CLASSIFY] RSI: %s (%.1f) | VWAP: %s | EMA: %s", state.tech.rsi_state, state.tech.rsi_value, state.tech.vwap_position, state.tech.ema_cross)
+        logger.info("[CLASSIFY] Breadth: %s (%d/7)%s", state.breadth.bias, state.breadth.aligned_count,
+                    f" | Divergent: {', '.join(state.breadth.divergent_tickers)}" if state.breadth.divergent_tickers else "")
 
         # 3. RECALL (hash-cached)
         memories = await asyncio.get_event_loop().run_in_executor(None, self.memory.recall, state)
@@ -188,28 +189,35 @@ class TradingEngine:
         self._current_state = state
         self._current_memories = memories
         
-        # Log memory influence
+        # Log memory results
         if memories:
             has_post_exit = any("POST_EXIT_ANALYSIS" in m for m in memories)
             has_post_wait = any("POST_WAIT_ANALYSIS" in m for m in memories)
             has_missed = any("MISSED_OPPORTUNITY" in m for m in memories)
-            
-            influences = []
-            if has_post_exit:
-                influences.append("📊 Post-Exit Lessons")
-            if has_post_wait:
-                influences.append("⏸️  Post-Wait Lessons")
-            if has_missed:
-                influences.append("⚠️  Missed Opportunities")
-            
-            if influences:
-                logger.info(f"🧠 Agent has access to: {', '.join(influences)}")
+            has_outcome = any("OUTCOME" in m for m in memories)
+
+            types = []
+            if has_outcome: types.append("OUTCOME")
+            if has_missed: types.append("MISSED")
+            if has_post_exit: types.append("POST_EXIT")
+            if has_post_wait: types.append("POST_WAIT")
+
+            logger.info("[MEMORY] Recalled %d memories (types: %s) query=%s",
+                        len(memories), ", ".join(types) or "none", state.to_search_text())
+            for i, m in enumerate(memories, 1):
+                logger.debug("[MEMORY]   %d. %s", i, m[:120])
+        else:
+            logger.info("[MEMORY] No memories recalled for current labels")
 
         # 5. BUILD PROMPT (data inline + wait streak warning)
+        mode = "monitor" if self.position else "scan"
         if self.position:
             user_prompt = build_monitor_prompt(state, self.position, memories)
         else:
             user_prompt = build_scan_prompt(state, memories, wait_streak=self._wait_streak)
+
+        logger.info("[AGENT] Calling %s | mode=%s | memories=%d | wait_streak=%d",
+                    ENGINE_MODEL_ID, mode, len(memories or []), self._wait_streak)
 
         # 6. SYNTHESIZE (Strands Agent with conversation history)
         query_start_ts = time.time()
@@ -217,20 +225,26 @@ class TradingEngine:
         latency = time.time() - query_start_ts
 
         if not response_text:
+            logger.error("[AGENT] Empty response from agent after %.1fs", latency)
             return
+
+        logger.info("[AGENT] Response (%.1fs):\n%s", latency, response_text)
 
         # 7. PARSE SIGNAL
         signal_data = self._parse_signal(response_text)
         signal_data["latency"] = round(latency, 1)
-        
-        # Log if decision was influenced by memory
+
         action = signal_data.get("action")
         conviction = signal_data.get("conviction", "")
+
+        # Check if parse fell back to default WAIT
+        if signal_data.get("signal") is None and action == "WAIT" and conviction == "LOW":
+            logger.warning("[SIGNAL] Parse fell back to default WAIT — no valid JSON found in response")
+
+        # Log if decision was influenced by memory
         if memories and action != "WAIT":
-            # Check if agent mentioned memory in reasoning
             if "memory" in response_text.lower() or "learned" in response_text.lower() or "past" in response_text.lower():
-                logger.info(f"🎯 MEMORY-INFLUENCED DECISION: {action} {conviction}")
-                logger.info(f"   Agent reasoning referenced past experiences")
+                logger.info("[MEMORY] Decision %s %s was influenced by recalled memories", action, conviction)
 
         # 8. TRACK WAIT STREAK
         if signal_data.get("action") == "WAIT":
@@ -241,8 +255,12 @@ class TradingEngine:
         # 9. ACT
         self._act(signal_data, state, response_text)
 
+        logger.info("[SIGNAL] %s %s | entry=%s stop=%s target=%s | price=%s",
+                    action, conviction,
+                    signal_data.get("entry", "-"), signal_data.get("stop", "-"),
+                    signal_data.get("target", "-"), signal_data.get("price", "-"))
+
         # 10. PUBLISH TO UI
-        mode = "monitor" if self.position else "scan"
         total = time.time() - t0
 
         # Structured events for v2 engine dashboard
@@ -273,7 +291,8 @@ class TradingEngine:
         )
 
         streak_tag = f" | streak={self._wait_streak}" if self._wait_streak >= 2 else ""
-        print(f"  Signal: {signal_data.get('action', '?')} | {signal_data.get('conviction', '?')} | {latency:.1f}s LLM | {total:.1f}s total{streak_tag}")
+        logger.info("═══ CYCLE #%d DONE | %.1fs total | %.1fs LLM%s ═══════════════",
+                    self.cycle_count, total, latency, streak_tag)
 
     async def _fetch_data(self) -> tuple[dict, dict, dict]:
         """Fetch order flow, SPY data, and Mag7 data in parallel."""
@@ -286,7 +305,7 @@ class TradingEngine:
                 )
                 return resp.json() if resp.status_code == 200 else {}
             except Exception as e:
-                logger.warning(f"Order flow fetch failed: {e}")
+                logger.error("[FETCH] Order flow fetch failed: %s", e)
                 return {}
 
         async def fetch_redis(key):
@@ -294,7 +313,7 @@ class TradingEngine:
                 raw = await loop.run_in_executor(None, self.redis.get, key)
                 return json.loads(raw) if raw else {}
             except Exception as e:
-                logger.warning(f"Redis fetch {key} failed: {e}")
+                logger.error("[FETCH] Redis fetch %s failed: %s", key, e)
                 return {}
 
         flow_data, spy_data, mag7_data = await asyncio.gather(
@@ -317,7 +336,7 @@ class TradingEngine:
                 should_truncate_results=True,
             ),
         )
-        logger.info(f"Strands Agent created — model: {ENGINE_MODEL_ID}, window: {ENGINE_CONVERSATION_WINDOW}")
+        logger.info("[STARTUP] Strands Agent created — model: %s, window: %s", ENGINE_MODEL_ID, ENGINE_CONVERSATION_WINDOW)
 
     async def _invoke_agent(self, user_prompt: str) -> str:
         """Call the Strands Agent from the async event loop via run_in_executor.
@@ -330,16 +349,12 @@ class TradingEngine:
 
         def _call():
             result = self.agent(user_prompt)
-            # Strands Agent returns an AgentResult; extract the text
-            print(result)
-            print("====")
             return str(result)
 
         try:
             return await loop.run_in_executor(None, _call)
         except Exception as e:
-            logger.error(f"Agent call failed: {e}")
-            print(f"  [v2] Agent error: {e}")
+            logger.error("[AGENT] LLM call failed: %s", e, exc_info=True)
             return ""
 
     async def _classify_flow_llm(self, flow_data: dict, symbol: str) -> str:
@@ -354,6 +369,7 @@ class TradingEngine:
 
         def _invoke():
             user_text = build_flow_classifier_prompt(w60, w5)
+            logger.info("[HAIKU] Classifying %s flow — input: %s", symbol, user_text.replace("\n", " "))
             response = self.bedrock.converse(
                 modelId=CLASSIFIER_MODEL_ID,
                 system=[
@@ -388,17 +404,22 @@ class TradingEngine:
                 },
                 inferenceConfig={"maxTokens": 2000, "temperature": 0},
             )
-            parsed = json.loads(response["output"]["message"]["content"][0]["text"])
+            raw_text = response["output"]["message"]["content"][0]["text"]
+            logger.info("[HAIKU] Raw response: %s", raw_text)
+            parsed = json.loads(raw_text)
             return parsed["direction"]
 
         try:
             t0 = time.time()
             direction = await loop.run_in_executor(None, _invoke)
             dur = time.time() - t0
-            print(f"  [hybrid] Haiku classified {symbol} flow in {dur:.1f}s: {direction}")
+            logger.info("[HAIKU] Classified %s flow in %.1fs: %s", symbol, dur, direction)
             return direction
+        except json.JSONDecodeError as e:
+            logger.error("[HAIKU] JSON parse failed: %s", e)
+            return None
         except Exception as e:
-            logger.warning(f"Haiku flow classification failed: {e}")
+            logger.error("[HAIKU] Classification failed: %s", e, exc_info=True)
             return None
 
     def _state_to_dict(self, state: MarketState, spy_data: dict = None) -> dict:
@@ -476,9 +497,13 @@ class TradingEngine:
                 if isinstance(parsed, dict) and "action" in parsed:
                     if "direction" not in parsed:
                         parsed["direction"] = parsed["action"]
+                    logger.info("[SIGNAL] Parsed OK: %s", json.dumps(parsed))
                     return parsed
             except (json.JSONDecodeError, ValueError):
                 continue
+        # Log the last 3 lines so we can debug what the LLM actually returned
+        tail = lines[-3:] if len(lines) >= 3 else lines
+        logger.error("[SIGNAL] No valid JSON found in response. Last lines: %s", tail)
         return {"action": "WAIT", "signal": None, "conviction": "LOW"}
 
     def _act(self, signal_data: dict, state: MarketState, response_text: str):
@@ -499,7 +524,9 @@ class TradingEngine:
             self.memory.record_entry(signal_data, state)
             self.trade_logger.log_entry(signal_data, state)  # Log to JSONL
             publish_event("V2_POSITION", "", {"active": True, "event": "ENTRY", **self.position})
-            print(f"  >>> ENTERED {action} @ ${signal_data.get('entry')}")
+            logger.info("[ACTION] >>> ENTERED %s @ $%s | stop=$%s target=$%s | %s",
+                        action, signal_data.get("entry"), signal_data.get("stop"),
+                        signal_data.get("target"), signal_data.get("conviction"))
 
         # EXIT — close position
         elif action == "EXIT" and self.position:
@@ -518,21 +545,22 @@ class TradingEngine:
                 **self.position,
             })
             self.memory.record_outcome_async(signal_data, state, response_text)
-            print(f"  >>> EXITED {self.position['action']} @ ${signal_data.get('price')}")
+            logger.info("[ACTION] >>> EXITED %s @ $%s", self.position["action"], signal_data.get("price"))
+            logger.info("[POST] Post-exit tracking started (5min)")
             self.position = None
 
         # HOLD — update conviction if changed
         elif sig == "HOLD" and self.position:
             new_conv = signal_data.get("conviction")
             if new_conv and new_conv != self.position.get("conviction"):
-                print(f"  >>> Conviction: {self.position['conviction']} → {new_conv}")
+                logger.info("[ACTION] Conviction changed: %s -> %s", self.position["conviction"], new_conv)
                 self.position["conviction"] = new_conv
 
         # WAIT — snapshot for missed opportunity tracking
         elif action == "WAIT" and not self.position:
             flow_dir = state.flow.direction
-            print(f"  >>> WAIT signal | Flow: {flow_dir}")
-            print(f"  >>> Starting post-WAIT tracking")
+            logger.info("[ACTION] WAIT | Flow: %s", flow_dir)
+            logger.info("[POST] Post-WAIT tracking started")
             self._snapshot_wait(state)
             # Start post-WAIT tracking for all WAIT signals
             self.post_exit_analyzer.start_wait_tracking(
@@ -608,4 +636,5 @@ class TradingEngine:
         self.redis.delete(self.WAIT_SNAPSHOT_KEY)
 
         direction_word = "up" if move > 0 else "down"
-        print(f"  [memory] MISSED {missed_action}: WAIT at ${wait_price:.2f}, price moved {direction_word} ${abs_move:.2f} to ${current_price:.2f}")
+        logger.warning("[POST] MISSED %s: WAIT at $%.2f, price moved %s $%.2f to $%.2f",
+                       missed_action, wait_price, direction_word, abs_move, current_price)
