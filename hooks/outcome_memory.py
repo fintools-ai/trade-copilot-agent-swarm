@@ -234,7 +234,7 @@ def record_outcome(exit_signal):
             memory_id=memory_id,
             actor_id="trader/SPY",
             session_id=f"trades-{today}",
-            messages=[(content, "ASSISTANT")],
+            messages=[(content, "USER")],
         )
 
         # Clear entry snapshot
@@ -301,7 +301,7 @@ def recall_outcomes(flow_text, top_k=5):
             print(f"\n{'='*60}")
             print(f" OUTCOME MEMORY — RECALLED {len(facts)} PAST OUTCOMES")
             print(f"{'='*60}")
-            print(f"Query: {query[:100]}...")
+            print(f"Query: {query}")
             print(f"Bedrock read: {dur:.1f}s")
             for i, fact in enumerate(facts, 1):
                 print(f"\n--- Outcome {i} ---")

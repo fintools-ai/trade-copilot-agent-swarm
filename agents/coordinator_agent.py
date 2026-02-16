@@ -134,13 +134,14 @@ VWAP SD position adds context but does NOT override Order Flow:
 </sd_guardrails>
 
 <output_format>
-Respond in EXACTLY this format (10 lines max):
+Respond in EXACTLY this format. Keep it tight — no filler, no hedging language.
 
 SPY $[price] | [CALL/PUT/WAIT/EXIT/HOLD] | [HIGH/MED]
-Flow: [describe order flow - buying/selling/mixed]
-Tech: [RSI XX, vs VWAP +/-$X, ORB status]
+Flow: [1 line - buying/selling/mixed, key metric]
+Tech: [1 line - RSI XX, vs VWAP +/-$X, ORB status]
 Entry: $XXX | Stop: $XXX | Target: $XXX | R/R: X:X
-[Time-based warning if after 11:00 AM PT]
+Why: [1 line - the specific reason for this decision, what flow/level convinced you]
+[Time warning ONLY if after 11:00 AM PT]
 
 {"action": "[CALL/PUT/WAIT/EXIT]", "signal": "[ENTRY/HOLD/null]", "price": [current_price], "entry": [entry_price], "stop": [stop_price], "target": [target_price], "conviction": "[HIGH/MED/LOW]"}
 
@@ -189,18 +190,20 @@ Flow confirmation matters only ABOVE invalidation. Below invalidation, get out.
 <examples>
 <example type="clear_bullish_entry">
 SPY $582.30 | CALL | HIGH
-Flow: Strong buying pressure, consistent bid lifts
+Flow: Strong buying, bid lifts +$2.1M net, consistent 5min blocks
 Tech: RSI 58, +$0.80 vs VWAP, ORB breakout confirmed
 Entry: $582.50 | Stop: $580.00 | Target: $585.00 | R/R: 2.5:1
+Why: Sustained institutional bid lifts above VWAP with ORB breakout — momentum alignment
 
 {"action": "CALL", "signal": "ENTRY", "price": 582.30, "entry": 582.50, "stop": 580.00, "target": 585.00, "conviction": "HIGH"}
 </example>
 
 <example type="clear_bearish_entry">
 SPY $583.50 | PUT | HIGH
-Flow: Heavy selling, ask drops dominating
+Flow: Heavy selling, ask drops -$1.8M net, accelerating
 Tech: RSI 38, -$1.20 vs VWAP, ORB breakdown
 Entry: $583.00 | Stop: $585.00 | Target: $580.00 | R/R: 1.5:1
+Why: Distribution pattern — large ask drops broke ORB low with volume
 After 11 AM - theta accelerating, quick exit
 
 {"action": "PUT", "signal": "ENTRY", "price": 583.50, "entry": 583.00, "stop": 585.00, "target": 580.00, "conviction": "HIGH"}
@@ -208,29 +211,30 @@ After 11 AM - theta accelerating, quick exit
 
 <example type="mixed_signals">
 SPY $582.00 | WAIT | LOW
-Flow: Mixed - bid lifts and drops balanced, no clear direction
+Flow: Mixed — bid lifts and drops balanced, no net direction
 Tech: RSI 52 neutral, price at VWAP, inside ORB range
-No trade - wait for flow clarity
+Entry: — | Stop: — | Target: — | R/R: —
+Why: No directional flow edge — balanced order book, price chopping at VWAP
 
 {"action": "WAIT", "signal": null, "price": 582.00, "entry": null, "stop": null, "target": null, "conviction": "LOW"}
 </example>
 
 <example type="hold_through_dip">
 SPY $580.50 | HOLD | MED
-Flow: Still buying pressure, bid lifts continue despite dip
+Flow: Still buying, bid lifts continue despite price dip
 Tech: RSI 48 (pulled back), price dipped but ABOVE $580 stop
-Structure intact - normal pullback, flow still bullish
-HOLD - not a breakdown, just noise
+Entry: $582.50 | Stop: $580.00 | Target: $585.00 | R/R: 2.5:1
+Why: Flow still bullish above stop — pullback is noise, not reversal
 
 {"action": "CALL", "signal": "HOLD", "price": 580.50, "entry": 582.50, "stop": 580.00, "target": 585.00, "conviction": "MED"}
 </example>
 
 <example type="exit_call_on_reversal">
 SPY $579.80 | EXIT | HIGH
-Flow: Buying pressure GONE, flow flipped to selling
+Flow: Buying GONE — flipped to selling, ask drops dominating
 Tech: RSI 42, broke below VWAP, lost $580 support
-Structure BROKEN - flow reversed, not just weak
-EXIT CALL immediately
+Entry: — | Stop: — | Target: — | R/R: —
+Why: Flow reversed + price below stop $580 — thesis invalidated
 
 {"action": "EXIT", "signal": null, "price": 579.80, "entry": null, "stop": null, "target": null, "conviction": "HIGH"}
 </example>
@@ -238,10 +242,10 @@ EXIT CALL immediately
 <example type="exit_put_on_reversal">
 [CURRENT TRADE: PUT @ $584 | Stop $586 | Target $581 — HOLD with MED conviction]
 SPY $583.20 | EXIT | HIGH
-Flow: Selling pressure GONE, flow flipped to BUYING (bid lifts dominating)
+Flow: Selling GONE — flipped to buying, bid lifts dominating
 Tech: RSI 55 (recovering), bounced off VWAP support
-PUT thesis INVALID - flow reversed to bullish
-EXIT PUT immediately - do NOT flip to CALL, just exit
+Entry: — | Stop: — | Target: — | R/R: —
+Why: Flow reversed to bullish — exit PUT, do not flip to CALL
 
 {"action": "EXIT", "signal": null, "price": 583.20, "entry": null, "stop": null, "target": null, "conviction": "HIGH"}
 </example>
@@ -249,10 +253,10 @@ EXIT PUT immediately - do NOT flip to CALL, just exit
 <example type="hold_put_through_bounce">
 [CURRENT TRADE: PUT @ $584 | Stop $586 | Target $581 — HOLD with MED conviction]
 SPY $583.80 | PUT | MED
-Flow: Still SELLING pressure, bid drops continue despite bounce
+Flow: Still selling, bid drops continue despite bounce
 Tech: RSI 42, still below VWAP, bounced but structure bearish
-Normal bounce - flow still supports PUT
-HOLD PUT - not a reversal, just noise
+Entry: $584.00 | Stop: $586.00 | Target: $581.00 | R/R: 1.5:1
+Why: Bounce is noise — flow still bearish, price below VWAP, stop intact
 
 {"action": "PUT", "signal": "HOLD", "price": 583.80, "entry": 584.00, "stop": 586.00, "target": 581.00, "conviction": "MED"}
 </example>
@@ -263,7 +267,7 @@ HOLD PUT - not a reversal, just noise
 - WAIT is a valid and often correct output
 - Never flip direction without Order Flow reversal
 - Time warnings are mandatory after 11:00 AM PT
-- Maximum 10 lines of output
+- STRICT: Header + Flow + Tech + Entry + Why + JSON. No extra paragraphs. The "Why" line IS your reasoning — keep it to 1 line.
 </critical_reminders>
 """
 

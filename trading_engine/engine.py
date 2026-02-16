@@ -537,7 +537,14 @@ class TradingEngine:
             if entry_snapshot:
                 entry_data = json.loads(entry_snapshot)
                 self.trade_logger.log_exit(signal_data, entry_data)  # Log to JSONL
-                self.post_exit_analyzer.start_tracking(signal_data, entry_data)  # Start 5-min tracking
+                market_labels = {
+                    "regime": state.orb_regime.regime,
+                    "session": state.session,
+                    "flow_dir": state.flow.direction,
+                    "flow_ratio": state.flow.ratio,
+                    "action": self.position["action"],
+                }
+                self.post_exit_analyzer.start_tracking(signal_data, entry_data, market_labels=market_labels)
             
             publish_event("V2_POSITION", "", {
                 "active": False, "event": "EXIT",
@@ -563,9 +570,16 @@ class TradingEngine:
             logger.info("[POST] Post-WAIT tracking started")
             self._snapshot_wait(state)
             # Start post-WAIT tracking for all WAIT signals
+            market_labels = {
+                "regime": state.orb_regime.regime,
+                "session": state.session,
+                "flow_dir": state.flow.direction,
+                "flow_ratio": state.flow.ratio,
+            }
             self.post_exit_analyzer.start_wait_tracking(
                 wait_signal={"price": signal_data.get("price", 0)},
-                market_state={"flow": flow_dir}
+                market_state={"flow": flow_dir},
+                market_labels=market_labels,
             )
 
     # ── WAIT outcome tracking ─────────────────────────────────
@@ -583,6 +597,7 @@ class TradingEngine:
             "labels": state.to_prompt_text(),
             "labels_hash": state.labels_hash(),
             "session": state.session,
+            "regime": state.orb_regime.regime,
             "time": now_pt.strftime("%H:%M"),
             "ts": time.time(),
             "wait_nlp": self.memory._state_to_nlp(state),

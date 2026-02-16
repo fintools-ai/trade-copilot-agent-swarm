@@ -1,0 +1,46 @@
+%%{init: {'theme': 'dark', 'themeVariables': {'primaryColor': '#1a1a2e', 'primaryTextColor': '#e0e0e0', 'primaryBorderColor': '#00d4ff', 'lineColor': '#00d4ff', 'secondaryColor': '#16213e', 'tertiaryColor': '#0f3460', 'fontFamily': 'monospace'}}}%%
+
+flowchart TB
+    subgraph LOOP["DAILY ANALYSIS LOOP"]
+        direction TB
+        A["Collect Raw Data\n18 tickers x 4 DTEs\nOI + Market Data via MCP"] --> B["Compute Deltas\nvs previous day\nfrom Redis cache"]
+        B --> C["Recall from Memory\n5 most relevant facts\nper ticker"]
+        C --> D["LLM Analysis\n1 call per ticker\nraw data + delta + memory facts"]
+        D --> E["Store Results\nRedis: fast cache\nMemory: episode"]
+    end
+
+    subgraph MEMORY["MEMORY STORE"]
+        direction LR
+        F["Episodic Memory\nFull daily snapshots\ndirection, thesis,\nstrikes, trades,\nmarket regime"]
+        G["Semantic Memory\nAuto-extracted facts\ncompressed knowledge\nper ticker"]
+        F -- "auto-extraction" --> G
+    end
+
+    E -- "store_episode()" --> F
+    G -- "recall()" --> C
+
+    subgraph COMPOUNDS["WHAT COMPOUNDS OVER TIME"]
+        direction TB
+        H["Day 1: 'Call wall at $580'"]
+        I["Day 3: 'Wall growing 3 days — sustained accumulation'"]
+        J["Day 7: 'Bullish streak, last 2 targets hit, $570 structural floor'"]
+        K["Day 14: 'Regime shift detected — institutions rotating to puts'"]
+        H --> I --> J --> K
+    end
+
+    E -. "each cycle\nmakes the next\none smarter" .-> A
+
+    style LOOP fill:#1a1a2e,stroke:#00d4ff,stroke-width:2px,color:#e0e0e0
+    style MEMORY fill:#0f3460,stroke:#ff6b6b,stroke-width:2px,color:#e0e0e0
+    style COMPOUNDS fill:#16213e,stroke:#ffd93d,stroke-width:2px,color:#e0e0e0
+    style A fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style B fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style C fill:#1a1a2e,stroke:#00ff88,color:#e0e0e0
+    style D fill:#1a1a2e,stroke:#ff6b6b,color:#e0e0e0
+    style E fill:#1a1a2e,stroke:#00d4ff,color:#e0e0e0
+    style F fill:#0f3460,stroke:#ff6b6b,color:#e0e0e0
+    style G fill:#0f3460,stroke:#ff6b6b,color:#e0e0e0
+    style H fill:#16213e,stroke:#ffd93d,color:#ffd93d
+    style I fill:#16213e,stroke:#ffd93d,color:#ffd93d
+    style J fill:#16213e,stroke:#ffd93d,color:#ffd93d
+    style K fill:#16213e,stroke:#ffd93d,color:#ffd93d

@@ -204,10 +204,10 @@ class PostExitAnalyzer:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
     
-    def start_tracking(self, exit_signal: dict, entry_data: dict):
+    def start_tracking(self, exit_signal: dict, entry_data: dict, market_labels: dict = None):
         """Start 5-minute tracking after exit."""
         exit_id = f"exit_{int(time.time())}"
-        
+
         tracking = {
             "exit_id": exit_id,
             "action": entry_data.get("action"),
@@ -215,65 +215,70 @@ class PostExitAnalyzer:
             "exit_time": datetime.now(ZoneInfo("America/Los_Angeles")).isoformat(),
             "entry_price": entry_data.get("entry_price", 0),
             "exit_flow": self._get_current_flow(),
+            "market_labels": market_labels or {},
             "samples": [],
             "start_time": time.time(),
             "type": "exit",
         }
-        
-        post_analysis_logger.info(f"Started post-exit tracking: {exit_id} | {tracking['action']} @ ${tracking['exit_price']:.2f}")
+
+        post_analysis_logger.info("[POST] Started post-exit tracking: %s | %s @ $%.2f",
+                                  exit_id, tracking['action'], tracking['exit_price'])
         asyncio.create_task(self._track_and_analyze(exit_id, tracking))
     
-    def start_wait_tracking(self, wait_signal: dict, market_state: dict):
+    def start_wait_tracking(self, wait_signal: dict, market_state: dict, market_labels: dict = None):
         """Start 5-minute tracking after WAIT signal."""
         wait_id = f"wait_{int(time.time())}"
-        
+
         tracking = {
             "wait_id": wait_id,
             "wait_price": wait_signal.get("price", 0),
             "wait_time": datetime.now(ZoneInfo("America/Los_Angeles")).isoformat(),
             "wait_flow": self._get_current_flow(),
             "flow_signal": market_state.get("flow", "UNKNOWN"),
+            "market_labels": market_labels or {},
             "samples": [],
             "start_time": time.time(),
             "type": "wait",
         }
-        
-        post_analysis_logger.info(f"Started post-wait tracking: {wait_id} | Flow {tracking['flow_signal']} @ ${tracking['wait_price']:.2f}")
+
+        post_analysis_logger.info("[POST] Started post-wait tracking: %s | Flow %s @ $%.2f",
+                                  wait_id, tracking['flow_signal'], tracking['wait_price'])
         asyncio.create_task(self._track_and_analyze(wait_id, tracking))
     
     async def _track_and_analyze(self, tracking_id: str, tracking: dict):
         """Track for 5 minutes, then analyze with LLM and save to memory."""
         try:
-            post_analysis_logger.info(f"Tracking {tracking['type']} for 5 minutes (20 samples)...")
-            
+            post_analysis_logger.info("[POST] Tracking %s for 5 minutes (20 samples)...", tracking['type'])
+
             # Sample every 15 seconds for 5 minutes
             for i in range(20):
                 await asyncio.sleep(15)
-                
+
                 sample = {
                     "time_offset": int(time.time() - tracking["start_time"]),
                     "price": self._get_current_price(),
                     "flow": self._get_current_flow(),
                 }
                 tracking["samples"].append(sample)
-                
+
                 # Log every 4th sample (every minute)
                 if (i + 1) % 4 == 0:
                     post_analysis_logger.info(
-                        f"  +{sample['time_offset']}s: ${sample['price']:.2f} | "
-                        f"Flow {sample['flow'].get('ratio', 0):.2f}:1"
+                        "[POST]   +%ds: $%.2f | Flow %.2f:1",
+                        sample['time_offset'], sample['price'],
+                        sample['flow'].get('ratio', 0),
                     )
-            
-            post_analysis_logger.info(f"Tracking complete. Analyzing with LLM...")
-            
+
+            post_analysis_logger.info("[POST] Tracking complete. Analyzing with LLM...")
+
             # Analyze with LLM
             if tracking["type"] == "exit":
                 await self._analyze_exit_with_llm(tracking)
             else:
                 await self._analyze_wait_with_llm(tracking)
-            
+
         except Exception as e:
-            post_analysis_logger.error(f"Post-{tracking['type']} tracking failed: {e}")
+            post_analysis_logger.error("[POST] %s tracking failed: %s", tracking['type'], e)
     
     def _get_current_price(self) -> float:
         """Get current SPY price from Redis."""
@@ -342,10 +347,27 @@ class PostExitAnalyzer:
         analysis = await self._invoke_llm(prompt)
         if not analysis:
             return
-        
+
         verdict = analysis.get('verdict', 'UNKNOWN')
         pnl_str = f"${abs(pnl):.2f} {'profit' if pnl >= 0 else 'loss'}"
-        memory_text = (
+
+        # Build structured header from market_labels
+        labels = tracking.get("market_labels", {})
+        now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
+        header = json.dumps({
+            "v": 1,
+            "type": "POST_EXIT_ANALYSIS",
+            "verdict": verdict,
+            "action": tracking["action"],
+            "regime": labels.get("regime", "UNKNOWN"),
+            "session": labels.get("session", "morning"),
+            "flow_dir": labels.get("flow_dir", "MIXED"),
+            "pnl": round(pnl, 2),
+            "date": now_pt.strftime("%Y-%m-%d"),
+        })
+
+        # NLP body (drives semantic search)
+        body = (
             f"POST_EXIT_ANALYSIS: {verdict} | {tracking['action']} | {pnl_str}\n"
             f"Exited {tracking['action']} position at ${tracking['exit_price']:.2f} "
             f"(entered at ${tracking['entry_price']:.2f}) with {pnl_str}. "
@@ -353,9 +375,11 @@ class PostExitAnalyzer:
             f"Flow behavior after exit: {analysis.get('flow_pattern', '')}. "
             f"Lesson: {analysis.get('lesson', '')}"
         )
-        
+
+        memory_text = header + "\n" + body
+
         self._save_to_memory(memory_text)
-        self._print_analysis("POST-EXIT", analysis)
+        self._log_analysis("POST-EXIT", analysis)
     
     async def _analyze_wait_with_llm(self, tracking: dict):
         """Use LLM to analyze the 5-minute data after WAIT."""
@@ -386,11 +410,36 @@ class PostExitAnalyzer:
         analysis = await self._invoke_llm(prompt)
         if not analysis:
             return
-        
+
         verdict = analysis.get('verdict', 'UNKNOWN')
         flow_desc = tracking['flow_signal'].lower().replace('_', ' ')
         max_move = analysis.get('max_favorable_move', '')
-        memory_text = (
+
+        # Parse max_move as float for header
+        max_move_val = 0.0
+        if max_move:
+            try:
+                max_move_val = abs(float(str(max_move).replace('$', '').split()[0]))
+            except (ValueError, IndexError, AttributeError):
+                pass
+
+        # Build structured header from market_labels
+        labels = tracking.get("market_labels", {})
+        now_pt = datetime.now(ZoneInfo("America/Los_Angeles"))
+        header = json.dumps({
+            "v": 1,
+            "type": "POST_WAIT_ANALYSIS",
+            "verdict": verdict,
+            "regime": labels.get("regime", "UNKNOWN"),
+            "session": labels.get("session", "morning"),
+            "flow_dir": labels.get("flow_dir", "MIXED"),
+            "flow_ratio": round(labels.get("flow_ratio", 1.0), 2),
+            "max_move": round(max_move_val, 2),
+            "date": now_pt.strftime("%Y-%m-%d"),
+        })
+
+        # NLP body (drives semantic search)
+        body = (
             f"POST_WAIT_ANALYSIS: {verdict} | {flow_desc} flow\n"
             f"Said WAIT at ${tracking['wait_price']:.2f} with {flow_desc} flow "
             f"({wait_flow.get('ratio', 0):.2f}:1 ratio). "
@@ -399,9 +448,11 @@ class PostExitAnalyzer:
             f"Maximum favorable move was {max_move}. "
             f"Lesson: {analysis.get('lesson', '')}"
         )
-        
+
+        memory_text = header + "\n" + body
+
         self._save_to_memory(memory_text)
-        self._print_analysis("POST-WAIT", analysis)
+        self._log_analysis("POST-WAIT", analysis)
     
     def _format_samples(self, samples: list) -> str:
         """Format samples for LLM prompt."""
@@ -434,7 +485,7 @@ class PostExitAnalyzer:
         try:
             return await loop.run_in_executor(None, _invoke)
         except Exception as e:
-            post_analysis_logger.error(f"LLM analysis failed: {e}")
+            post_analysis_logger.error("[POST] LLM analysis failed: %s", e)
             return {}
     
     def _save_to_memory(self, memory_text: str):
@@ -444,26 +495,17 @@ class PostExitAnalyzer:
             record_id = f"post-analysis-{now_pt.strftime('%Y-%m-%d-%H%M%S')}"
             dur = self.memory._write_record("/facts/trader/SPY/", memory_text, record_id)
 
-            post_analysis_logger.info("=" * 60)
-            post_analysis_logger.info("🧠 STORED TO BEDROCK MEMORY 🧠")
-            post_analysis_logger.info("=" * 60)
-            for line in memory_text.split('\n'):
-                post_analysis_logger.info(f"  {line}")
-            dur_str = f"{dur:.1f}s" if dur else "failed"
-            post_analysis_logger.info(f"  Write: {dur_str}")
-            post_analysis_logger.info("=" * 60)
+            dur_str = f"{dur:.1f}s" if dur else "rejected"
+            post_analysis_logger.info("[POST] Stored to Bedrock Memory (%s): %s",
+                                      dur_str, memory_text.split('\n')[0][:120])
 
         except Exception as e:
-            post_analysis_logger.error(f"❌ Failed to save to memory: {e}")
+            post_analysis_logger.error("[POST] Failed to save to memory: %s", e)
     
-    def _print_analysis(self, title: str, analysis: dict):
-        """Print analysis to console."""
-        post_analysis_logger.info(f"{title}: {analysis.get('verdict')} - {analysis.get('insight', '')}")
-        print(f"\n{'='*60}")
-        print(f" {title}: {analysis.get('verdict')}")
-        print(f"{'='*60}")
-        print(f"  {analysis.get('insight', '')}")
-        print(f"  Flow: {analysis.get('flow_pattern', '')}")
-        print(f"  Lesson: {analysis.get('lesson', '')}")
-        print(f"{'='*60}\n")
+    def _log_analysis(self, title: str, analysis: dict):
+        """Log analysis results."""
+        post_analysis_logger.info("[POST] %s: %s — %s", title, analysis.get('verdict'),
+                                  analysis.get('insight', ''))
+        post_analysis_logger.info("[POST]   Flow: %s", analysis.get('flow_pattern', ''))
+        post_analysis_logger.info("[POST]   Lesson: %s", analysis.get('lesson', ''))
 
