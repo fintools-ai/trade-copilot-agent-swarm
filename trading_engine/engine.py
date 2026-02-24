@@ -137,6 +137,7 @@ class TradingEngine:
 
         except Exception as e:
             logger.error("[ERROR] Engine fatal: %s", e, exc_info=True)
+            publish_event("V2_ERROR", f"Engine fatal: {e}", {"source": "ENGINE"})
         finally:
             self._cleanup()
 
@@ -159,6 +160,7 @@ class TradingEngine:
         flow_data, spy_data, mag7_data = await self._fetch_data()
         if not spy_data:
             logger.warning("[FETCH] No SPY data available, skipping cycle")
+            publish_event("V2_ERROR", "No SPY data available — check market_poller and quote poller", {"source": "FETCH"})
             return
         logger.info("[FETCH] flow=%s spy=%s mag7=%s",
                     "OK" if flow_data else "EMPTY",
@@ -234,6 +236,7 @@ class TradingEngine:
 
         if not response_text:
             logger.error("[AGENT] Empty response from agent after %.1fs", latency)
+            publish_event("V2_ERROR", f"Empty LLM response after {latency:.1f}s", {"source": "AGENT"})
             return
 
         logger.info("[AGENT] Response (%.1fs):\n%s", latency, response_text)
@@ -345,6 +348,7 @@ class TradingEngine:
                 return redis_data
             except Exception as e:
                 logger.error("[FETCH] Quote fetch failed: %s", e)
+                publish_event("V2_ERROR", f"Quote fetch failed: {e}", {"source": "FETCH"})
                 try:
                     raw = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_SPY)
                     return json.loads(raw) if raw else {}
@@ -409,6 +413,7 @@ class TradingEngine:
             return await loop.run_in_executor(None, _call)
         except Exception as e:
             logger.error("[AGENT] LLM call failed: %s", e, exc_info=True)
+            publish_event("V2_ERROR", f"LLM call failed: {e}", {"source": "AGENT"})
             return ""
 
     async def _classify_flow_llm(self, flow_data: dict, symbol: str) -> str:

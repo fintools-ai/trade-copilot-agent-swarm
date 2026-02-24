@@ -544,6 +544,27 @@
     .bottom-bar .disconnected { color: var(--red); }
     .bottom-bar .pnl-summary { color: var(--text-dim); }
 
+    /* ── ERROR TOAST ──────────────────────────────── */
+    .error-toast {
+      position: fixed;
+      top: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a0000;
+      border: 1px solid var(--red);
+      color: var(--red);
+      padding: 6px 16px;
+      font-size: 11px;
+      z-index: 9999;
+      display: none;
+      max-width: 600px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .error-toast.visible { display: block; animation: fadeToast 8s ease-out forwards; }
+    @keyframes fadeToast { 0%,80% { opacity: 1; } 100% { opacity: 0; display: none; } }
+
     /* ── TRANSITIONS ──────────────────────────────── */
     .flash-green { animation: flashG 0.5s ease-out; }
     .flash-red { animation: flashR 0.5s ease-out; }
@@ -552,6 +573,7 @@
   </style>
 </head>
 <body>
+  <div class="error-toast" id="error-toast"></div>
   <div class="shell">
 
     <!-- ── TOP BAR ──────────────────────────────────── -->
@@ -1434,9 +1456,21 @@ function handleEvent(msg) {
     saveJSON('engine_v2_perf', perfData);
     renderPerf();
   }
+  else if (type === 'V2_ERROR') {
+    showError(msg.content || 'Unknown engine error');
+  }
   else if (type === 'ENGINE_STATUS') {
     document.getElementById('bottom-model').textContent = msg.content || '';
   }
+}
+
+function showError(text) {
+  const el = document.getElementById('error-toast');
+  el.textContent = 'ERROR: ' + text;
+  el.classList.remove('visible');
+  void el.offsetWidth; // reflow to restart animation
+  el.classList.add('visible');
+  setTimeout(() => el.classList.remove('visible'), 8000);
 }
 
 // ══════════════════════════════════════════════════════════
