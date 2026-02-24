@@ -97,6 +97,7 @@ async def poll_spy(mcp, r):
         r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)
 
         # Publish price tick for UI — prefer fresh Prism quote, fallback to Twelve Data
+        price_data = data.get("price", {})
         raw_quote = r.get("market:spy:quote")
         if raw_quote:
             q = json.loads(raw_quote)
@@ -129,7 +130,6 @@ async def poll_spy(mcp, r):
             r.publish("zero_dte:events", tick)
 
         elapsed = time.time() - t0
-        price_data = data.get("price", {})
         price = price_data.get("current", "?")
         logger.info("[SPY] Price poll: $%s in %.1fs", price, elapsed)
 
