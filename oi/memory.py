@@ -299,6 +299,7 @@ def _get_sentiment_memory_id():
 def recall_sentiment(ticker):
     """
     Retrieve social media sentiment from market_sentiment memory (if it exists).
+    Uses natural language query against /facts/ namespace for better semantic matching.
     Returns list of fact strings, or empty list if sentiment plugin is not set up.
     """
     memory_id = _get_sentiment_memory_id()
@@ -312,9 +313,9 @@ def recall_sentiment(ticker):
         t0 = time.time()
         records = client.retrieve_memories(
             memory_id=memory_id,
-            namespace=f"/summaries/sentiment/{ticker}/",
-            query=f"{ticker} sentiment direction confidence themes notable accounts",
-            top_k=3,
+            namespace=f"/facts/sentiment/{ticker}/",
+            query=f"What does the crowd think about {ticker}? What are the key themes, catalysts, and sentiment direction?",
+            top_k=5,
         )
 
         for record in records:
@@ -343,6 +344,7 @@ def recall_sentiment(ticker):
 def recall_market_sentiment():
     """
     Retrieve overall market sentiment from market_sentiment memory.
+    Uses natural language query against /facts/ namespace for better semantic matching.
     Returns list of fact strings, or empty list if not available.
     """
     memory_id = _get_sentiment_memory_id()
@@ -356,9 +358,9 @@ def recall_market_sentiment():
         t0 = time.time()
         records = client.retrieve_memories(
             memory_id=memory_id,
-            namespace="/summaries/sentiment/MARKET/",
-            query="overall market sentiment risk appetite sector rotation macro themes",
-            top_k=3,
+            namespace="/facts/sentiment/MARKET/",
+            query="What is the overall market mood? Is the crowd risk-on or risk-off? What macro themes and sector rotations are traders focused on?",
+            top_k=5,
         )
 
         for record in records:

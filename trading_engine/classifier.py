@@ -38,6 +38,7 @@ class FlowLabel:
     ask_drops_60: int = 0
     bid_vol_60: int = 0
     ask_vol_60: int = 0
+    r5_ratio: float = 1.0  # 5s lift ratio — early move detection
 
 
 def _get_window(ticker_data: dict, window: str) -> dict:
@@ -123,7 +124,12 @@ def classify_flow(flow_data: dict, symbol: str = "SPY") -> FlowLabel:
         else:
             momentum = "STEADY"
     else:
-        momentum = "STEADY"
+        # MIXED — detect 5s directional buildup (early move signal)
+        r5_events = w5.get("bid_lifts", 0) + w5.get("bid_drops", 0)
+        if r5_events >= 4 and (r5 > 1.8 or r5 < 0.55):
+            momentum = "ACCELERATING"
+        else:
+            momentum = "STEADY"
 
     return FlowLabel(
         direction=direction,
@@ -137,6 +143,7 @@ def classify_flow(flow_data: dict, symbol: str = "SPY") -> FlowLabel:
         ask_drops_60=ask_drops,
         bid_vol_60=bid_vol,
         ask_vol_60=ask_vol,
+        r5_ratio=round(r5, 2),
     )
 
 
@@ -416,7 +423,7 @@ class MarketState:
             f"SPY ${self.price:.2f} | {self.session}",
             f"Regime: {orb.regime} (ORB range ${orb.range_dollars} = {orb.range_pct:.3f}% | "
             f"first-hour {orb.direction} | {orb.confidence}% historical)",
-            f"Flow: {f.direction} {f.ratio}:1 net={f.net} {f.momentum}"
+            f"Flow: {f.direction} {f.ratio}:1 net={f.net} {f.momentum} | 5s: {f.r5_ratio:.1f}:1"
             f"  (bid_lifts={f.bid_lifts_60} drops={f.bid_drops_60} ask_lifts={f.ask_lifts_60} drops={f.ask_drops_60}"
             f" bid_vol={f.bid_vol_60} ask_vol={f.ask_vol_60})",
             f"RSI: {t.rsi_state} ({t.rsi_value}) | VWAP: {t.vwap_position} ({t.price_vs_vwap:+.2f})",

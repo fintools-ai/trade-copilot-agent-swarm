@@ -307,15 +307,25 @@ ONLY use these 3 types based on the combined evidence:
 - **Buy Put**: Distribution across DTEs + bearish flow + protective hedging at long DTEs
 - **Put Credit Spread**: Strong put walls at long DTEs creating support + neutral-to-bullish bias + high IV environment (premium selling edge)
 
-## Step 5: Form Synthesis Thesis
+## Step 5: Sentiment Cross-Check (if available)
+- If sentiment_context exists, compare crowd sentiment to your OI-based direction
+- **aligned**: crowd agrees with OI → higher conviction, add +5-10% to confidence
+- **contrarian**: crowd disagrees → potential fade opportunity OR caution flag (institutions vs retail)
+- **neutral**: no strong crowd signal or sentiment data unavailable
+- Extreme crowd sentiment (>85% bullish/bearish) is often a contrarian indicator
+
+## Step 6: Form Synthesis Thesis
 Your thesis MUST be 4-6 sentences that SYNTHESIZE, not summarize:
 1. What the term structure reveals when viewed as a whole (reference specific DTE biases + confidence)
 2. Where institutional consensus exists and where it breaks down
 3. The key level or strike that determines direction (cite the number)
 4. What would INVALIDATE this trade — the specific level or signal that means you're wrong
+5. **REQUIRED: How crowd sentiment aligns or conflicts with the OI thesis (if sentiment data available, otherwise state "No sentiment data available")**
 
 BAD: "30 DTE is bullish, 60 DTE is bullish, 90 DTE is bullish, so we recommend calls."
-GOOD: "Institutions are accumulating calls across all timeframes: 30 DTE shows $580 call wall (+12K 5-day change), while 90 DTE confirms strategic positioning with $600 calls at 120K OI. The P/C ratio declining from 1.1 to 0.7 across DTEs signals progressive bullish rotation. The gamma squeeze setup at 30 DTE ($580 flip point) could catalyze a move that aligns with the 90 DTE target of $600. Invalidation: a close below $570 max pain would break the thesis."
+GOOD: "Institutions are accumulating calls across all timeframes: 30 DTE shows $580 call wall (+12K 5-day change), while 90 DTE confirms strategic positioning with $600 calls at 120K OI. The P/C ratio declining from 1.1 to 0.7 across DTEs signals progressive bullish rotation. The gamma squeeze setup at 30 DTE ($580 flip point) could catalyze a move that aligns with the 90 DTE target of $600. Social sentiment is bullish at 78% confidence, aligning with institutional positioning and adding conviction. Invalidation: a close below $570 max pain would break the thesis."
+
+GOOD (no sentiment): "Institutions are accumulating calls across all timeframes: 30 DTE shows $580 call wall (+12K 5-day change), while 90 DTE confirms strategic positioning with $600 calls at 120K OI. The P/C ratio declining from 1.1 to 0.7 across DTEs signals progressive bullish rotation. The gamma squeeze setup at 30 DTE ($580 flip point) could catalyze a move that aligns with the 90 DTE target of $600. No sentiment data available for cross-validation. Invalidation: a close below $570 max pain would break the thesis."
 
 # ACCURACY RULES
 1. If DTEs strongly disagree, confidence MUST be <50% and confluence = "divergent"
@@ -349,6 +359,7 @@ RULES:
 - direction must be exactly "CALL" or "PUT"
 - confidence must be integer 0-100
 - confluence must be exactly "aligned" or "divergent"
+- sentiment_alignment must be exactly "aligned" or "contrarian" or "neutral" or "unavailable"
 - instrument must be exactly "Buy Call", "Buy Put", or "Put Credit Spread"
 - All price fields are STOCK PRICES (not option premiums), plain numbers without $ signs
 - key_strikes: 3-6 most important strikes across ALL DTEs with interpretations
@@ -361,6 +372,8 @@ RULES:
   "success_probability": 65,
   "thesis": "4-6 sentence synthesis thesis (see requirements above)",
   "confluence": "aligned or divergent",
+  "sentiment_alignment": "aligned or contrarian or neutral or unavailable",
+  "sentiment_note": "1-2 sentence note on how crowd sentiment compares to OI thesis, or 'N/A' if no sentiment data",
   "pattern_type": "institutional_accumulation or distribution or gamma_squeeze_setup or protective_hedging or mixed",
   "smart_money_summary": "1-2 sentence summary of what institutions are doing across timeframes",
   "term_structure": {{

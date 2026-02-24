@@ -1,5 +1,5 @@
 """
-Post-exit analysis - Track price and flow for 5 minutes after exit.
+Post-exit analysis - Track price and flow for 2 minutes after exit.
 Uses LLM to analyze patterns and saves insights to Bedrock Memory.
 
 HOW IT WORKS:
@@ -15,9 +15,9 @@ HOW IT WORKS:
 
 3. SPAWNS ASYNC BACKGROUND TASK (doesn't block trading engine)
 
-4. 5-MINUTE TRACKING LOOP (20 samples × 15 seconds):
+4. 2-MINUTE TRACKING LOOP (8 samples × 15 seconds):
    Every 15 seconds, captures:
-   - Time offset: +15s, +30s, +45s... +300s
+   - Time offset: +15s, +30s, +45s... +120s
    - SPY price from Redis (market:spy:data)
    - Flow metrics from order flow service (localhost:8300):
      * bid_lifts, bid_drops, ratio
@@ -27,10 +27,10 @@ HOW IT WORKS:
    +15s: $685.75 | Flow 1.30:1 (lifts=130, drops=100)
    +30s: $686.00 | Flow 1.28:1 (lifts=128, drops=100)
    ...
-   +300s: $687.25 | Flow 0.95:1 (lifts=95, drops=100)
+   +120s: $686.50 | Flow 0.95:1 (lifts=95, drops=100)
 
 5. LLM ANALYSIS (Haiku):
-   After 5 minutes, sends all samples to LLM to determine:
+   After 2 minutes, sends all samples to LLM to determine:
    - EARLY_EXIT: Price kept moving favorably, flow stayed directional → Should have held longer
    - GOOD_EXIT: Price reversed against position → Exit was correct
    - NEUTRAL: Price stayed flat → Exit timing was fine
@@ -43,18 +43,19 @@ HOW IT WORKS:
 6. SAVES TO BEDROCK MEMORY:
    POST_EXIT_ANALYSIS: EARLY_EXIT
    CALL exited @ $685.50 (entered @ $684.00)
-   Insight: Price moved $1.75 favorable after exit with sustained flow
-   Flow pattern: Ratio stayed above 1.2 for 4 minutes before weakening
+   Insight: Price moved $0.80 favorable after exit with sustained flow
+   Flow pattern: Ratio stayed above 1.2 for 90 seconds before weakening
    Lesson: Hold CALL positions longer when flow ratio >1.2 and price momentum strong
 
 7. PRINTS TO CONSOLE for immediate feedback
 
 This helps the system learn optimal exit timing by analyzing what happened AFTER each exit.
 
-POST-WAIT ANALYSIS:
+POST_WAIT_ANALYSIS:
 ===================
 Also tracks what happens after WAIT signals to detect missed opportunities.
 If price moves significantly in the direction flow suggested, stores as MISSED_OPPORTUNITY.
+Runs for 2 minutes (8 samples) to provide faster feedback on whether waiting was correct.
 """
 
 import json
@@ -64,6 +65,8 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
+
+from config.settings import CLASSIFIER_MODEL_ID
 
 # Dedicated logger for post-analysis with separate file handler
 logger = logging.getLogger(__name__)
@@ -85,10 +88,11 @@ ch.setLevel(logging.INFO)
 ch.setFormatter(logging.Formatter('%(asctime)s [POST-ANALYSIS] %(message)s'))
 post_analysis_logger.addHandler(ch)
 
-POST_EXIT_PROMPT = """<role>You are an expert 0DTE options trader analyzing post-exit performance.</role>
+POST_EXIT_PROMPT = """<role>You are an expert 0DTE SPY options trader analyzing post-exit performance.</role>
 
 <context>
-You just exited a position. Now you're reviewing what happened in the 5 minutes AFTER the exit to determine if the exit timing was optimal.
+You just exited a SPY position. Now you're reviewing what happened in the 2 minutes AFTER the exit to determine if the exit timing was optimal.
+This analysis is ONLY for SPY 0DTE options trading.
 </context>
 
 <exit_snapshot>
@@ -100,49 +104,57 @@ Exit Flow: {exit_flow_ratio}:1 (bid_lifts={exit_lifts}, bid_drops={exit_drops})
 Bid Volume: {exit_bid_vol:,} | Ask Volume: {exit_ask_vol:,}
 </exit_snapshot>
 
-<5min_post_exit_data>
+<2min_post_exit_data>
 {samples_text}
-</5min_post_exit_data>
+</2min_post_exit_data>
 
 <analysis_framework>
-As a professional trader, analyze:
+As a professional trader, analyze with FLOW AS PRIMARY SIGNAL:
 
-1. PRICE ACTION POST-EXIT
-   - Did price continue moving favorably? (suggests early exit)
-   - Did price reverse against the position? (exit was correct)
-   - Did price consolidate/chop? (exit timing was neutral)
+1. FLOW BEHAVIOR POST-EXIT (PRIMARY)
+   - Did flow stay directional in the same direction? (suggests early exit)
+   - Did flow weaken to MIXED? (exit was correct - theta risk)
+   - Did flow reverse to opposite direction? (exit was correct)
+   - What was the flow strength trajectory: ACCELERATING/STEADY/FADING?
 
-2. FLOW BEHAVIOR POST-EXIT
-   - Did flow stay directional in the same direction?
-   - Did flow weaken or reverse?
-   - Did volume ratios confirm the move or show exhaustion?
+2. PRICE ACTION POST-EXIT (CONFIRMATION)
+   - Did price continue moving favorably? (confirms early exit if flow stayed strong)
+   - Did price dip initially then recover past exit price? (EARLY_EXIT - temporary shakeout)
+   - Did price reverse against the position and stay reversed? (confirms exit was correct)
+   - Did price consolidate/chop? (neutral)
 
-3. EXIT TIMING ASSESSMENT
-   - EARLY_EXIT: Price moved $0.50+ favorable AND flow stayed directional
-   - GOOD_EXIT: Price reversed $0.30+ against position OR flow reversed
-   - NEUTRAL: Price stayed within $0.30 range OR mixed signals
+3. EXIT TIMING ASSESSMENT (FLOW-DRIVEN)
+   - EARLY_EXIT: 
+     * Flow stayed directional (>1.2 or <0.8) AND price moved $0.40+ favorable, OR
+     * Price dipped <$0.25 initially but then recovered and moved $0.40+ favorable (temporary shakeout pattern)
+   - GOOD_EXIT: Flow weakened to MIXED (<1.1, >0.9) OR flow reversed OR price reversed $0.25+ and stayed reversed
+   - NEUTRAL: Flow stayed weak/mixed AND price stayed within $0.25 range
 
-4. ACTIONABLE LESSON
-   - What specific flow/price threshold should trigger holding longer?
-   - What specific flow/price pattern confirmed this exit was correct?
-   - What would you do differently next time in similar conditions?
+4. ACTIONABLE LESSON (FLOW-FOCUSED)
+   - What flow strength/momentum should trigger holding longer?
+   - If temporary dip then recovery: "Hold through <$0.25 dips when flow stays directional"
+   - What flow weakening pattern confirmed this exit was correct?
+   - Specific rule: "Hold when flow stays above X:1 ratio with ACCELERATING momentum"
+   - Specific rule: "Exit when flow drops to MIXED on 0DTE (theta risk)"
 </analysis_framework>
 
 <output_format>
 Return ONLY valid JSON:
 {{
   "verdict": "EARLY_EXIT|GOOD_EXIT|NEUTRAL",
-  "insight": "1-2 sentence analysis of what happened after exit",
-  "flow_pattern": "Describe flow behavior: stayed directional/weakened/reversed",
-  "price_movement": "Describe price action: continued favorable/reversed/consolidated",
-  "lesson": "Specific actionable rule for next time (e.g., 'Hold CALL longer when flow >1.2 and price momentum strong')"
+  "insight": "1-2 sentence analysis focusing on flow behavior after exit",
+  "flow_pattern": "Describe flow: stayed BUYING 1.4:1 ACCELERATING / weakened to MIXED / reversed to SELLING",
+  "price_movement": "Describe price action: continued favorable/dipped then recovered/reversed and stayed reversed/consolidated",
+  "price_pattern": "If dip-then-recovery: 'Dipped $0.20 at +45s, then recovered to +$0.80 by +240s' else 'N/A'",
+  "lesson": "Flow-driven rule (e.g., 'Hold CALL when flow stays >1.3:1 ACCELERATING. Exit when flow drops to MIXED <1.1:1. Hold through <$0.30 dips when flow directional')"
 }}
 </output_format>"""
 
-POST_WAIT_PROMPT = """<role>You are an expert 0DTE options trader analyzing missed opportunities.</role>
+POST_WAIT_PROMPT = """<role>You are an expert 0DTE SPY options trader analyzing missed opportunities.</role>
 
 <context>
-You said WAIT (no entry) when flow was directional. Now you're reviewing what happened in the 5 minutes AFTER to determine if you missed a trade opportunity.
+You said WAIT (no entry) on SPY when flow was directional. Now you're reviewing what happened in the 2 minutes AFTER to determine if you missed a trade opportunity.
+This analysis is ONLY for SPY 0DTE options trading.
 </context>
 
 <wait_snapshot>
@@ -153,43 +165,54 @@ Bid Volume: {wait_bid_vol:,} | Ask Volume: {wait_ask_vol:,}
 Volume Ratio: {wait_vol_ratio:.2f}:1 (bid/ask)
 </wait_snapshot>
 
-<5min_post_wait_data>
+<2min_post_wait_data>
 {samples_text}
-</5min_post_wait_data>
+</2min_post_wait_data>
 
 <analysis_framework>
-As a professional trader, analyze:
+As a professional trader, analyze with FLOW AS PRIMARY SIGNAL:
 
-1. PRICE MOVEMENT POST-WAIT
-   - Did price move $0.50+ in the direction flow suggested? (missed opportunity)
-   - Did price stay flat or reverse? (WAIT was correct)
+1. FLOW CONFIRMATION POST-WAIT (PRIMARY)
+   - Did flow strengthen in the same direction? (missed opportunity)
+   - Did flow stay consistent at same level? (should have entered)
+   - Did flow weaken to MIXED? (WAIT was correct)
+   - Did flow reverse? (WAIT was correct)
+   - What was the flow trajectory: ACCELERATING/STEADY/FADING?
+
+2. PRICE MOVEMENT POST-WAIT (CONFIRMATION)
+   CRITICAL: "Favorable" direction depends on flow:
+   - BUYING/LEAN_BUYING flow → favorable = price UP (CALL opportunity)
+   - SELLING/LEAN_SELLING flow → favorable = price DOWN (PUT opportunity)
+   
+   Questions:
+   - Did price move $0.50+ in the direction flow suggested? (confirms missed opportunity)
+   - Did price stay flat or move opposite to flow? (confirms WAIT was correct)
    - What was the max favorable move you could have captured?
 
-2. FLOW CONFIRMATION POST-WAIT
-   - Did flow strengthen in the same direction?
-   - Did flow stay consistent or weaken?
-   - Did volume ratios confirm directional bias?
+3. OPPORTUNITY ASSESSMENT (FLOW-DRIVEN)
+   - MISSED_OPPORTUNITY: Flow stayed directional (>1.2 or <0.8) AND price moved $0.35+ in flow direction
+     * BUYING flow (>1.2) + price UP $0.35+ = missed CALL
+     * SELLING flow (<0.8) + price DOWN $0.35+ = missed PUT
+     * Even $0.40 move with directional flow = MISSED_OPPORTUNITY
+   - GOOD_WAIT: Flow weakened to MIXED (<1.15, >0.85) OR flow reversed OR price moved opposite to flow OR (flow stayed directional BUT price moved <$0.25)
+   - NEUTRAL: Flow stayed weak/mixed (0.9-1.1) AND price stayed within $0.35 range
 
-3. OPPORTUNITY ASSESSMENT
-   - MISSED_OPPORTUNITY: Price moved $0.50+ favorable AND flow stayed/strengthened
-   - GOOD_WAIT: Price stayed flat (<$0.30 move) OR flow reversed
-   - NEUTRAL: Mixed signals, unclear outcome
-
-4. ACTIONABLE LESSON
-   - What flow/volume threshold should have triggered entry?
-   - What additional confirmation was needed before entering?
-   - What specific conditions warrant being more aggressive vs cautious?
+4. ACTIONABLE LESSON (FLOW-FOCUSED)
+   - What flow strength/momentum should have triggered immediate entry?
+   - What flow pattern confirmed waiting was correct?
+   - Specific rule: "Enter when flow >X:1 with ACCELERATING momentum, even if price/RSI neutral"
+   - Specific rule: "Wait when flow <1.2:1 FADING, even if price looks bullish"
 </analysis_framework>
 
 <output_format>
 Return ONLY valid JSON:
 {{
   "verdict": "MISSED_OPPORTUNITY|GOOD_WAIT|NEUTRAL",
-  "insight": "1-2 sentence analysis of what happened after WAIT",
-  "flow_pattern": "Describe flow behavior: strengthened/stayed consistent/weakened/reversed",
-  "price_movement": "Describe price action: moved favorable/stayed flat/reversed",
-  "max_favorable_move": "Maximum $ move in flow direction (e.g., '$0.75 up')",
-  "lesson": "Specific entry criteria for next time (e.g., 'Enter CALL when flow >1.2 + volume ratio >1.3')"
+  "insight": "1-2 sentence analysis focusing on flow behavior after WAIT",
+  "flow_pattern": "Describe flow: strengthened to BUYING 1.5:1 ACCELERATING / stayed LEAN_BUYING 1.15:1 STEADY / weakened to MIXED / reversed to SELLING",
+  "price_movement": "Describe price action: moved UP/DOWN in flow direction / stayed flat / moved opposite to flow",
+  "max_favorable_move": "Maximum $ move in flow direction - UP for BUYING, DOWN for SELLING (e.g., '$0.75 up' for BUYING flow or '$0.80 down' for SELLING flow)",
+  "lesson": "Flow-driven entry rule (e.g., 'Enter CALL when flow >1.2:1 STEADY or ACCELERATING, regardless of RSI. Wait when flow <1.15:1 FADING')"
 }}
 </output_format>"""
 
@@ -246,12 +269,12 @@ class PostExitAnalyzer:
         asyncio.create_task(self._track_and_analyze(wait_id, tracking))
     
     async def _track_and_analyze(self, tracking_id: str, tracking: dict):
-        """Track for 5 minutes, then analyze with LLM and save to memory."""
+        """Track for 2 minutes, then analyze with LLM and save to memory."""
         try:
-            post_analysis_logger.info("[POST] Tracking %s for 5 minutes (20 samples)...", tracking['type'])
+            post_analysis_logger.info("[POST] Tracking %s for 2 minutes (8 samples)...", tracking['type'])
 
-            # Sample every 15 seconds for 5 minutes
-            for i in range(20):
+            # Sample every 15 seconds for 2 minutes
+            for i in range(8):
                 await asyncio.sleep(15)
 
                 sample = {
@@ -373,6 +396,7 @@ class PostExitAnalyzer:
             f"(entered at ${tracking['entry_price']:.2f}) with {pnl_str}. "
             f"{analysis.get('insight', '')} "
             f"Flow behavior after exit: {analysis.get('flow_pattern', '')}. "
+            f"Price pattern: {analysis.get('price_pattern', 'N/A')}. "
             f"Lesson: {analysis.get('lesson', '')}"
         )
 
@@ -471,7 +495,7 @@ class PostExitAnalyzer:
         
         def _invoke():
             response = self.bedrock.converse(
-                modelId="global.anthropic.claude-opus-4-5-20251101-v1:0",
+                modelId=CLASSIFIER_MODEL_ID,
                 messages=[{"role": "user", "content": [{"text": prompt}]}],
                 inferenceConfig={"maxTokens": 300, "temperature": 0},
             )

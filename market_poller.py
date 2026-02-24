@@ -209,12 +209,18 @@ async def poll_spy_technicals(mcp, r):
         if not isinstance(ts, Exception) and ts and ts.get("status") == "success":
             t = _parse(ts)
             if t and "values" in t:
+                logger.info("[SPY] Processing time series: %d candles available", len(t["values"]))
+                
                 orb = _calc_orb(t["values"])
                 if orb:
                     data["orb_high"] = orb.get("high", 0)
                     data["orb_low"] = orb.get("low", 0)
                     data["orb_range"] = orb.get("range", 0)
                     data["orb_direction"] = orb.get("direction", "")
+                    logger.info("[SPY] ORB calculated: high=$%.2f low=$%.2f range=$%.2f", 
+                               orb.get("high", 0), orb.get("low", 0), orb.get("range", 0))
+                else:
+                    logger.warning("[SPY] ORB calculation returned None (need 6+ candles from today)")
 
                 trama = _calc_trama(t["values"])
                 if trama:
@@ -231,6 +237,10 @@ async def poll_spy_technicals(mcp, r):
                         data["vwap_plus_2"] = vwap_sd["plus_2"]
                         data["vwap_minus_1"] = vwap_sd["minus_1"]
                         data["vwap_minus_2"] = vwap_sd["minus_2"]
+            else:
+                logger.warning("[SPY] Time series parse failed or no values")
+        else:
+            logger.warning("[SPY] Time series fetch failed or returned error")
 
         # Write updated data back to Redis
         r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)

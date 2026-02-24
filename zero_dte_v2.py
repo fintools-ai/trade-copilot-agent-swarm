@@ -25,10 +25,18 @@ def main():
         datefmt="%H:%M:%S",
     )
 
-    print("=" * 60)
-    print("  Zero-DTE v2 — Learning Trading Engine")
-    print("  Code classifies | Claude synthesizes | Memory learns")
-    print("=" * 60)
+    print("\033[95m")  # Purple
+    print("""
+████████╗██████╗  █████╗ ██████╗ ███████╗    ██╗      ██████╗  ██████╗ ██████╗ 
+╚══██╔══╝██╔══██╗██╔══██╗██╔══██╗██╔════╝    ██║     ██╔═══██╗██╔═══██╗██╔══██╗
+   ██║   ██████╔╝███████║██║  ██║█████╗      ██║     ██║   ██║██║   ██║██████╔╝
+   ██║   ██╔══██╗██╔══██║██║  ██║██╔══╝      ██║     ██║   ██║██║   ██║██╔═══╝ 
+   ██║   ██║  ██║██║  ██║██████╔╝███████╗    ███████╗╚██████╔╝╚██████╔╝██║     
+   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝    ╚══════╝ ╚═════╝  ╚═════╝ ╚═╝     
+                                                                                 
+        Code classifies ··· Claude synthesizes ··· Memory learns
+    """)
+    print("\033[0m")  # Reset
 
     engine = TradingEngine()
     asyncio.run(engine.run())

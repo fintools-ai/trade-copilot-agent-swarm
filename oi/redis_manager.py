@@ -87,22 +87,9 @@ def store_ondemand_result(ticker, analysis):
 
 
 def get_ondemand_results():
-    """Get all on-demand results (checks latest key + migrates legacy daily keys)"""
-    r = _redis()
-    data = r.get("oi:ondemand:latest")
-    results = json.loads(data) if data else {}
-
-    # Migrate legacy daily keys (oi:ondemand:YYYY-MM-DD) if latest is empty
-    if not results:
-        for key in r.keys("oi:ondemand:2*"):
-            old_data = r.get(key)
-            if old_data:
-                old_results = json.loads(old_data)
-                results.update(old_results)
-        if results:
-            r.setex("oi:ondemand:latest", EXPIRY_SECONDS, json.dumps(results))
-
-    return results
+    """Get all on-demand results"""
+    data = _redis().get("oi:ondemand:latest")
+    return json.loads(data) if data else {}
 
 
 def set_status(status, message="", progress=0, ticker=None):

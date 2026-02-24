@@ -26,6 +26,9 @@ wheels/
 
 # Strands session storage
 sessions/
+
+# Process manager PID files
+data/
 *.pdf
 # IDE
 .vscode/

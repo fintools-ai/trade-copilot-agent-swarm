@@ -388,11 +388,12 @@ class MemoryStore:
         for query_text, label in queries:
             logger.info("[MEMORY]   [%s] %s", label, query_text)
             try:
+                from config.settings import ENGINE_MEMORY_MAX_RESULTS
                 records = client.retrieve_memories(
                     memory_id=memory_id,
                     namespace="/facts/trader/SPY/",
                     query=query_text,
-                    top_k=40,
+                    top_k=ENGINE_MEMORY_MAX_RESULTS,
                 )
                 count = 0
                 skipped = 0

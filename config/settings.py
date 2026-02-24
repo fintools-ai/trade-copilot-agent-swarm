@@ -15,8 +15,9 @@ DEFAULT_TIMEOUT = int(os.getenv('DEFAULT_TIMEOUT', '10'))
 GREEKS_TIMEOUT = int(os.getenv('GREEKS_TIMEOUT', '15'))
 
 
-MCP_OI_EXECUTABLE = "../mcp-openinterest-server"
-MCP_MARKET_DATA_EXECUTABLE = "../mcp-market-data-server"
+MCP_OI_EXECUTABLE = "/mcp-openinterest-server"
+MCP_MARKET_DATA_EXECUTABLE = "/mcp-market-data-server"
+
 
 # OI Analysis Configuration
 OI_TICKERS = [
@@ -26,7 +27,7 @@ OI_TICKERS = [
 ]
 OI_ANALYSIS_DAYS = [30, 50, 60, 90]
 AWS_REGION = "us-east-1"
-BEDROCK_MODEL_ID = "us.anthropic.claude-opus-4-6-20250610-v1:0"
+BEDROCK_MODEL_ID = "global.anthropic.claude-opus-4-6-v1"
 OI_BEDROCK_CONCURRENCY = int(os.getenv('OI_BEDROCK_CONCURRENCY', '4'))
 
 # Market Data Poller intervals (seconds)
@@ -35,13 +36,14 @@ POLLER_MAG7_INTERVAL = int(os.getenv('POLLER_MAG7_INTERVAL', '5'))
 POLLER_MAX_STALENESS = int(os.getenv('POLLER_MAX_STALENESS', '10'))
 
 # Trading Engine v2
-ENGINE_MODEL_ID = os.getenv('ENGINE_MODEL_ID', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')
+ENGINE_MODEL_ID = os.getenv('ENGINE_MODEL_ID', 'global.anthropic.claude-sonnet-4-6')
 ENGINE_SCAN_INTERVAL = int(os.getenv('ENGINE_SCAN_INTERVAL', '10'))
 ENGINE_MONITOR_INTERVAL = int(os.getenv('ENGINE_MONITOR_INTERVAL', '7'))
-ENGINE_MEMORY_NAME = os.getenv('ENGINE_MEMORY_NAME', 'zero_dte_v2')
+ENGINE_MEMORY_NAME = os.getenv('ENGINE_MEMORY_NAME', 'trade_mem_v4')
+ENGINE_MEMORY_MAX_RESULTS = int(os.getenv('ENGINE_MEMORY_MAX_RESULTS', '10'))  # Max memories per recall
 ENGINE_MAX_TOKENS = int(os.getenv('ENGINE_MAX_TOKENS', '512'))
-ENGINE_CONVERSATION_WINDOW = int(os.getenv('ENGINE_CONVERSATION_WINDOW', '20'))
-CLASSIFIER_MODEL_ID = os.getenv('CLASSIFIER_MODEL_ID', 'us.anthropic.claude-haiku-4-5-20251001-v1:0')
+ENGINE_CONVERSATION_WINDOW = int(os.getenv('ENGINE_CONVERSATION_WINDOW', '10'))
+CLASSIFIER_MODEL_ID = os.getenv('CLASSIFIER_MODEL_ID', 'global.anthropic.claude-haiku-4-5-20251001-v1:0')
 CLASSIFIER_ALWAYS_LLM = os.getenv('CLASSIFIER_ALWAYS_LLM', 'true').lower() == 'true'
 
 # Logging

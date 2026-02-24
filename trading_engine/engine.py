@@ -62,6 +62,7 @@ class TradingEngine:
         self.cycle_count = 0
         self.poller_proc = None
         self._shutdown = asyncio.Event()
+        self._mcp_client = None  # Persistent MCP client for fresh quotes
 
         # Strands Agent state
         self.agent = None  # Created once, persists all day with conversation history
@@ -70,7 +71,18 @@ class TradingEngine:
         self._wait_streak = 0  # Consecutive WAIT count
 
     async def run(self):
-        """Main loop: start poller, run cycles until market close, then consolidate."""
+        """Main loop: start poller, run cycles until market close."""
+        from tools.fast_0dte_tools import create_twelvedata_mcp
+        
+        # Initialize MCP client for fresh quotes
+        with create_twelvedata_mcp() as mcp:
+            self._mcp_client = mcp
+            logger.info("[STARTUP] MCP client initialized for fresh quotes")
+            
+            await self._run_loop()
+    
+    async def _run_loop(self):
+        """Main engine loop (extracted for MCP context manager)."""
         pt_tz = ZoneInfo("America/Los_Angeles")
 
         # Wire up shutdown
@@ -98,6 +110,9 @@ class TradingEngine:
             await asyncio.sleep(1)
 
         logger.info("[STARTUP] Agent created — model: %s, summarizing context manager", ENGINE_MODEL_ID)
+        
+        # Clear UI trade history for new day
+        publish_event("V2_CLEAR_HISTORY", "", {})
         publish_event("ENGINE_STATUS", "v2 engine started", {"version": "v2", "agent": True})
 
         try:
@@ -308,6 +323,53 @@ class TradingEngine:
                 logger.error("[FETCH] Order flow fetch failed: %s", e)
                 return {}
 
+        async def fetch_spy_quote():
+            """Fetch fresh SPY quote from MCP server, merge with Redis technicals."""
+            try:
+                # Use engine's persistent MCP client
+                if not hasattr(self, '_mcp_client') or self._mcp_client is None:
+                    logger.warning("[FETCH] No MCP client available, falling back to Redis")
+                    raw = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_SPY)
+                    return json.loads(raw) if raw else {}
+                
+                quote_result = await self._mcp_client.call_tool_async(
+                    tool_use_id="spy_quote",
+                    name="GetQuote",
+                    arguments={"params": {"symbol": "SPY"}},
+                )
+                
+                # Parse MCP response
+                quote = {}
+                if not isinstance(quote_result, Exception) and quote_result and quote_result.get("status") == "success":
+                    from tools.fast_0dte_tools import _parse
+                    q = _parse(quote_result)
+                    if q:
+                        quote["price"] = {
+                            "current": float(q.get("close", 0)),
+                            "open": float(q.get("open", 0)),
+                            "high": float(q.get("high", 0)),
+                            "low": float(q.get("low", 0)),
+                        }
+                
+                # Get technicals from Redis (RSI, VWAP, ORB, etc.)
+                raw = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_SPY)
+                redis_data = json.loads(raw) if raw else {}
+                
+                # Merge: fresh price from MCP, technicals from Redis
+                if quote and "price" in quote:
+                    redis_data["price"] = quote["price"]
+                    logger.info("[FETCH] Fresh SPY quote from MCP: $%.2f", quote["price"].get("current", 0))
+                
+                return redis_data
+            except Exception as e:
+                logger.error("[FETCH] MCP quote fetch failed: %s", e)
+                # Fallback to Redis only
+                try:
+                    raw = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_SPY)
+                    return json.loads(raw) if raw else {}
+                except:
+                    return {}
+
         async def fetch_redis(key):
             try:
                 raw = await loop.run_in_executor(None, self.redis.get, key)
@@ -318,7 +380,7 @@ class TradingEngine:
 
         flow_data, spy_data, mag7_data = await asyncio.gather(
             fetch_flow(),
-            fetch_redis(REDIS_KEY_SPY),
+            fetch_spy_quote(),  # Fetch from MCP server
             fetch_redis(REDIS_KEY_MAG7),
         )
 
@@ -327,8 +389,18 @@ class TradingEngine:
     def _create_agent(self):
         """Create the persistent Strands Agent with tools and summarizing context manager."""
         tools = create_engine_tools(self)
+        
+        # Create BedrockModel with 1M context enabled
+        from strands.models import BedrockModel
+        model = BedrockModel(
+            model_id=ENGINE_MODEL_ID,
+            additional_request_fields={
+                "anthropic_beta": ["context-1m-2025-08-07"]
+            }
+        )
+        
         self.agent = Agent(
-            model=ENGINE_MODEL_ID,
+            model=model,
             system_prompt=SYSTEM_PROMPT,
             tools=tools,
             conversation_manager=SummarizingConversationManager(
@@ -337,7 +409,7 @@ class TradingEngine:
                 summarization_system_prompt=ENGINE_SUMMARIZATION_PROMPT,
             ),
         )
-        logger.info("[STARTUP] Strands Agent created — model: %s, summarizing (ratio=0.4, preserve=10)", ENGINE_MODEL_ID)
+        logger.info("[STARTUP] Strands Agent created — model: %s, 1M context enabled, summarizing (ratio=0.4, preserve=10)", ENGINE_MODEL_ID)
 
     async def _invoke_agent(self, user_prompt: str) -> str:
         """Call the Strands Agent from the async event loop via run_in_executor.
@@ -447,6 +519,7 @@ class TradingEngine:
             "flow_ask_drops": state.flow.ask_drops_60,
             "flow_bid_vol": state.flow.bid_vol_60,
             "flow_ask_vol": state.flow.ask_vol_60,
+            "flow_r5_ratio": state.flow.r5_ratio,
             # Technicals
             "rsi_state": state.tech.rsi_state,
             "rsi_value": state.tech.rsi_value,

@@ -1413,6 +1413,13 @@ function handleEvent(msg) {
     renderSignal(sig, msg.content, msg.timestamp);
     if (sig.price) { S.currentPrice = sig.price; updateCandle(sig.price); }
   }
+  else if (type === 'V2_CLEAR_HISTORY') {
+    tradeLog = [];
+    saveJSON('engine_v2_trades', tradeLog);
+    perfData = { wins: 0, losses: 0, pnl: 0, cycles: 0 };
+    saveJSON('engine_v2_perf', perfData);
+    renderPerf();
+  }
   else if (type === 'ENGINE_STATUS') {
     document.getElementById('bottom-model').textContent = msg.content || '';
   }
@@ -1520,6 +1527,18 @@ function updateClock() {
 // ══════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════
+// Clear trade history + P&L if new day
+const today = new Date().toISOString().split('T')[0];
+const lastDate = localStorage.getItem('engine_v2_last_date');
+if (lastDate !== today) {
+  tradeLog = [];
+  saveJSON('engine_v2_trades', tradeLog);
+  perfData = { wins: 0, losses: 0, pnl: 0, cycles: 0 };
+  saveJSON('engine_v2_perf', perfData);
+  renderPerf();
+  localStorage.setItem('engine_v2_last_date', today);
+}
+
 initChart();
 loadChartFromStorage();
 initResize();
