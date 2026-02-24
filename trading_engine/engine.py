@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 ORDER_FLOW_URL = "http://localhost:8300/flow/all"
 REDIS_KEY_SPY = "market:spy:data"
+REDIS_KEY_QUOTE = "market:spy:quote"
 REDIS_KEY_MAG7 = "market:mag7:data"
 
 
@@ -62,7 +63,6 @@ class TradingEngine:
         self.cycle_count = 0
         self.poller_proc = None
         self._shutdown = asyncio.Event()
-        self._mcp_client = None  # Persistent MCP client for fresh quotes
 
         # Strands Agent state
         self.agent = None  # Created once, persists all day with conversation history
@@ -72,14 +72,7 @@ class TradingEngine:
 
     async def run(self):
         """Main loop: start poller, run cycles until market close."""
-        from tools.fast_0dte_tools import create_twelvedata_mcp
-        
-        # Initialize MCP client for fresh quotes
-        with create_twelvedata_mcp() as mcp:
-            self._mcp_client = mcp
-            logger.info("[STARTUP] MCP client initialized for fresh quotes")
-            
-            await self._run_loop()
+        await self._run_loop()
     
     async def _run_loop(self):
         """Main engine loop (extracted for MCP context manager)."""
@@ -324,46 +317,34 @@ class TradingEngine:
                 return {}
 
         async def fetch_spy_quote():
-            """Fetch fresh SPY quote from MCP server, merge with Redis technicals."""
+            """Fetch fresh SPY price from market-quote Redis key, merge with technicals."""
             try:
-                # Use engine's persistent MCP client
-                if not hasattr(self, '_mcp_client') or self._mcp_client is None:
-                    logger.warning("[FETCH] No MCP client available, falling back to Redis")
-                    raw = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_SPY)
-                    return json.loads(raw) if raw else {}
-                
-                quote_result = await self._mcp_client.call_tool_async(
-                    tool_use_id="spy_quote",
-                    name="GetQuote",
-                    arguments={"params": {"symbol": "SPY"}},
-                )
-                
-                # Parse MCP response
-                quote = {}
-                if not isinstance(quote_result, Exception) and quote_result and quote_result.get("status") == "success":
-                    from tools.fast_0dte_tools import _parse
-                    q = _parse(quote_result)
-                    if q:
-                        quote["price"] = {
-                            "current": float(q.get("close", 0)),
-                            "open": float(q.get("open", 0)),
-                            "high": float(q.get("high", 0)),
-                            "low": float(q.get("low", 0)),
-                        }
-                
+                # Read fresh price from market:spy:quote (written by market-quote poller)
+                raw_quote = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_QUOTE)
+
                 # Get technicals from Redis (RSI, VWAP, ORB, etc.)
                 raw = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_SPY)
                 redis_data = json.loads(raw) if raw else {}
-                
-                # Merge: fresh price from MCP, technicals from Redis
-                if quote and "price" in quote:
-                    redis_data["price"] = quote["price"]
-                    logger.info("[FETCH] Fresh SPY quote from MCP: $%.2f", quote["price"].get("current", 0))
-                
+
+                # Merge: fresh price from quote poller, technicals from market_poller
+                if raw_quote:
+                    q = json.loads(raw_quote)
+                    redis_data["price"] = {
+                        "current": q["mid"],
+                        "bid": q["bid"],
+                        "ask": q["ask"],
+                        "spread": q["spread"],
+                        "spread_bps": q["spread_bps"],
+                        "open": redis_data.get("price", {}).get("open", 0),
+                        "high": redis_data.get("price", {}).get("high", 0),
+                        "low": redis_data.get("price", {}).get("low", 0),
+                    }
+                    logger.info("[FETCH] Fresh SPY quote from Redis: $%.2f (bid=%.2f ask=%.2f spread=%.4f)",
+                                q["mid"], q["bid"], q["ask"], q["spread"])
+
                 return redis_data
             except Exception as e:
-                logger.error("[FETCH] MCP quote fetch failed: %s", e)
-                # Fallback to Redis only
+                logger.error("[FETCH] Quote fetch failed: %s", e)
                 try:
                     raw = await loop.run_in_executor(None, self.redis.get, REDIS_KEY_SPY)
                     return json.loads(raw) if raw else {}
@@ -380,7 +361,7 @@ class TradingEngine:
 
         flow_data, spy_data, mag7_data = await asyncio.gather(
             fetch_flow(),
-            fetch_spy_quote(),  # Fetch from MCP server
+            fetch_spy_quote(),  # Fresh price from Redis quote key + technicals
             fetch_redis(REDIS_KEY_MAG7),
         )
 

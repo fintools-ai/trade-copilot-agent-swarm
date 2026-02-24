@@ -21,12 +21,14 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+QUOTE_ROOT = ROOT.parent / "market-quote"
 PID_DIR = ROOT / "data" / "pids"
 LOG_DIR = ROOT / "logs"
 
 COMPONENTS = {
     "server": {"script": "server.py", "label": "Server"},
     "engine": {"script": "zero_dte_v2.py", "label": "Engine"},
+    "quote":  {"script": "run.py",  "label": "Quote",  "cwd": QUOTE_ROOT},
 }
 
 # ANSI colors
@@ -96,6 +98,21 @@ def _check_server_http() -> bool:
         return False
 
 
+def _check_quote_key() -> dict | None:
+    """Check market:spy:quote Redis key freshness."""
+    try:
+        import json, redis as _redis
+        r = _redis.Redis(host="localhost", port=6379, socket_connect_timeout=2, decode_responses=True)
+        raw = r.get("market:spy:quote")
+        if raw:
+            data = json.loads(raw)
+            ttl = r.ttl("market:spy:quote")
+            return {"mid": data.get("mid", 0), "spread_bps": data.get("spread_bps", 0), "ttl": ttl}
+    except Exception:
+        pass
+    return None
+
+
 def cmd_doctor():
     """Check status of all services."""
     print(f"\n{BOLD}  Service     Status{RESET}")
@@ -112,6 +129,13 @@ def cmd_doctor():
     redis_ok = _check_redis()
     status = f"{GREEN}online{RESET}" if redis_ok else f"{RED}offline{RESET}"
     print(f"  {'Redis':<11} {status}")
+
+    if redis_ok:
+        quote = _check_quote_key()
+        if quote:
+            print(f"  {'SPY Quote':<11} {GREEN}live{RESET}  (${quote['mid']:.2f}  spread={quote['spread_bps']:.1f}bps  ttl={quote['ttl']}s)")
+        else:
+            print(f"  {'SPY Quote':<11} {RED}stale/missing{RESET}")
     print()
 
 
@@ -122,7 +146,7 @@ def cmd_start(target: str | None):
         print(f"Valid: {', '.join(COMPONENTS)}")
         sys.exit(1)
 
-    names = [target] if target else ["server", "engine"]
+    names = [target] if target else ["server", "quote", "engine"]
 
     for name in names:
         existing = _read_pid(name)
@@ -132,14 +156,15 @@ def cmd_start(target: str | None):
 
         info = COMPONENTS[name]
         log_file = _create_log(name)
-        script = ROOT / info["script"]
+        cwd = info.get("cwd", ROOT)
+        script = cwd / info["script"]
 
         with open(log_file, "a") as log_f:
             proc = subprocess.Popen(
                 [sys.executable, str(script)],
                 stdout=log_f,
                 stderr=log_f,
-                cwd=str(ROOT),
+                cwd=str(cwd),
                 start_new_session=True,
             )
 
@@ -178,8 +203,8 @@ def cmd_stop(target: str | None):
         print(f"Valid: {', '.join(COMPONENTS)}")
         sys.exit(1)
 
-    # Stop engine first (it has child processes), then server
-    names = [target] if target else ["engine", "server"]
+    # Stop engine first (it has child processes), then quote, then server
+    names = [target] if target else ["engine", "quote", "server"]
 
     for name in names:
         pid = _read_pid(name)
@@ -226,7 +251,7 @@ def cmd_stop(target: str | None):
 def cmd_logs(target: str | None):
     """Tail logs for a component."""
     if not target:
-        print(f"{RED}Usage: tc logs <server|engine>{RESET}")
+        print(f"{RED}Usage: tc logs <{'|'.join(COMPONENTS)}>{RESET}")
         sys.exit(1)
     if target not in COMPONENTS:
         print(f"{RED}Unknown component: {target}{RESET}")

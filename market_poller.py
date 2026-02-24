@@ -96,9 +96,27 @@ async def poll_spy(mcp, r):
         # Write to Redis
         r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)
 
-        # Publish price tick for UI updates
-        price_data = data.get("price", {})
-        if price_data.get("current"):
+        # Publish price tick for UI — prefer fresh Prism quote, fallback to Twelve Data
+        raw_quote = r.get("market:spy:quote")
+        if raw_quote:
+            q = json.loads(raw_quote)
+            tick = json.dumps({
+                "type": "V2_PRICE_TICK",
+                "timestamp": q.get("timestamp", ""),
+                "signal": {
+                    "price": q["mid"],
+                    "bid": q["bid"],
+                    "ask": q["ask"],
+                    "bid_size": q.get("bid_size", 0),
+                    "ask_size": q.get("ask_size", 0),
+                    "spread": q["spread"],
+                    "spread_bps": q["spread_bps"],
+                    "change": price_data.get("change", 0),
+                    "change_pct": price_data.get("change_pct", 0),
+                },
+            })
+            r.publish("zero_dte:events", tick)
+        elif price_data.get("current"):
             tick = json.dumps({
                 "type": "V2_PRICE_TICK",
                 "timestamp": data.get("timestamp", ""),
@@ -109,7 +127,6 @@ async def poll_spy(mcp, r):
                 },
             })
             r.publish("zero_dte:events", tick)
-        r.set(REDIS_KEY_SPY, json.dumps(data), ex=REDIS_TTL)
 
         elapsed = time.time() - t0
         price_data = data.get("price", {})

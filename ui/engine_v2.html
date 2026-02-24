@@ -52,6 +52,10 @@
     .top-bar .change { margin-left: 8px; font-size: 12px; font-weight: 600; }
     .top-bar .change.up { color: var(--green); }
     .top-bar .change.down { color: var(--red); }
+    .top-bar .quote-detail { margin-left: 10px; font-size: 10px; color: var(--text-dim); letter-spacing: 0.3px; }
+    .top-bar .quote-detail .bid { color: var(--green); }
+    .top-bar .quote-detail .ask { color: var(--red); }
+    .top-bar .quote-detail .spread { color: var(--text-muted); }
     .regime-pill {
       padding: 2px 10px;
       font-size: 10px;
@@ -557,6 +561,7 @@
         <span class="brand">0DTE v2</span>
         <span class="price" id="spy-price">--</span>
         <span class="change" id="spy-change">--</span>
+        <span class="quote-detail" id="spy-quote-detail"></span>
         <span class="regime-pill unknown" id="regime-pill">--</span>
         <span class="session-pill closed" id="session-pill">--</span>
       </div>
@@ -1394,6 +1399,15 @@ function handleEvent(msg) {
     if (p.change_pct != null) {
       chgEl.textContent = fmtPct(p.change_pct);
       chgEl.className = 'change ' + (p.change_pct >= 0 ? 'up' : 'down');
+    }
+
+    // Bid/Ask/Spread from Prism quote
+    const qd = document.getElementById('spy-quote-detail');
+    if (p.bid != null && qd) {
+      qd.innerHTML =
+        `<span class="bid">${p.bid.toFixed(2)}</span>` +
+        ` / <span class="ask">${p.ask.toFixed(2)}</span>` +
+        ` <span class="spread">(${p.spread_bps.toFixed(1)}bps)</span>`;
     }
 
     // Live P&L update

@@ -46,6 +46,9 @@ ENGINE_CONVERSATION_WINDOW = int(os.getenv('ENGINE_CONVERSATION_WINDOW', '10'))
 CLASSIFIER_MODEL_ID = os.getenv('CLASSIFIER_MODEL_ID', 'global.anthropic.claude-haiku-4-5-20251001-v1:0')
 CLASSIFIER_ALWAYS_LLM = os.getenv('CLASSIFIER_ALWAYS_LLM', 'true').lower() == 'true'
 
+# Redis key for fresh SPY quote (written by market-quote poller)
+QUOTE_REDIS_KEY = "market:spy:quote"
+
 # Logging
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 

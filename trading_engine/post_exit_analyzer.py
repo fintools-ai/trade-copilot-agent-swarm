@@ -304,13 +304,18 @@ class PostExitAnalyzer:
             post_analysis_logger.error("[POST] %s tracking failed: %s", tracking['type'], e)
     
     def _get_current_price(self) -> float:
-        """Get current SPY price from Redis."""
+        """Get current SPY price from Redis (quote poller preferred, fallback to technicals)."""
+        try:
+            raw = self.redis.get("market:spy:quote")
+            if raw:
+                return json.loads(raw).get("mid", 0)
+        except Exception:
+            pass
         try:
             raw = self.redis.get("market:spy:data")
             if raw:
-                data = json.loads(raw)
-                return data.get("price", {}).get("current", 0)
-        except:
+                return json.loads(raw).get("price", {}).get("current", 0)
+        except Exception:
             pass
         return 0
     

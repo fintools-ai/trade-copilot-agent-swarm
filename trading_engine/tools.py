@@ -38,11 +38,20 @@ def create_engine_tools(engine):
     def get_current_spy_price() -> str:
         """Get the absolute latest SPY price from Redis (updated every 1 second).
         Use this when you need the most current price for entry/exit decisions.
-        
-        Returns: Current SPY price with timestamp.
+
+        Returns: Current SPY price with bid/ask/mid and timestamp.
         """
         import json
         try:
+            # Primary: fresh quote from market-quote poller
+            raw = engine.redis.get("market:spy:quote")
+            if raw:
+                q = json.loads(raw)
+                return (
+                    f"SPY: ${q['mid']:.2f} (bid={q['bid']:.2f} ask={q['ask']:.2f} "
+                    f"spread={q['spread_bps']:.1f}bps) as of {q['timestamp']}"
+                )
+            # Fallback: technicals key
             raw = engine.redis.get("market:spy:data")
             if raw:
                 data = json.loads(raw)
