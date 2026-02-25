@@ -11,7 +11,7 @@ Uses MemoryClient (snake_case params) for all operations:
 import time
 import logging
 import boto3
-from datetime import datetime
+from datetime import datetime, timedelta
 from bedrock_agentcore.memory import MemoryClient
 from config.settings import AWS_REGION
 
@@ -265,30 +265,17 @@ def _get_sentiment_memory_id():
         return _sentiment_cache["id"]
 
     _sentiment_cache["checked"] = True
-    client = _get_memory_client()
     control = _get_control_client()
 
+    # Use boto3 control plane list_memories (same pattern as market-sentiment-plugin)
     try:
-        memories = client.list_memories()
-        for mem in memories:
-            mid = mem.get("id", "")
-            if not mid:
-                continue
-            # ID often starts with the memory name — check that before making an extra API call
-            if mid.startswith(SENTIMENT_MEMORY_NAME):
+        response = control.list_memories()
+        for mem in response.get("memories", []):
+            if SENTIMENT_MEMORY_NAME in mem.get("arn", ""):
+                mid = mem.get("id", "")
                 _sentiment_cache["id"] = mid
                 logger.info(f"Found sentiment memory: {mid}")
                 return mid
-            # Otherwise resolve name via get_memory (extra API call per entry)
-            try:
-                detail = control.get_memory(memoryId=mid)
-                name = detail.get("memory", detail).get("name", "")
-                if name == SENTIMENT_MEMORY_NAME:
-                    _sentiment_cache["id"] = mid
-                    logger.info(f"Found sentiment memory: {mid}")
-                    return mid
-            except Exception:
-                pass
     except Exception as e:
         logger.debug(f"Sentiment memory lookup failed: {e}")
 
@@ -299,88 +286,77 @@ def _get_sentiment_memory_id():
 def recall_sentiment(ticker):
     """
     Retrieve social media sentiment from market_sentiment memory (if it exists).
-    Uses natural language query against /facts/ namespace for better semantic matching.
+    Uses list_events (same as market-sentiment-plugin 'recall TSM').
     Returns list of fact strings, or empty list if sentiment plugin is not set up.
     """
     memory_id = _get_sentiment_memory_id()
     if not memory_id:
         return []
 
-    client = _get_memory_client()
-    facts = []
-
-    try:
-        t0 = time.time()
-        records = client.retrieve_memories(
-            memory_id=memory_id,
-            namespace=f"/facts/sentiment/{ticker}/",
-            query=f"What does the crowd think about {ticker}? What are the key themes, catalysts, and sentiment direction?",
-            top_k=5,
-        )
-
-        for record in records:
-            content = record.get("content", {})
-            if isinstance(content, dict):
-                text = content.get("text", "")
-            elif isinstance(content, str):
-                text = content
-            else:
-                text = str(content)
-            if text:
-                facts.append(text)
-
-        dur = time.time() - t0
-        if facts:
-            logger.info(f"{ticker}: recalled {len(facts)} sentiment facts ({dur:.1f}s)")
-        else:
-            logger.info(f"{ticker}: no sentiment facts ({dur:.1f}s)")
-
-    except Exception as e:
-        logger.warning(f"{ticker}: sentiment recall failed - {e}")
-
-    return facts
+    return _list_sentiment_events(
+        memory_id,
+        actor_id=f"sentiment/{ticker}",
+        label=ticker,
+    )
 
 
 def recall_market_sentiment():
     """
     Retrieve overall market sentiment from market_sentiment memory.
-    Uses natural language query against /facts/ namespace for better semantic matching.
+    Uses list_events (same as market-sentiment-plugin 'recall MARKET').
     Returns list of fact strings, or empty list if not available.
     """
     memory_id = _get_sentiment_memory_id()
     if not memory_id:
         return []
 
-    client = _get_memory_client()
+    return _list_sentiment_events(
+        memory_id,
+        actor_id="sentiment/MARKET",
+        label="MARKET",
+    )
+
+
+def _list_sentiment_events(memory_id, actor_id, label, days=10):
+    """List recent sentiment events using boto3 runtime list_events (same as market-sentiment-plugin recall)."""
+    runtime = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
     facts = []
+    today = datetime.now()
 
     try:
         t0 = time.time()
-        records = client.retrieve_memories(
-            memory_id=memory_id,
-            namespace="/facts/sentiment/MARKET/",
-            query="What is the overall market mood? Is the crowd risk-on or risk-off? What macro themes and sector rotations are traders focused on?",
-            top_k=5,
-        )
+        days_with_data = 0
 
-        for record in records:
-            content = record.get("content", {})
-            if isinstance(content, dict):
-                text = content.get("text", "")
-            elif isinstance(content, str):
-                text = content
-            else:
-                text = str(content)
-            if text:
-                facts.append(text)
+        for i in range(days):
+            day = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+            session_id = f"sentiment-{day}"
+
+            try:
+                response = runtime.list_events(
+                    memoryId=memory_id,
+                    actorId=actor_id,
+                    sessionId=session_id,
+                    maxResults=10,
+                )
+
+                for event in response.get("events", []):
+                    for item in event.get("payload", []):
+                        text = item.get("conversational", {}).get("content", {}).get("text", "")
+                        if text:
+                            facts.append(text)
+                            days_with_data += 1
+            except Exception:
+                pass  # No events for this day
 
         dur = time.time() - t0
         if facts:
-            logger.info(f"MARKET: recalled {len(facts)} market sentiment facts ({dur:.1f}s)")
+            logger.info(f"{label}: recalled {len(facts)} sentiment events from {days_with_data} days ({dur:.1f}s)")
+            for i, fact in enumerate(facts, 1):
+                logger.info(f"{label}: sentiment[{i}] {fact[:200]}")
         else:
-            logger.info(f"MARKET: no market sentiment facts ({dur:.1f}s)")
+            logger.info(f"{label}: no sentiment events ({dur:.1f}s)")
 
     except Exception as e:
-        logger.warning(f"MARKET: market sentiment recall failed - {e}")
+        logger.warning(f"{label}: sentiment recall failed - {e}")
 
     return facts
