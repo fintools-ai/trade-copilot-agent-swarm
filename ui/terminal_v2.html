@@ -2143,8 +2143,9 @@
       const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
       sortedDates.forEach(date => groups[date].sort((a, b) => (b.confidence || 0) - (a.confidence || 0)));
 
-      const today = new Date().toISOString().slice(0, 10);
-      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const ptDate = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+      const today = ptDate(new Date());
+      const yesterday = ptDate(new Date(Date.now() - 86400000));
 
       let html = '';
       sortedDates.forEach(date => {
