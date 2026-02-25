@@ -15,15 +15,19 @@ The agent will:
 """
 
 import json
+import sys
 import time
+import subprocess
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from strands import Agent, tool
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 from rich.console import Console
 from rich.panel import Panel
 
 from swarm import TradingSwarm
 from redis_stream import publish_event, get_stream
+from utils.token_tracker import TokenTracker
 
 console = Console()
 
@@ -73,8 +77,120 @@ def get_mode_override() -> str:
         return DEFAULT_MODE
 
 
+def get_position_context() -> str:
+    """Get the custom position/question from Redis (if set by user)."""
+    try:
+        stream = get_stream()
+        position = stream.redis.get("zero_dte:position")
+        return position.strip() if position else ""
+    except Exception as e:
+        console.print(f"[red]Redis error reading position: {e}[/red]")
+        return ""
+
+
+def was_just_exited() -> bool:
+    """
+    Check if the most recent signal was an EXIT (manual or system).
+    Used to tell the agent "position just closed, scan for new setup".
+    """
+    try:
+        stream = get_stream()
+        events = stream.redis.lrange("zero_dte:history", 0, 5)
+
+        for event_json in events:
+            try:
+                event = json.loads(event_json)
+                if event.get("signal") and event.get("type") == "SWARM_RESPONSE":
+                    sig = event["signal"]
+                    signal_type = sig.get("signal")
+                    action = sig.get("action")
+                    # First SWARM_RESPONSE we find - check if it's EXIT
+                    if signal_type == "EXIT" or action == "EXIT":
+                        return True
+                    else:
+                        return False  # Most recent signal is not EXIT
+            except (json.JSONDecodeError, KeyError):
+                continue
+        return False
+    except Exception:
+        return False
+
+
+def get_last_recommendation() -> dict:
+    """
+    Get the last active position and current state from Redis history.
+
+    Returns BOTH:
+    1. Original ENTRY params (entry/stop/target) for risk management
+    2. Current state (HOLD/EXIT) and conviction
+
+    Logic:
+    - Find the most recent ENTRY to get trade params
+    - Find the most recent signal to get current state
+    - If EXIT found before ENTRY → position closed, return {}
+    """
+    try:
+        stream = get_stream()
+        events = stream.redis.lrange("zero_dte:history", 0, 25)
+
+        entry_data = None
+        current_state = None
+
+        for event_json in events:
+            try:
+                event = json.loads(event_json)
+                if event.get("signal") and event.get("type") == "SWARM_RESPONSE":
+                    sig = event["signal"]
+                    signal_type = sig.get("signal")
+                    action = sig.get("action") or sig.get("direction")
+
+                    # Capture most recent signal as current state (first one we see)
+                    if current_state is None:
+                        current_state = {
+                            "current_signal": signal_type,
+                            "current_conviction": sig.get("conviction"),
+                            "current_price": sig.get("price"),
+                            "last_update": event.get("timestamp")
+                        }
+
+                    # EXIT found before ENTRY → position closed
+                    if entry_data is None and (signal_type == "EXIT" or action == "EXIT"):
+                        return {}
+
+                    # Found ENTRY → capture trade params
+                    if signal_type == "ENTRY" and entry_data is None:
+                        entry_data = {
+                            "action": action,
+                            "entry": sig.get("entry"),
+                            "stop": sig.get("stop"),
+                            "target": sig.get("target"),
+                            "entry_time": event.get("timestamp")
+                        }
+                        break
+
+            except (json.JSONDecodeError, KeyError):
+                continue
+
+        # Combine entry + current state if we have both
+        if entry_data and current_state:
+            return {**entry_data, **current_state}
+
+        return {}
+    except Exception as e:
+        console.print(f"[red]Redis error reading last recommendation: {e}[/red]")
+        return {}
+
+
 def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     """Internal helper to call swarm and stream to UI."""
+    # Inject fresh timestamp into every query (agents no longer have static timestamps)
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(pt_tz)
+    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
+    # Market hours: 6:30 AM - 1:00 PM PT
+    market_status = 'OPEN' if (now.hour == 6 and now.minute >= 30) or (7 <= now.hour < 13) else 'CLOSED'
+    time_context = f"\n\n[CURRENT TIME: {current_time_full} | Market: {market_status}]"
+
     # Check for UI mode override - ALWAYS check fresh from Redis
     mode_override = get_mode_override()
     agent_tool = "fast_follow" if fast_mode else "analyze_market"
@@ -96,12 +212,66 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
         # Auto mode - use agent's decision
         console.print(f"[dim]>>> EXECUTING: {'FAST' if fast_mode else 'FULL'} MODE (auto - agent decided) <<<[/dim]")
 
-    # Stream the agent's question to UI immediately
-    stream_to_ui("AGENT_QUESTION", query)
+    # Get current trade context (original ENTRY + latest state)
+    last_rec = get_last_recommendation()
+    if last_rec and last_rec.get("action"):
+        # Natural language - like a trader would say it
+        prev_context = f"\n\n[CURRENT TRADE: {last_rec['action']} @ ${last_rec.get('entry')} | Stop ${last_rec.get('stop')} | Target ${last_rec.get('target')} — {last_rec.get('current_signal')} with {last_rec.get('current_conviction')} conviction]"
+        query_with_context = query + time_context + prev_context
+        console.print(f"[dim]Trade: {last_rec['action']} @ ${last_rec.get('entry')} — {last_rec.get('current_signal')} {last_rec.get('current_conviction')}[/dim]")
+    elif was_just_exited():
+        # Position was just closed - tell agent to scan for new setup
+        exit_context = "\n\n[POSITION CLOSED - scanning for new entry setup. Look for fresh CALL or PUT opportunity.]"
+        query_with_context = query + time_context + exit_context
+        console.print(f"[dim]Status: Position closed, scanning for new trade[/dim]")
+    else:
+        query_with_context = query + time_context
 
-    # Call the swarm
+    # Outcome memory: recall past outcomes when flat (no position)
+    try:
+        from hooks.outcome_memory import before_swarm
+        has_position = bool(last_rec and last_rec.get("action"))
+        query_with_context = before_swarm(query_with_context, has_position)
+    except Exception as e:
+        console.print(f"[dim]Outcome hook error: {e}[/dim]")
+
+    # Stream the agent's question to UI immediately (without context noise)
+    # Include query_start_ts for latency calculation
+    query_start_ts = time.time()
+    stream_to_ui("AGENT_QUESTION", query, {"query_start_ts": query_start_ts})
+
+    # Call the swarm with context
     swarm = get_swarm()
-    response = swarm.ask(query, fast_mode=fast_mode)
+    try:
+        response = swarm.ask(query_with_context, fast_mode=fast_mode)
+    except Exception as e:
+        error_msg = str(e)
+        # Publish error to UI
+        error_signal = {"action": "ERROR", "conviction": "HIGH", "error": error_msg[:200], "query_start_ts": query_start_ts}
+        stream_to_ui("SWARM_ERROR", f"⚠️ SWARM ERROR: {error_msg}", error_signal)
+        console.print(f"[bold red]Swarm error: {error_msg}[/bold red]")
+        raise  # Re-raise so the outer loop can handle restart
+
+    # Calculate latency
+    response_end_ts = time.time()
+    latency = response_end_ts - query_start_ts
+
+    # Track token usage from swarm
+    try:
+        token_usage = swarm.get_last_token_usage()
+        if token_usage and token_usage.get('total', {}).get('input', 0) > 0:
+            mode_label = "fast" if fast_mode else "full"
+            tracker = TokenTracker(mode=mode_label, model="haiku-4.5")
+
+            # Record per-agent tokens
+            for agent_name, agent_data in token_usage.get('agents', {}).items():
+                tracker.record(agent_name, agent_data.get('input', 0), agent_data.get('output', 0))
+
+            # Save to Redis + JSONL
+            tracker.finish()
+            console.print(f"[dim]Tokens: {token_usage['total']['input']:,} in / {token_usage['total']['output']:,} out[/dim]")
+    except Exception as e:
+        console.print(f"[dim]Token tracking error: {e}[/dim]")
 
     # Extract signal from response - look for JSON with action or direction
     signal = None
@@ -118,10 +288,23 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
                 if 'action' in parsed and 'direction' not in parsed:
                     parsed['direction'] = parsed['action']
                 # Include signal field (ENTRY/HOLD) for UI display - only if present
+                # Add latency for UI display
+                parsed['latency'] = round(latency, 1)
                 signal = parsed
                 break
         except (json.JSONDecodeError, ValueError):
             continue
+
+    # If no signal parsed, create minimal one with latency
+    if signal is None:
+        signal = {"latency": round(latency, 1)}
+
+    # Outcome memory: capture ENTRY, record EXIT
+    try:
+        from hooks.outcome_memory import after_signal
+        after_signal(signal, response)
+    except Exception as e:
+        console.print(f"[dim]Outcome hook error: {e}[/dim]")
 
     # Stream the swarm's response to UI with mode indicator and signal
     mode_label = "Fast" if fast_mode else "Full"
@@ -129,8 +312,7 @@ def _call_swarm_internal(query: str, fast_mode: bool) -> str:
     mode_note = f"\n\n---\n*[{mode_label} Mode{override_note}]*"
     stream_to_ui("SWARM_RESPONSE", response + mode_note, signal)
 
-    # Pause before next tool call
-    time.sleep(5)
+    console.print(f"[dim]Latency: {latency:.1f}s[/dim]")
 
     return response
 
@@ -194,15 +376,17 @@ You are a DESK TRADER broadcasting live calls. Traders follow your signals.
 
 After EVERY response, end with your ACTION STATE as JSON:
 ```json
-{{"action": "CALL", "signal": "ENTRY", "price": 582.50, "conviction": "HIGH", "invalidation": 580.00}}
+{{"action": "CALL", "signal": "ENTRY", "price": 582.50, "entry": 582.50, "stop": 580.00, "target": 585.00, "conviction": "HIGH"}}
 ```
 
 Fields:
 - action: CALL, PUT, EXIT, or WAIT
 - signal: ENTRY (new trade) or HOLD (stay in, noise not breakdown)
 - price: current SPY price
+- entry: entry price level
+- stop: stop loss level (invalidation)
+- target: profit target level
 - conviction: HIGH, MED, or LOW
-- invalidation: price that kills the trade
 
 Your broadcasts:
 - CALL + ENTRY = "Enter CALL now"
@@ -296,25 +480,127 @@ START_INSTRUCTIONS = {
     "full": "Call analyze_market for complete analysis - should we go CALL or PUT?"
 }
 
+# Position validation prompt - used when user sets a custom question
+POSITION_VALIDATION_PROMPT = """You are a senior 0DTE desk trader helping validate a specific position/question.
+
+## USER'S QUESTION/POSITION
+{position}
+
+## YOUR MISSION
+The user has a specific question or position they need validated. Your ONLY job is to continuously monitor and answer THIS question.
+
+## YOUR TOOLS
+1. `analyze_market` - Full 6-agent analysis (25-60s). Use for deep validation.
+2. `fast_follow` - Quick 2-agent check (8-12s). Use for monitoring.
+
+{mode_instruction}
+
+## HOW TO RESPOND
+
+Every response must directly address the user's question. Structure:
+
+1. CURRENT STATE: What's the market doing RIGHT NOW?
+2. VALIDATION: Does current flow/technicals support their position?
+3. VERDICT: Clear answer - HOLD, CUT, or ADJUST
+4. RISK: What could invalidate this in next 5-10 mins?
+
+After EVERY response, end with your ACTION STATE as JSON:
+```json
+{{"action": "CALL", "signal": "HOLD", "price": 582.50, "entry": 581.00, "stop": 579.50, "target": 584.00, "conviction": "HIGH"}}
+```
+
+Fields:
+- action: CALL, PUT, HOLD, or EXIT (what position type they have or should exit)
+- signal: HOLD (stay in position) or EXIT (cut now)
+- price: current SPY price
+- entry: their entry price (from their question, or current price if new)
+- stop: stop loss level (where to cut)
+- target: profit target level
+- conviction: HIGH, MED, or LOW
+
+## YOUR WORKFLOW
+
+1. FIRST: Full analysis to understand their position context
+2. THEN: Quick checks every 30-60s to validate
+3. REACT: If thesis breaks, tell them IMMEDIATELY to cut
+
+## RULES
+CRITICAL
+- They questions should be related to SPY, everything else is supporting context
+- Always include the keyword SPY, and keep the question short
+- You never ask for human loop and do not stop, even if response is same. 
+- Always call a tool after each response
+
+START NOW. Analyze the market and answer their question."""
+
+
+def get_prompt_for_position(position: str, mode: str) -> str:
+    """Generate the system prompt for position validation mode."""
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(pt_tz)
+    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
+
+    # Market hours: 6:30 AM - 1:00 PM PT
+    market_status = 'OPEN' if (now.hour == 6 and now.minute >= 30) or (7 <= now.hour < 13) else 'CLOSED'
+    timestamp_header = f"""<current_time>
+Current Time: {current_time_full}
+Market Session: {market_status}
+</current_time>
+
+"""
+
+    mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["auto"])
+    prompt = POSITION_VALIDATION_PROMPT.format(
+        position=position,
+        mode_instruction=mode_instruction
+    )
+    return timestamp_header + prompt
+
 
 def get_prompt_for_mode(mode: str) -> str:
     """Generate the system prompt based on current mode override."""
+    pt_tz = ZoneInfo("America/Los_Angeles")
+    now = datetime.now(pt_tz)
+    current_time_full = now.strftime("%Y-%m-%d %H:%M:%S PT")
+
+    # Market hours: 6:30 AM - 1:00 PM PT
+    market_status = 'OPEN' if (now.hour == 6 and now.minute >= 30) or (7 <= now.hour < 13) else 'CLOSED'
+    timestamp_header = f"""<current_time>
+Current Time: {current_time_full}
+Market Session: {market_status}
+</current_time>
+
+"""
+
     mode_instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["auto"])
     start_instruction = START_INSTRUCTIONS.get(mode, START_INSTRUCTIONS["auto"])
-    return CONTINUOUS_TRADER_PROMPT_BASE.format(
+    base_prompt = CONTINUOUS_TRADER_PROMPT_BASE.format(
         mode_instruction=mode_instruction,
         start_instruction=start_instruction
     )
+    return timestamp_header + base_prompt
 
 
-def create_zero_dte_agent(mode: str = "auto") -> Agent:
-    """Create the Zero-DTE Agent with mode-aware prompt."""
-    prompt = get_prompt_for_mode(mode)
-    console.print(f"[cyan]Creating agent with mode: {mode}[/cyan]")
+def create_zero_dte_agent(mode: str = "auto", position: str = "") -> Agent:
+    """Create the Zero-DTE Agent with mode-aware or position-aware prompt."""
+    if position:
+        prompt = get_prompt_for_position(position, mode)
+        console.print(f"[cyan]Creating agent in VALIDATION mode: {mode}[/cyan]")
+        console.print(f"[green]Position: {position[:60]}...[/green]" if len(position) > 60 else f"[green]Position: {position}[/green]")
+    else:
+        prompt = get_prompt_for_mode(mode)
+        console.print(f"[cyan]Creating agent in SCANNING mode: {mode}[/cyan]")
+
+    conversation_manager = SlidingWindowConversationManager(
+        window_size=3,
+        should_truncate_results=False
+    )
+
     return Agent(
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=prompt,
-        tools=[analyze_market, fast_follow]
+        tools=[analyze_market, fast_follow],
+        conversation_manager=conversation_manager
     )
 
 
@@ -324,22 +610,46 @@ def run_zero_dte_agent():
 
     The agent calls call_swarm() repeatedly, and each call
     streams both the question and response to the UI.
+
+    Modes:
+    - SCANNING: Looking for new 0DTE setups (default)
+    - VALIDATING: Monitoring a specific position/question set by user
     """
     console.print(Panel.fit(
         "[bold cyan]Zero-DTE Agent - Continuous Thinking Mode[/bold cyan]\n\n"
         "[green]Mode:[/green] Runs forever, never stops\n"
         "[yellow]Behavior:[/yellow] Queries swarm, asks follow-ups, streams everything\n"
         "[blue]Output:[/blue] Every exchange streams to UI via SSE\n\n"
+        "[magenta]Position Mode:[/magenta] Set a custom question in the UI to switch from\n"
+        "                scanning to validating your specific position.\n\n"
         "[dim]Press Ctrl+C to stop[/dim]",
         title="[bold]Starting Agent[/bold]",
         border_style="cyan"
     ))
 
-    # Track current mode to detect changes - loads from Redis (persists across restarts)
+    # Start background market data poller (persistent MCP → Redis)
+    poller_proc = subprocess.Popen(
+        [sys.executable, "market_poller.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    console.print(f"[green]Market poller started (pid {poller_proc.pid})[/green]")
+
+    # Track current state - loads from Redis (persists across restarts)
     current_mode = get_mode_override()
+    current_position = get_position_context()
+
     console.print(f"[bold green]Loaded mode from Redis: {current_mode}[/bold green]")
-    agent = create_zero_dte_agent(current_mode)
-    prompt = f"Start monitoring SPY for 0DTE trading. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
+    if current_position:
+        console.print(f"[bold green]Loaded position from Redis: {current_position[:50]}...[/bold green]")
+
+    agent = create_zero_dte_agent(current_mode, current_position)
+
+    # Set initial prompt based on whether we have a position
+    if current_position:
+        prompt = f"User has a position/question: '{current_position}'. Analyze the market and validate their position now."
+    else:
+        prompt = f"Start monitoring SPY for 0DTE trading. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
     pt_tz = ZoneInfo("America/Los_Angeles")
     market_close_hour = 13  # 1PM PT
@@ -350,33 +660,90 @@ def run_zero_dte_agent():
             now_pt = datetime.now(pt_tz)
             if now_pt.hour >= market_close_hour:
                 console.print("\n[bold yellow]Market closed (1PM PT) - stopping agent[/bold yellow]")
+                poller_proc.terminate()
+                poller_proc.wait(timeout=5)
+                console.print("[green]Market poller stopped[/green]")
                 break
 
-            # Check if mode changed - recreate agent with new prompt
+            # Check for changes in mode or position
             new_mode = get_mode_override()
-            if new_mode != current_mode:
+            new_position = get_position_context()
+
+            # Detect if we need to recreate the agent
+            need_recreate = False
+            mode_changed = new_mode != current_mode
+            position_changed = new_position != current_position
+
+            if mode_changed:
                 console.print(f"\n[bold yellow]Mode changed: {current_mode} -> {new_mode}[/bold yellow]")
                 current_mode = new_mode
-                agent = create_zero_dte_agent(current_mode)
-                prompt = f"Mode changed to {current_mode}. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
+                need_recreate = True
+
+            if position_changed:
+                if new_position and not current_position:
+                    console.print(f"\n[bold green]>>> POSITION SET - Switching to VALIDATION mode <<<[/bold green]")
+                    console.print(f"[green]Question: {new_position}[/green]")
+                elif not new_position and current_position:
+                    console.print(f"\n[bold yellow]>>> POSITION CLEARED - Returning to SCANNING mode <<<[/bold yellow]")
+                else:
+                    console.print(f"\n[bold yellow]Position updated[/bold yellow]")
+                current_position = new_position
+                need_recreate = True
+
+            if need_recreate:
+                agent = create_zero_dte_agent(current_mode, current_position)
+                if current_position:
+                    prompt = f"User updated their position/question: '{current_position}'. Analyze and validate now."
+                else:
+                    prompt = f"Returned to scanning mode. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
             try:
                 # Agent should run continuously, but if it returns, restart it
-                agent(prompt)
+                result = agent(prompt)
+
+                # Track outer agent tokens (the orchestrating Haiku agent)
+                if hasattr(result, 'metrics') and hasattr(result.metrics, 'accumulated_usage'):
+                    usage = result.metrics.accumulated_usage
+                    outer_input = usage.get('inputTokens', 0)
+                    outer_output = usage.get('outputTokens', 0)
+                    if outer_input > 0 or outer_output > 0:
+                        tracker = TokenTracker(mode=current_mode, model="haiku-4.5")
+                        tracker.record("zero_dte_agent", outer_input, outer_output)
+                        tracker.finish()
+                        console.print(f"[dim]Outer agent tokens: {outer_input:,} in / {outer_output:,} out[/dim]")
 
                 # If agent returns without error, it stopped - restart it
                 console.print("\n[yellow]Agent stopped - restarting...[/yellow]")
-                prompt = "Continue monitoring. Call your next tool now."
+                if current_position:
+                    prompt = f"Continue validating the user's position: '{current_position}'. Call your next tool now."
+                else:
+                    prompt = "Continue monitoring. Call your next tool now."
                 time.sleep(2)
 
             except Exception as e:
-                console.print(f"\n[yellow]Agent error: {e}[/yellow]")
+                error_msg = str(e)
+                console.print(f"\n[yellow]Agent error: {error_msg}[/yellow]")
                 console.print("[cyan]Restarting in 3 seconds...[/cyan]")
+
+                # Publish error to UI so user sees it
+                error_signal = {"action": "ERROR", "conviction": "HIGH", "error": error_msg[:200]}
+                stream_to_ui("SWARM_ERROR", f"⚠️ ERROR: {error_msg[:300]}", error_signal)
+
                 time.sleep(3)
-                prompt = f"Resume monitoring SPY. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
+                if current_position:
+                    prompt = f"Resume validating position: '{current_position}'. Call your tool now."
+                else:
+                    prompt = f"Resume monitoring SPY. {START_INSTRUCTIONS.get(current_mode, 'Call analyze_market.')}"
 
     except KeyboardInterrupt:
         console.print("\n[bold red]Stopping Zero-DTE Agent...[/bold red]")
+    finally:
+        poller_proc.terminate()
+        try:
+            poller_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            poller_proc.kill()
+        console.print("[green]Market poller stopped[/green]")
 
 
 if __name__ == "__main__":

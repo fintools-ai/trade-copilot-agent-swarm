@@ -16,3 +16,7 @@ rich
 
 # Redis for real-time pub/sub
 redis
+
+# AWS Bedrock (OI analysis LLM + memory)
+boto3
+bedrock-agentcore

@@ -6,9 +6,6 @@ Analyzes options activity, PUT/CALL bias, unusual activity, and smart money posi
 from strands import Agent
 from tools.options_flow_tools import options_order_flow_tool
 
-from strands.session.file_session_manager import FileSessionManager
-from datetime import datetime
-
 OPTIONS_FLOW_INSTRUCTIONS = """
 You are the Options Flow Analyst - an expert in reading real-time options quote flow to detect institutional positioning.
 
@@ -120,13 +117,9 @@ def create_options_flow_agent() -> Agent:
     Returns:
         Configured Strands Agent for options flow analysis
     """
-    now = datetime.now()
-    current_time = now.strftime("%H:%M:%S")
-    session_manager = FileSessionManager(session_id=f"options-order-flow-{current_time}")
     agent = Agent(
         name="Options Flow Analyst",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
-        #session_manager=session_manager,
         system_prompt=OPTIONS_FLOW_INSTRUCTIONS,
         tools=[options_order_flow_tool]
     )

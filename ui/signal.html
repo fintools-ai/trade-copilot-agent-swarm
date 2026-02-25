@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>0DTE Terminal</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+      font-size: 11px;
+      overflow: hidden;
+    }
+
+    /* Main Layout */
+    .terminal {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 12px;
+      background: #111;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+
+    .top-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .live-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      color: #ef4444;
+      font-weight: 600;
+      font-size: 10px;
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      background: #ef4444;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .ticker-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .ticker-symbol {
+      font-size: 14px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .ticker-price {
+      font-size: 14px;
+      font-weight: 600;
+      color: #22c55e;
+    }
+
+    .ticker-change {
+      font-size: 11px;
+      color: #22c55e;
+    }
+
+    .ticker-change.down {
+      color: #ef4444;
+    }
+
+    .top-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      color: #666;
+      font-size: 10px;
+    }
+
+    /* Main Content Area */
+    .main-content {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Resizable Panels */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel-resizer {
+      width: 4px;
+      background: #222;
+      cursor: col-resize;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+
+    .panel-resizer:hover {
+      background: #3b82f6;
+    }
+
+    /* Left Panel - Agent Responses */
+    .left-panel {
+      width: 320px;
+      min-width: 200px;
+      max-width: 500px;
+      background: #0d0d0d;
+      border-right: 1px solid #222;
+    }
+
+    .agent-section {
+      border-bottom: 1px solid #222;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .agent-header {
+      padding: 8px 10px;
+      background: #151515;
+      border-bottom: 1px solid #222;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .agent-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .agent-title.flow { color: #60a5fa; }
+    .agent-title.tech { color: #a78bfa; }
+    .agent-title.coord { color: #fbbf24; }
+
+    .agent-status {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .agent-status.bullish {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .agent-status.bearish {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .agent-status.neutral {
+      background: rgba(107, 114, 128, 0.2);
+      color: #6b7280;
+    }
+
+    .agent-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      font-size: 10px;
+      line-height: 1.5;
+      color: #a3a3a3;
+    }
+
+    .agent-content::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .agent-content::-webkit-scrollbar-thumb {
+      background: #333;
+    }
+
+    .agent-data-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px solid #1a1a1a;
+    }
+
+    .agent-data-label {
+      color: #666;
+    }
+
+    .agent-data-value {
+      font-weight: 500;
+      color: #e5e5e5;
+    }
+
+    .agent-data-value.up { color: #22c55e; }
+    .agent-data-value.down { color: #ef4444; }
+
+    .agent-response-text {
+      white-space: pre-wrap;
+      font-size: 10px;
+      line-height: 1.5;
+    }
+
+    /* Agent History Entry */
+    .agent-history-entry {
+      padding: 6px 8px;
+      margin-bottom: 6px;
+      background: #141414;
+      border-radius: 4px;
+      border-left: 2px solid #333;
+    }
+
+    .agent-history-entry.latest {
+      border-left-color: #3b82f6;
+      background: #0f1419;
+    }
+
+    .agent-history-entry.bullish {
+      border-left-color: #22c55e;
+    }
+
+    .agent-history-entry.bearish {
+      border-left-color: #ef4444;
+    }
+
+    .agent-history-entry.neutral {
+      border-left-color: #6b7280;
+    }
+
+    .agent-entry-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .agent-entry-time {
+      font-size: 9px;
+      color: #525252;
+    }
+
+    .agent-entry-badge {
+      font-size: 8px;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 2px;
+      text-transform: uppercase;
+    }
+
+    .agent-entry-badge.bullish {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+
+    .agent-entry-badge.bearish {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .agent-entry-badge.neutral {
+      background: rgba(107, 114, 128, 0.2);
+      color: #6b7280;
+    }
+
+    .agent-entry-body {
+      font-size: 9px;
+      line-height: 1.4;
+      color: #a3a3a3;
+      white-space: pre-wrap;
+    }
+
+    /* Center Panel - Stream */
+    .center-panel {
+      flex: 1;
+      min-width: 300px;
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Current Signal Header */
+    .signal-header {
+      padding: 10px 16px;
+      background: #111;
+      border-bottom: 1px solid #222;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .signal-current {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .signal-direction {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: 2px;
+    }
+
+    .signal-direction.call { color: #22c55e; }
+    .signal-direction.put { color: #ef4444; }
+    .signal-direction.wait { color: #525252; }
+    .signal-direction.hold { color: #fbbf24; }
+    .signal-direction.exit { color: #ef4444; }
+
+    .signal-conviction {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 3px;
+    }
+
+    .signal-conviction.high {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+
+    .signal-conviction.med {
+      background: rgba(156, 163, 175, 0.2);
+      color: #9ca3af;
+    }
+
+    .signal-conviction.low {
+      background: rgba(107, 114, 128, 0.2);
+      color: #6b7280;
+    }
+
+    .signal-levels {
+      display: flex;
+      gap: 16px;
+      font-size: 10px;
+    }
+
+    .signal-level {
+      display: flex;
+      gap: 4px;
+    }
+
+    .signal-level-label {
+      color: #525252;
+    }
+
+    .signal-level-value {
+      font-weight: 600;
+    }
+
+    .signal-level.entry .signal-level-value { color: #60a5fa; }
+    .signal-level.stop .signal-level-value { color: #ef4444; }
+    .signal-level.target .signal-level-value { color: #22c55e; }
+
+    /* Stream Container */
+    .stream-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .stream-container::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .stream-container::-webkit-scrollbar-thumb {
+      background: #333;
+    }
+
+    /* Message Styles */
+    .message {
+      display: flex;
+      gap: 10px;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+
+    .message-icon.agent { background: #1e3a5f; }
+    .message-icon.swarm { background: #1a1a2e; }
+    .message-icon.flow { background: #1e3a5f; }
+    .message-icon.tech { background: #2d1f4e; }
+    .message-icon.coord { background: #3d2e0a; }
+
+    .message-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .message-sender {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .message-sender.agent { color: #60a5fa; }
+    .message-sender.swarm { color: #a78bfa; }
+    .message-sender.flow { color: #60a5fa; }
+    .message-sender.tech { color: #a78bfa; }
+    .message-sender.coord { color: #fbbf24; }
+
+    .message-time {
+      font-size: 9px;
+      color: #525252;
+    }
+
+    .message-body {
+      font-size: 11px;
+      line-height: 1.5;
+      color: #d4d4d4;
+      white-space: pre-wrap;
+    }
+
+    .message.agent .message-body {
+      color: #93c5fd;
+      font-style: italic;
+    }
+
+    /* Inline Signal */
+    .signal-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+
+    .signal-inline.call {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.4);
+    }
+
+    .signal-inline.put {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+
+    .signal-inline.wait {
+      background: rgba(251, 191, 36, 0.15);
+      border: 1px solid rgba(251, 191, 36, 0.4);
+    }
+
+    .signal-inline-direction {
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .signal-inline-direction.call { color: #22c55e; }
+    .signal-inline-direction.put { color: #ef4444; }
+    .signal-inline-direction.wait { color: #fbbf24; }
+
+    .signal-inline-conviction {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+
+    .signal-inline-conviction.high {
+      background: rgba(251, 191, 36, 0.3);
+      color: #fbbf24;
+    }
+
+    .signal-inline-conviction.med {
+      background: rgba(163, 163, 163, 0.3);
+      color: #a3a3a3;
+    }
+
+    /* Thinking indicator */
+    .thinking {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px;
+      color: #525252;
+      font-size: 10px;
+    }
+
+    .thinking-dots {
+      display: flex;
+      gap: 3px;
+    }
+
+    .thinking-dots span {
+      width: 4px;
+      height: 4px;
+      background: #525252;
+      border-radius: 50%;
+      animation: thinking 1.4s infinite ease-in-out;
+    }
+
+    .thinking-dots span:nth-child(1) { animation-delay: 0s; }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes thinking {
+      0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Right Panel */
+    .right-panel {
+      width: 220px;
+      min-width: 180px;
+      max-width: 350px;
+      background: #0d0d0d;
+      border-left: 1px solid #222;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-section {
+      border-bottom: 1px solid #222;
+    }
+
+    .panel-header {
+      padding: 8px 10px;
+      background: #151515;
+      border-bottom: 1px solid #222;
+      font-size: 10px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* Market Data */
+    .market-data {
+      padding: 6px;
+    }
+
+    .market-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 6px;
+    }
+
+    .market-row:nth-child(odd) {
+      background: #141414;
+      border-radius: 2px;
+    }
+
+    .market-label {
+      color: #666;
+    }
+
+    .market-value {
+      font-weight: 500;
+      color: #e5e5e5;
+    }
+
+    /* Breadth Grid */
+    .breadth-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 2px;
+      padding: 6px;
+    }
+
+    .breadth-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 5px;
+      background: #141414;
+      border-radius: 2px;
+      font-size: 9px;
+    }
+
+    .breadth-ticker {
+      color: #888;
+    }
+
+    .breadth-change.up { color: #22c55e; }
+    .breadth-change.down { color: #ef4444; }
+
+    /* Signal History */
+    .history-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      margin-bottom: 3px;
+      background: #141414;
+      border-radius: 3px;
+      border-left: 2px solid #333;
+    }
+
+    .history-item.call { border-left-color: #22c55e; }
+    .history-item.put { border-left-color: #ef4444; }
+    .history-item.wait { border-left-color: #525252; }
+    .history-item.hold { border-left-color: #fbbf24; }
+    .history-item.exit { border-left-color: #f97316; }
+
+    .history-dir {
+      font-size: 9px;
+      font-weight: 700;
+      min-width: 32px;
+    }
+
+    .history-item.call .history-dir { color: #22c55e; }
+    .history-item.put .history-dir { color: #ef4444; }
+    .history-item.wait .history-dir { color: #525252; }
+    .history-item.hold .history-dir { color: #fbbf24; }
+    .history-item.exit .history-dir { color: #f97316; }
+
+    .history-meta {
+      flex: 1;
+    }
+
+    .history-price {
+      font-size: 9px;
+      color: #a3a3a3;
+    }
+
+    .history-time {
+      font-size: 8px;
+      color: #525252;
+    }
+
+    /* Bottom Bar */
+    .bottom-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 12px;
+      background: #111;
+      border-top: 1px solid #333;
+      font-size: 9px;
+      color: #525252;
+      flex-shrink: 0;
+    }
+
+    .time-warning {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="terminal">
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <div class="top-left">
+        <div class="live-badge">
+          <div class="live-dot"></div>
+          LIVE
+        </div>
+        <div class="ticker-info">
+          <span class="ticker-symbol">SPY 0DTE</span>
+          <span class="ticker-price" id="ticker-price">$582.30</span>
+          <span class="ticker-change" id="ticker-change">+0.45% (+$2.60)</span>
+        </div>
+      </div>
+      <div class="top-right">
+        <span id="session-time">Session: 4h 15m</span>
+        <span id="current-time">10:45:32 AM PT</span>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Left Panel - Agent History -->
+      <div class="left-panel panel" id="left-panel">
+        <!-- Order Flow Agent History -->
+        <div class="agent-section" style="flex: 1;">
+          <div class="agent-header">
+            <span class="agent-title flow">📊 Order Flow Agent</span>
+            <span class="agent-status bullish" id="flow-status">BUYING</span>
+          </div>
+          <div class="agent-content" id="flow-history">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Technicals Agent History -->
+        <div class="agent-section" style="flex: 1;">
+          <div class="agent-header">
+            <span class="agent-title tech">📈 Technicals Agent</span>
+            <span class="agent-status bullish" id="tech-status">BULLISH</span>
+          </div>
+          <div class="agent-content" id="tech-history">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Coordinator History -->
+        <div class="agent-section" style="flex: 1;">
+          <div class="agent-header">
+            <span class="agent-title coord">🎯 Coordinator</span>
+            <span class="agent-status bullish" id="coord-status">CALL</span>
+          </div>
+          <div class="agent-content" id="coord-history">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-resizer" id="left-resizer"></div>
+
+      <!-- Center Panel - Stream -->
+      <div class="center-panel panel">
+        <div class="signal-header">
+          <div class="signal-current">
+            <div class="signal-direction call" id="signal-direction">CALL</div>
+            <div class="signal-conviction high" id="signal-conviction">HIGH</div>
+          </div>
+          <div class="signal-levels" id="signal-levels">
+            <div class="signal-level entry">
+              <span class="signal-level-label">Entry:</span>
+              <span class="signal-level-value" id="entry-price">$582.50</span>
+            </div>
+            <div class="signal-level stop">
+              <span class="signal-level-label">Stop:</span>
+              <span class="signal-level-value" id="stop-price">$580.00</span>
+            </div>
+            <div class="signal-level target">
+              <span class="signal-level-label">Target:</span>
+              <span class="signal-level-value" id="target-price">$585.00</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="stream-container" id="stream">
+          <!-- Messages will be injected here -->
+        </div>
+      </div>
+
+      <div class="panel-resizer" id="right-resizer"></div>
+
+      <!-- Right Panel -->
+      <div class="right-panel panel" id="right-panel">
+        <!-- Market Data History -->
+        <div class="panel-section" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+          <div class="panel-header">Market Data History</div>
+          <div class="agent-content" id="market-history" style="flex: 1;">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Signal History -->
+        <div class="panel-section history-section" style="flex: 1;">
+          <div class="panel-header">Signal History</div>
+          <div class="history-list" id="history-list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Bar -->
+    <div class="bottom-bar">
+      <span>0DTE Terminal v1.0 | Fast Mode</span>
+      <span class="time-warning" id="time-warning"></span>
+      <span id="connection-status">Order Flow Server: Connected</span>
+    </div>
+  </div>
+
+  <script>
+    // State
+    const messages = [];
+    const signalHistory = [];
+
+    // Demo messages - full Q&A conversation
+    const demoMessages = [
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:22:48",
+        content: "Analyze SPY for 0DTE entry opportunity"
+      },
+      {
+        type: "FLOW_RESPONSE",
+        timestamp: "10:22:55",
+        content: "ORDER FLOW ANALYSIS:\nDirection: SELLING\nBid Lifts: 10 | Bid Drops: 35\nMag7 Breadth: 2/7 bullish\n\nHeavy selling pressure. Bid drops dominating. Institutional distribution pattern detected."
+      },
+      {
+        type: "TECH_RESPONSE",
+        timestamp: "10:23:00",
+        content: "TECHNICAL ANALYSIS:\nRSI: 38 (oversold territory)\nvs VWAP: -$1.20 (below)\nORB: Below low ($579.50)\nEMA: Bearish - 9 under 21\n\nStructure broken. Bearish continuation likely."
+      },
+      {
+        type: "COORD_RESPONSE",
+        timestamp: "10:23:05",
+        content: "SPY $580.50 | PUT | MED\nFlow: Selling pressure, bid drops > lifts (35 vs 10)\nTech: RSI 38, -$1.20 vs VWAP, below ORB low\nEntry: $580.00 | Stop: $582.00 | Target: $577.50 | R/R: 1.25:1",
+        signal: { action: "PUT", signal: "ENTRY", price: 580.50, conviction: "MED", entry: 580.00, stop: 582.00, target: 577.50 }
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:25:55",
+        content: "Update: SPY moved to $580.20, still holding PUT?"
+      },
+      {
+        type: "FLOW_RESPONSE",
+        timestamp: "10:26:02",
+        content: "ORDER FLOW UPDATE:\nDirection: SELLING (weakening)\nBid Lifts: 14 | Bid Drops: 32\nMag7: 2/7 bullish\n\nSelling pressure continues but buyers starting to absorb. Watch for reversal."
+      },
+      {
+        type: "COORD_RESPONSE",
+        timestamp: "10:26:12",
+        content: "SPY $580.20 | PUT | MED → HOLD\nFlow: Still selling but weakening\nTech: RSI 42, below VWAP, structure intact\nPUT position: HOLD - flow still bearish, price above stop",
+        signal: { action: "PUT", signal: "HOLD", price: 580.20, conviction: "MED" }
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:28:02",
+        content: "Market bouncing hard - evaluate position now"
+      },
+      {
+        type: "FLOW_RESPONSE",
+        timestamp: "10:28:10",
+        content: "ORDER FLOW ALERT:\nDirection: REVERSED → MIXED\nBid Lifts: 22 | Bid Drops: 19\nMag7: 4/7 bullish\n\n⚠️ Flow flipping! Buyers stepping in at support. Selling exhaustion."
+      },
+      {
+        type: "TECH_RESPONSE",
+        timestamp: "10:28:15",
+        content: "TECHNICAL UPDATE:\nRSI: 50 (neutral, bounced from oversold)\nvs VWAP: +$0.10 (reclaiming)\nORB: Inside range\n\nV-bottom forming. VWAP reclaim = bullish."
+      },
+      {
+        type: "COORD_RESPONSE",
+        timestamp: "10:28:20",
+        content: "SPY $581.20 | EXIT | HIGH\nFlow: REVERSED - buyers stepping in\nTech: RSI 50, reclaiming VWAP\nClose PUT immediately - flow flipped, structure broken",
+        signal: { action: "EXIT", signal: null, price: 581.20, conviction: "HIGH" }
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:30:08",
+        content: "Flat now. What's the new setup?"
+      },
+      {
+        type: "FLOW_RESPONSE",
+        timestamp: "10:30:20",
+        content: "ORDER FLOW:\nDirection: MIXED\nBid Lifts: 22 | Bid Drops: 19\nMag7: 4/7 bullish\n\nNo clear direction yet. Need to see lifts > 30 or drops > 30 for conviction."
+      },
+      {
+        type: "COORD_RESPONSE",
+        timestamp: "10:30:45",
+        content: "SPY $581.50 | WAIT | LOW\nFlow: Mixed - balanced (22 vs 19)\nTech: RSI 50 neutral, at VWAP\nNo trade - wait for flow clarity",
+        signal: { action: "WAIT", signal: null, price: 581.50, conviction: "LOW" }
+      },
+      {
+        type: "AGENT_QUESTION",
+        timestamp: "10:32:00",
+        content: "Volume spike detected - check for signal"
+      },
+      {
+        type: "FLOW_RESPONSE",
+        timestamp: "10:32:08",
+        content: "ORDER FLOW:\nDirection: BUYING ✓\nBid Lifts: 45 | Bid Drops: 12\nMag7: 6/7 bullish\n\nSTRONG buying pressure! Bid lifts clearly dominating. This is institutional accumulation."
+      },
+      {
+        type: "TECH_RESPONSE",
+        timestamp: "10:32:12",
+        content: "TECHNICAL ANALYSIS:\nRSI: 58 (bullish momentum)\nvs VWAP: +$0.80 (strong)\nORB: ABOVE HIGH ✓ Breakout!\nEMA: 9 > 21, bullish cross\n\nAll systems bullish. ORB breakout with momentum."
+      },
+      {
+        type: "COORD_RESPONSE",
+        timestamp: "10:32:15",
+        content: "SPY $582.30 | CALL | HIGH\nFlow: Strong buying pressure (45 vs 12)\nTech: RSI 58, +$0.80 vs VWAP, ORB breakout\nEntry: $582.50 | Stop: $580.00 | Target: $585.00 | R/R: 2.5:1\n\n{\"action\": \"CALL\", \"signal\": \"ENTRY\", \"price\": 582.30, \"conviction\": \"HIGH\", \"invalidation\": 580.00}",
+        signal: { action: "CALL", signal: "ENTRY", price: 582.30, conviction: "HIGH", entry: 582.50, stop: 580.00, target: 585.00 }
+      }
+    ];
+
+    const demoSignals = [
+      { time: '10:32:15', action: 'CALL', signal: 'ENTRY', price: 582.30, conviction: 'HIGH' },
+      { time: '10:30:08', action: 'WAIT', signal: null, price: 581.50, conviction: 'LOW' },
+      { time: '10:28:02', action: 'EXIT', signal: null, price: 581.20, conviction: 'HIGH' },
+      { time: '10:25:55', action: 'PUT', signal: 'HOLD', price: 580.20, conviction: 'MED' },
+      { time: '10:22:48', action: 'PUT', signal: 'ENTRY', price: 580.50, conviction: 'MED' },
+    ];
+
+    // Demo market data history (simulating data from financial data agent)
+    const demoMarketData = [
+      {
+        timestamp: '10:32:12',
+        price: 582.30,
+        vwap: 581.50,
+        orbHigh: 582.00,
+        orbLow: 579.50,
+        rsi: 58,
+        ema9: 581.80,
+        ema21: 581.20,
+        dayHigh: 583.20,
+        dayLow: 578.80,
+        breadth: '6/7'
+      },
+      {
+        timestamp: '10:28:15',
+        price: 581.20,
+        vwap: 581.10,
+        orbHigh: 582.00,
+        orbLow: 579.50,
+        rsi: 50,
+        ema9: 580.90,
+        ema21: 580.80,
+        dayHigh: 582.50,
+        dayLow: 578.80,
+        breadth: '4/7'
+      },
+      {
+        timestamp: '10:23:00',
+        price: 580.50,
+        vwap: 581.70,
+        orbHigh: 582.00,
+        orbLow: 579.50,
+        rsi: 38,
+        ema9: 580.20,
+        ema21: 580.60,
+        dayHigh: 582.00,
+        dayLow: 578.80,
+        breadth: '2/7'
+      }
+    ];
+
+    function renderMessage(msg) {
+      if (msg.type === "AGENT_QUESTION") {
+        return `
+          <div class="message agent">
+            <div class="message-icon agent">🤖</div>
+            <div class="message-content">
+              <div class="message-header">
+                <span class="message-sender agent">Zero DTE Agent</span>
+                <span class="message-time">${msg.timestamp}</span>
+              </div>
+              <div class="message-body">"${msg.content}"</div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (msg.type === "FLOW_RESPONSE") {
+        return `
+          <div class="message">
+            <div class="message-icon flow">📊</div>
+            <div class="message-content">
+              <div class="message-header">
+                <span class="message-sender flow">Order Flow Agent</span>
+                <span class="message-time">${msg.timestamp}</span>
+              </div>
+              <div class="message-body">${msg.content}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (msg.type === "TECH_RESPONSE") {
+        return `
+          <div class="message">
+            <div class="message-icon tech">📈</div>
+            <div class="message-content">
+              <div class="message-header">
+                <span class="message-sender tech">Technicals Agent</span>
+                <span class="message-time">${msg.timestamp}</span>
+              </div>
+              <div class="message-body">${msg.content}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      if (msg.type === "COORD_RESPONSE" || msg.type === "SWARM_RESPONSE") {
+        let signalCard = '';
+        if (msg.signal && msg.signal.action) {
+          const dir = msg.signal.action.toUpperCase();
+          const conv = msg.signal.conviction ? msg.signal.conviction.toUpperCase() : '';
+          const dirClass = dir.toLowerCase();
+
+          signalCard = `
+            <div class="signal-inline ${dirClass}">
+              <span class="signal-inline-direction ${dirClass}">${dir}</span>
+              ${conv ? `<span class="signal-inline-conviction ${conv.toLowerCase()}">${conv}</span>` : ''}
+            </div>
+          `;
+        }
+
+        return `
+          <div class="message">
+            <div class="message-icon coord">🎯</div>
+            <div class="message-content">
+              <div class="message-header">
+                <span class="message-sender coord">Coordinator</span>
+                <span class="message-time">${msg.timestamp}</span>
+              </div>
+              <div class="message-body">${msg.content}</div>
+              ${signalCard}
+            </div>
+          </div>
+        `;
+      }
+
+      return '';
+    }
+
+    function renderThinking() {
+      return `
+        <div class="thinking">
+          <div class="thinking-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span>Agent analyzing...</span>
+        </div>
+      `;
+    }
+
+    function renderStream() {
+      const stream = document.getElementById('stream');
+      const html = messages.map(renderMessage).join('');
+      stream.innerHTML = html + renderThinking();
+      stream.scrollTop = stream.scrollHeight;
+
+      // Also update agent histories
+      renderAgentHistories();
+    }
+
+    function renderSignalHistory() {
+      const container = document.getElementById('history-list');
+      container.innerHTML = signalHistory.map(s => {
+        let dirClass = s.action.toLowerCase();
+        let displayDir = s.action;
+        if (s.signal === 'HOLD') {
+          dirClass = 'hold';
+          displayDir = 'HOLD';
+        } else if (s.action === 'EXIT') {
+          dirClass = 'exit';
+        }
+        return `
+          <div class="history-item ${dirClass}">
+            <span class="history-dir">${displayDir}</span>
+            <div class="history-meta">
+              <div class="history-price">$${s.price.toFixed(2)}</div>
+              <div class="history-time">${s.time}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Parse direction/bias from content
+    function parseDirection(content) {
+      if (content.includes('BUYING') || content.includes('bullish')) return 'bullish';
+      if (content.includes('SELLING') || content.includes('bearish') || content.includes('BEARISH')) return 'bearish';
+      return 'neutral';
+    }
+
+    function parseBadgeLabel(content, type) {
+      if (type === 'flow') {
+        if (content.includes('BUYING')) return 'BUYING';
+        if (content.includes('SELLING')) return 'SELLING';
+        if (content.includes('MIXED') || content.includes('REVERSED')) return 'MIXED';
+        return 'NEUTRAL';
+      }
+      if (type === 'tech') {
+        if (content.includes('BULLISH') || content.toLowerCase().includes('bullish')) return 'BULLISH';
+        if (content.includes('BEARISH') || content.toLowerCase().includes('bearish')) return 'BEARISH';
+        return 'NEUTRAL';
+      }
+      if (type === 'coord') {
+        if (content.includes('CALL')) return 'CALL';
+        if (content.includes('PUT')) return 'PUT';
+        if (content.includes('EXIT')) return 'EXIT';
+        if (content.includes('WAIT')) return 'WAIT';
+        if (content.includes('HOLD')) return 'HOLD';
+        return '--';
+      }
+      return '--';
+    }
+
+    // Render agent histories from messages
+    function renderAgentHistories() {
+      const flowMsgs = messages.filter(m => m.type === 'FLOW_RESPONSE').reverse();
+      const techMsgs = messages.filter(m => m.type === 'TECH_RESPONSE').reverse();
+      const coordMsgs = messages.filter(m => m.type === 'COORD_RESPONSE' || m.type === 'SWARM_RESPONSE').reverse();
+
+      // Flow history
+      const flowContainer = document.getElementById('flow-history');
+      flowContainer.innerHTML = flowMsgs.map((m, i) => {
+        const dir = parseDirection(m.content);
+        const badge = parseBadgeLabel(m.content, 'flow');
+        return `
+          <div class="agent-history-entry ${i === 0 ? 'latest ' + dir : dir}">
+            <div class="agent-entry-header">
+              <span class="agent-entry-time">${m.timestamp}</span>
+              <span class="agent-entry-badge ${dir}">${badge}</span>
+            </div>
+            <div class="agent-entry-body">${m.content}</div>
+          </div>
+        `;
+      }).join('') || '<div style="color:#525252;padding:10px;text-align:center;">No data yet</div>';
+
+      // Update flow status
+      if (flowMsgs.length > 0) {
+        const latestFlow = flowMsgs[0];
+        const flowDir = parseDirection(latestFlow.content);
+        const flowStatus = document.getElementById('flow-status');
+        flowStatus.textContent = parseBadgeLabel(latestFlow.content, 'flow');
+        flowStatus.className = 'agent-status ' + flowDir;
+      }
+
+      // Tech history
+      const techContainer = document.getElementById('tech-history');
+      techContainer.innerHTML = techMsgs.map((m, i) => {
+        const dir = parseDirection(m.content);
+        const badge = parseBadgeLabel(m.content, 'tech');
+        return `
+          <div class="agent-history-entry ${i === 0 ? 'latest ' + dir : dir}">
+            <div class="agent-entry-header">
+              <span class="agent-entry-time">${m.timestamp}</span>
+              <span class="agent-entry-badge ${dir}">${badge}</span>
+            </div>
+            <div class="agent-entry-body">${m.content}</div>
+          </div>
+        `;
+      }).join('') || '<div style="color:#525252;padding:10px;text-align:center;">No data yet</div>';
+
+      // Update tech status
+      if (techMsgs.length > 0) {
+        const latestTech = techMsgs[0];
+        const techDir = parseDirection(latestTech.content);
+        const techStatus = document.getElementById('tech-status');
+        techStatus.textContent = parseBadgeLabel(latestTech.content, 'tech');
+        techStatus.className = 'agent-status ' + techDir;
+      }
+
+      // Coord history
+      const coordContainer = document.getElementById('coord-history');
+      coordContainer.innerHTML = coordMsgs.map((m, i) => {
+        const badge = parseBadgeLabel(m.content, 'coord');
+        const dir = badge === 'CALL' ? 'bullish' : badge === 'PUT' || badge === 'EXIT' ? 'bearish' : 'neutral';
+        return `
+          <div class="agent-history-entry ${i === 0 ? 'latest ' + dir : dir}">
+            <div class="agent-entry-header">
+              <span class="agent-entry-time">${m.timestamp}</span>
+              <span class="agent-entry-badge ${dir}">${badge}</span>
+            </div>
+            <div class="agent-entry-body">${m.content}</div>
+          </div>
+        `;
+      }).join('') || '<div style="color:#525252;padding:10px;text-align:center;">No data yet</div>';
+
+      // Update coord status
+      if (coordMsgs.length > 0) {
+        const latestCoord = coordMsgs[0];
+        const coordBadge = parseBadgeLabel(latestCoord.content, 'coord');
+        const coordDir = coordBadge === 'CALL' ? 'bullish' : coordBadge === 'PUT' || coordBadge === 'EXIT' ? 'bearish' : 'neutral';
+        const coordStatus = document.getElementById('coord-status');
+        coordStatus.textContent = coordBadge;
+        coordStatus.className = 'agent-status ' + coordDir;
+      }
+    }
+
+    // Render market data history
+    function renderMarketDataHistory() {
+      const container = document.getElementById('market-history');
+      container.innerHTML = demoMarketData.map((d, i) => {
+        const vwapDiff = d.price - d.vwap;
+        const vwapClass = vwapDiff >= 0 ? 'bullish' : 'bearish';
+        const rsiClass = d.rsi >= 50 ? 'bullish' : d.rsi <= 40 ? 'bearish' : 'neutral';
+
+        return `
+          <div class="agent-history-entry ${i === 0 ? 'latest' : ''} ${vwapClass}">
+            <div class="agent-entry-header">
+              <span class="agent-entry-time">${d.timestamp}</span>
+              <span class="agent-entry-badge ${vwapClass}">$${d.price.toFixed(2)}</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px; font-size: 9px;">
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">VWAP</span>
+                <span class="agent-data-value">$${d.vwap.toFixed(2)}</span>
+              </div>
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">vs VWAP</span>
+                <span class="agent-data-value ${vwapDiff >= 0 ? 'up' : 'down'}">${vwapDiff >= 0 ? '+' : ''}$${vwapDiff.toFixed(2)}</span>
+              </div>
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">RSI</span>
+                <span class="agent-data-value">${d.rsi}</span>
+              </div>
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">Breadth</span>
+                <span class="agent-data-value">${d.breadth}</span>
+              </div>
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">ORB Hi</span>
+                <span class="agent-data-value">$${d.orbHigh.toFixed(2)}</span>
+              </div>
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">ORB Lo</span>
+                <span class="agent-data-value">$${d.orbLow.toFixed(2)}</span>
+              </div>
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">EMA 9</span>
+                <span class="agent-data-value">$${d.ema9.toFixed(2)}</span>
+              </div>
+              <div class="agent-data-row" style="border: none; padding: 1px 0;">
+                <span class="agent-data-label">EMA 21</span>
+                <span class="agent-data-value">$${d.ema21.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('') || '<div style="color:#525252;padding:10px;text-align:center;">No data yet</div>';
+    }
+
+    function updateSignalHeader(signal) {
+      const dirEl = document.getElementById('signal-direction');
+      const convEl = document.getElementById('signal-conviction');
+      const levelsEl = document.getElementById('signal-levels');
+
+      let displayDir = signal.action;
+      let dirClass = signal.action.toLowerCase();
+
+      if (signal.signal === 'HOLD') {
+        displayDir = 'HOLD';
+        dirClass = 'hold';
+      }
+
+      dirEl.textContent = displayDir;
+      dirEl.className = 'signal-direction ' + dirClass;
+
+      const conv = signal.conviction || 'LOW';
+      convEl.textContent = conv;
+      convEl.className = 'signal-conviction ' + conv.toLowerCase();
+
+      if (signal.entry) {
+        document.getElementById('entry-price').textContent = `$${signal.entry.toFixed(2)}`;
+        document.getElementById('stop-price').textContent = `$${signal.stop.toFixed(2)}`;
+        document.getElementById('target-price').textContent = `$${signal.target.toFixed(2)}`;
+        levelsEl.style.display = 'flex';
+      } else {
+        levelsEl.style.display = 'none';
+      }
+    }
+
+    function appendMessage(msg) {
+      messages.push(msg);
+      if (messages.length > 50) messages.shift();
+
+      if (msg.signal) {
+        updateSignalHeader(msg.signal);
+        signalHistory.unshift({
+          time: msg.timestamp,
+          action: msg.signal.action,
+          signal: msg.signal.signal,
+          price: msg.signal.price || 0,
+          conviction: msg.signal.conviction
+        });
+        if (signalHistory.length > 20) signalHistory.pop();
+        renderSignalHistory();
+      }
+
+      renderStream();
+    }
+
+    function updateTime() {
+      const now = new Date();
+      document.getElementById('current-time').textContent =
+        now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }) + ' PT';
+
+      const hours = now.getHours();
+      const warning = document.getElementById('time-warning');
+      if (hours >= 12) {
+        warning.textContent = '⚠️ After 12 PM - High risk window';
+      } else if (hours >= 11) {
+        warning.textContent = '⚠️ After 11 AM - Theta accelerating';
+      } else {
+        warning.textContent = '';
+      }
+    }
+
+    function findLatestSignal() {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].signal) return messages[i].signal;
+      }
+      return null;
+    }
+
+    // Resizable panels
+    function initResizers() {
+      const leftResizer = document.getElementById('left-resizer');
+      const rightResizer = document.getElementById('right-resizer');
+      const leftPanel = document.getElementById('left-panel');
+      const rightPanel = document.getElementById('right-panel');
+
+      let isResizing = false;
+      let currentResizer = null;
+
+      function startResize(e, resizer) {
+        isResizing = true;
+        currentResizer = resizer;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+      }
+
+      function resize(e) {
+        if (!isResizing) return;
+
+        if (currentResizer === leftResizer) {
+          const newWidth = e.clientX;
+          if (newWidth >= 200 && newWidth <= 500) {
+            leftPanel.style.width = newWidth + 'px';
+          }
+        } else if (currentResizer === rightResizer) {
+          const newWidth = window.innerWidth - e.clientX;
+          if (newWidth >= 180 && newWidth <= 350) {
+            rightPanel.style.width = newWidth + 'px';
+          }
+        }
+      }
+
+      function stopResize() {
+        isResizing = false;
+        currentResizer = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+
+      leftResizer.addEventListener('mousedown', (e) => startResize(e, leftResizer));
+      rightResizer.addEventListener('mousedown', (e) => startResize(e, rightResizer));
+      document.addEventListener('mousemove', resize);
+      document.addEventListener('mouseup', stopResize);
+    }
+
+    // SSE Connection
+    async function loadHistory() {
+      try {
+        const response = await fetch('/history');
+        const history = await response.json();
+        if (history && history.length > 0) {
+          messages.push(...history);
+          const latestSignal = findLatestSignal();
+          if (latestSignal) updateSignalHeader(latestSignal);
+          renderStream();
+          return true;
+        }
+      } catch (e) {
+        console.error('Failed to load history:', e);
+      }
+      return false;
+    }
+
+    async function connectSSE() {
+      await loadHistory();
+
+      const eventSource = new EventSource('/stream');
+
+      eventSource.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'CONNECTED' || msg.type === 'SESSION_RESET') {
+            if (msg.type === 'SESSION_RESET') {
+              messages.length = 0;
+              renderStream();
+            }
+          } else {
+            appendMessage(msg);
+          }
+        } catch (e) {
+          console.error('Error parsing SSE message:', e);
+        }
+      };
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        document.getElementById('connection-status').textContent = 'Reconnecting...';
+        setTimeout(connectSSE, 3000);
+      };
+    }
+
+    // Initialize
+    function init() {
+      initResizers();
+
+      // Always load demo data first for immediate display
+      signalHistory.push(...demoSignals);
+      messages.push(...demoMessages);
+
+      renderSignalHistory();
+      renderMarketDataHistory();
+      const latestSignal = findLatestSignal();
+      if (latestSignal) updateSignalHeader(latestSignal);
+      renderStream();
+
+      // Try to connect to SSE if not file protocol
+      if (window.location.protocol !== 'file:') {
+        connectSSE();
+      }
+
+      updateTime();
+      setInterval(updateTime, 1000);
+
+      console.log('0DTE Terminal initialized', {
+        messages: messages.length,
+        signalHistory: signalHistory.length
+      });
+    }
+
+    // Run on DOM ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  </script>
+</body>
+</html>

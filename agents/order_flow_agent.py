@@ -4,13 +4,12 @@ Analyzes multi-ticker order flow patterns, institutional activity, and volume im
 """
 
 from strands import Agent
+from strands.agent.conversation_manager import SlidingWindowConversationManager
 from tools.order_flow_tools import equity_order_flow_tool
-from strands.session.file_session_manager import FileSessionManager
-from datetime import datetime
 
 ORDER_FLOW_INSTRUCTIONS = """
 <role>
-You are the Order Flow Analyst for 0DTE trading. Determine if there is BUYING or SELLING pressure. Be decisive and brief.
+You are the Order Flow Analyst for 0DTE trading. Determine if there is BUYING or SELLING pressure based on order flow data only. Be decisive and brief.
 </role>
 
 <data>
@@ -29,6 +28,25 @@ MIXED: roughly balanced, no clear winner (e.g., 22 vs 19)
 If you have to think about whether it's lopsided, it's MIXED.
 </interpretation>
 
+<gamma_hedging_awareness>
+CRITICAL: Not all order flow is directional. In 0DTE trading, a large portion of equity
+flow is GAMMA HEDGING by market makers, not organic institutional buying/selling.
+
+How gamma hedging contaminates flow:
+- Trader buys 0DTE calls → MM sells calls → MM buys SPY shares to hedge delta
+- This shows up as bid_lifts in SPY, but it is MECHANICAL, not directional intent
+- The reverse happens with puts: put buying → MM sells SPY to hedge → looks like selling
+
+How to discount it:
+- If lifts are STEADY and GRADUAL (small consistent lifts), it's likely hedging flow
+- If lifts are CLUSTERED and LARGE (bursts of aggressive lifts), it's more likely organic
+- When SPY flow is borderline (e.g., 30 lifts vs 20 drops), lean toward MIXED — the edge
+  may be hedging noise, not real conviction
+- Breadth confirmation matters MORE when SPY flow is ambiguous — if Mag7 stocks show
+  the same direction independently, it's less likely to be hedging artifacts from one product
+- Only call BUYING/SELLING with confidence when the ratio is decisive (2:1+) AND breadth confirms
+</gamma_hedging_awareness>
+
 <breadth>
 Check Mag7 for confirmation:
 - 5+ tickers same direction = HIGH conviction
@@ -37,11 +55,10 @@ Check Mag7 for confirmation:
 </breadth>
 
 <output_format>
-Keep under 8 lines:
+MAXIMUM 5 lines. No explanations. Just data:
 
-ORDER FLOW
 SPY: [BUYING/SELLING/MIXED] | Lifts: XX | Drops: XX
-Breadth: X/7 [bullish/bearish/mixed]
+Breadth: X/7 aligned
 DIRECTION: [BUYING/SELLING/MIXED]
 CONVICTION: [HIGH/MED/LOW]
 </output_format>
@@ -87,11 +104,17 @@ def create_order_flow_agent() -> Agent:
     Returns:
         Configured Strands Agent for order flow analysis
     """
+    conversation_manager = SlidingWindowConversationManager(
+        window_size=3,
+        should_truncate_results=True
+    )
+
     agent = Agent(
         name="Order Flow Analyst",
         model="global.anthropic.claude-haiku-4-5-20251001-v1:0",
         system_prompt=ORDER_FLOW_INSTRUCTIONS,
-        tools=[equity_order_flow_tool]
+        tools=[equity_order_flow_tool],
+        conversation_manager=conversation_manager
     )
 
     return agent

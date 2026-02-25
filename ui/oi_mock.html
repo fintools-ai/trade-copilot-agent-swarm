@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OI Analysis — Redesign Mock</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-base: #0d1117;
+      --bg-raised: #161b22;
+      --bg-overlay: #1c2128;
+      --bg-inset: #010409;
+      --border: #30363d;
+      --border-muted: #21262d;
+      --text-primary: #c9d1d9;
+      --text-secondary: #8b949e;
+      --text-muted: #484f58;
+      --text-bright: #f0f6fc;
+      --accent-gold: #d29922;
+      --accent-coral: #f78166;
+      --accent-warm: #e09422;
+      --green: #3fb950;
+      --green-muted: #238636;
+      --green-bg: #0d2818;
+      --red: #f85149;
+      --red-muted: #da3633;
+      --red-bg: #2d1013;
+      --amber: #d29922;
+      --amber-bg: #2a1f05;
+      --blue: #58a6ff;
+      --blue-muted: #1f6feb;
+      --purple: #bc8cff;
+      --conf-high: #3fb950;
+      --conf-med: #d29922;
+      --conf-low: #8b949e;
+      --change-indicator: #f78166;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'IBM Plex Sans', -apple-system, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-size: 12px;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── SHELL ── */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 12px;
+      background: var(--bg-inset);
+      border-bottom: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .top-bar .brand {
+      color: var(--accent-warm);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+    .top-bar .meta { color: var(--text-secondary); }
+    .top-bar .live {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--green);
+      font-weight: 600;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    .tab-bar {
+      display: flex;
+      background: var(--bg-inset);
+      border-bottom: 1px solid var(--border);
+      padding: 0 8px;
+    }
+    .tab-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      padding: 8px 20px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      text-transform: uppercase;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text-secondary); }
+    .tab-btn.active {
+      color: var(--accent-coral);
+      border-bottom-color: var(--accent-coral);
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .oi-layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── LEFT PANEL: TICKERS ── */
+    .oi-left {
+      width: 260px;
+      min-width: 220px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-base);
+    }
+
+    .panel-header {
+      padding: 8px 12px;
+      background: var(--bg-raised);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .panel-header .title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-gold);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+    .panel-header .badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+
+    .ticker-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px;
+    }
+    .ticker-list::-webkit-scrollbar { width: 4px; }
+    .ticker-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .ticker-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      border-left: 3px solid transparent;
+      margin-bottom: 2px;
+      transition: all 0.12s;
+    }
+    .ticker-item:hover { background: var(--bg-raised); }
+    .ticker-item.selected {
+      background: var(--bg-overlay);
+      border-left-color: var(--accent-coral);
+    }
+
+    .ticker-item .tk-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ticker-item .tk-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text-bright);
+    }
+    .ticker-item .tk-dir {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 2px;
+      letter-spacing: 0.5px;
+    }
+    .tk-dir.bullish { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-muted); }
+    .tk-dir.bearish { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-muted); }
+
+    .ticker-item .tk-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .tk-conf {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .tk-conf.high { color: var(--conf-high); }
+    .tk-conf.med { color: var(--conf-med); }
+    .tk-conf.low { color: var(--conf-low); }
+    .tk-time {
+      font-size: 10px;
+      color: var(--text-muted);
+    }
+    .tk-change {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--change-indicator);
+    }
+    .tk-confluence {
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .tk-confluence.aligned { color: var(--green); }
+    .tk-confluence.divergent { color: var(--amber); }
+
+    /* ── CENTER PANEL: DETAIL ── */
+    .oi-center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 500px;
+    }
+
+    .detail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+    .detail-body::-webkit-scrollbar { width: 5px; }
+    .detail-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Synthesis Header */
+    .synth-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 16px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .synth-dir {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .synth-dir.CALL { color: var(--green); }
+    .synth-dir.PUT { color: var(--red); }
+
+    .synth-conf-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .synth-conf-bar {
+      width: 80px;
+      height: 6px;
+      background: var(--border-muted);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .synth-conf-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s;
+    }
+    .synth-conf-fill.high { background: var(--green); }
+    .synth-conf-fill.med { background: var(--amber); }
+    .synth-conf-fill.low { background: var(--text-muted); }
+    .synth-conf-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .synth-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .synth-badge.aligned { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-muted); }
+    .synth-badge.divergent { background: var(--amber-bg); color: var(--amber); border: 1px solid #554400; }
+
+    .synth-pattern {
+      font-size: 10px;
+      color: var(--text-secondary);
+      padding: 3px 8px;
+      background: var(--bg-overlay);
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .synth-dq {
+      margin-left: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .synth-dq.A { color: var(--green); }
+    .synth-dq.B { color: var(--amber); }
+    .synth-dq.C { color: var(--red); }
+
+    /* Smart Money Summary */
+    .sm-summary {
+      padding: 10px 14px;
+      background: var(--bg-raised);
+      border-left: 3px solid var(--accent-warm);
+      border-radius: 0 4px 4px 0;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--accent-warm);
+      font-style: italic;
+      line-height: 1.5;
+    }
+
+    /* Section */
+    .section {
+      margin-bottom: 16px;
+    }
+    .section-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent-gold);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--border-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .section-title .prev-label {
+      font-size: 9px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    /* DTE TABLE — the hero */
+    .dte-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+    }
+    .dte-table th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-raised);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .dte-table th:first-child { border-radius: 4px 0 0 0; }
+    .dte-table th:last-child { border-radius: 0 4px 0 0; }
+
+    .dte-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-muted);
+      color: var(--text-primary);
+      vertical-align: top;
+    }
+
+    .dte-table tbody tr {
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .dte-table tbody tr:hover { background: var(--bg-raised); }
+    .dte-table tbody tr.expanded { background: var(--bg-overlay); }
+    .dte-table tbody tr.changed {
+      border-left: 3px solid var(--change-indicator);
+    }
+
+    .dte-label-cell {
+      font-weight: 700;
+      color: var(--text-bright);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .dte-label-cell .dte-dq {
+      font-size: 9px;
+      font-weight: 500;
+      margin-left: 6px;
+    }
+
+    .bias-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .bias-pill.bullish { color: var(--green); }
+    .bias-pill.bearish { color: var(--red); }
+    .bias-pill.neutral { color: var(--text-secondary); }
+    .bias-pill .conf {
+      font-weight: 500;
+      font-size: 11px;
+      opacity: 0.8;
+    }
+
+    .strike-cell { color: var(--accent-warm); font-weight: 500; }
+    .strike-cell .oi-count { color: var(--text-secondary); font-weight: 400; font-size: 10px; }
+
+    .pcr-cell { color: var(--text-primary); }
+    .maxpain-cell { color: var(--text-secondary); }
+
+    .sm-cell {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .sm-cell.bullish { color: var(--green); }
+    .sm-cell.bearish { color: var(--red); }
+    .sm-cell.neutral { color: var(--text-muted); }
+
+    .gamma-cell {
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .gamma-cell.up { color: var(--green); }
+    .gamma-cell.down { color: var(--red); }
+    .gamma-cell.neutral { color: var(--text-muted); }
+
+    /* Change indicator */
+    .delta {
+      font-size: 10px;
+      color: var(--change-indicator);
+      font-weight: 400;
+      display: block;
+      margin-top: 2px;
+    }
+    .delta .prev { text-decoration: line-through; opacity: 0.6; }
+    .delta .arrow { margin: 0 3px; }
+
+    /* DTE expand panel (below table) */
+    .dte-expand-panel {
+      background: var(--bg-overlay);
+      border: 1px solid var(--border);
+      border-top: 2px solid var(--accent-coral);
+      border-radius: 0 0 4px 4px;
+      margin-top: -1px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      animation: slideIn 0.15s ease-out;
+    }
+    .dte-expand-panel .exp-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 14px;
+      background: var(--bg-raised);
+      border-bottom: 1px solid var(--border-muted);
+    }
+    .dte-expand-panel .exp-header-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-bright);
+    }
+    .dte-expand-panel .exp-header-close {
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .dte-expand-panel .exp-header-close:hover { color: var(--text-primary); background: var(--bg-base); }
+    .dte-expand-body {
+      display: flex;
+      gap: 16px;
+      padding: 12px 16px;
+    }
+    .dte-expand-body .exp-col { flex: 1; }
+    .dte-expand-body .exp-label {
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .dte-expand-body .exp-flow {
+      font-size: 11px;
+      color: var(--accent-warm);
+      font-style: italic;
+      line-height: 1.5;
+    }
+    .dte-expand-body .exp-thesis {
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    /* Thesis section */
+    .thesis-box {
+      padding: 12px 14px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border-muted);
+      border-radius: 4px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--text-primary);
+    }
+
+    /* Key Strikes Table */
+    .strikes-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+    }
+    .strikes-table th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-raised);
+    }
+    .strikes-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--border-muted);
+      color: var(--text-primary);
+    }
+    .strikes-table .type-call_wall { color: var(--green); font-weight: 600; }
+    .strikes-table .type-put_wall { color: var(--red); font-weight: 600; }
+    .strikes-table .type-max_pain { color: var(--accent-warm); font-weight: 600; }
+    .strikes-table .interp { color: var(--text-secondary); font-family: 'IBM Plex Sans', sans-serif; }
+
+    /* Trade Recommendation */
+    .trade-card {
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .trade-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: var(--bg-overlay);
+      border-bottom: 1px solid var(--border-muted);
+    }
+    .trade-card-dir {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .trade-card-dir.CALL { color: var(--green); }
+    .trade-card-dir.PUT { color: var(--red); }
+
+    .trade-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border-muted);
+    }
+    .trade-cell {
+      padding: 8px 14px;
+      background: var(--bg-raised);
+    }
+    .trade-cell .tc-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+    .trade-cell .tc-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-bright);
+    }
+    .trade-cell .tc-value.green { color: var(--green); }
+    .trade-cell .tc-value.red { color: var(--red); }
+    .trade-cell .tc-value.gold { color: var(--accent-warm); }
+
+    .trade-section {
+      padding: 10px 14px;
+      border-top: 1px solid var(--border-muted);
+    }
+    .trade-section .ts-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .trade-section .trigger-item {
+      font-size: 11px;
+      color: var(--text-primary);
+      padding: 3px 0;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .trigger-item::before {
+      content: "▸";
+      color: var(--accent-coral);
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Risk Management */
+    .risk-list {
+      list-style: none;
+      padding: 0;
+    }
+    .risk-list li {
+      font-size: 12px;
+      color: var(--text-primary);
+      padding: 6px 10px;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      border-bottom: 1px solid var(--border-muted);
+    }
+    .risk-list li:last-child { border-bottom: none; }
+    .risk-list li::before {
+      content: "⚠";
+      color: var(--red);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .risk-detail {
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding: 6px 10px;
+      line-height: 1.5;
+    }
+    .risk-detail .rd-label { color: var(--text-muted); font-weight: 500; }
+
+    /* ── RIGHT PANEL: CONTROLS ── */
+    .oi-right {
+      width: 300px;
+      min-width: 240px;
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-base);
+    }
+
+    .controls-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    .controls-body::-webkit-scrollbar { width: 4px; }
+    .controls-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .ctrl-input-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .ctrl-input {
+      flex: 1;
+      background: var(--bg-inset);
+      border: 1px solid var(--border);
+      color: var(--text-bright);
+      padding: 8px 10px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .ctrl-input:focus { border-color: var(--accent-coral); }
+    .ctrl-input::placeholder { color: var(--text-muted); text-transform: none; }
+
+    .ctrl-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border: 1px solid var(--accent-coral);
+      background: transparent;
+      color: var(--accent-coral);
+      cursor: pointer;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .ctrl-btn:hover { background: rgba(247, 129, 102, 0.1); }
+    .ctrl-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .ctrl-btn.secondary {
+      border-color: var(--border);
+      color: var(--text-secondary);
+      font-size: 10px;
+      padding: 6px 12px;
+      width: 100%;
+    }
+    .ctrl-btn.secondary:hover { border-color: var(--text-muted); color: var(--text-primary); }
+
+    .dte-checkboxes {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-size: 11px;
+    }
+    .dte-checkboxes label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .dte-checkboxes input[type="checkbox"] {
+      accent-color: var(--accent-coral);
+      width: 14px;
+      height: 14px;
+    }
+
+    .progress-bar {
+      height: 3px;
+      background: var(--border-muted);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent-coral);
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    .status-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    .status-text.running { color: var(--accent-warm); }
+    .status-text.complete { color: var(--green); }
+    .status-text.error { color: var(--red); }
+
+    /* Bias Summary Cards */
+    .bias-summary {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .bias-card {
+      flex: 1;
+      text-align: center;
+      padding: 10px 6px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border-muted);
+      border-radius: 4px;
+    }
+    .bias-card .bc-count {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .bias-card .bc-count.bullish { color: var(--green); }
+    .bias-card .bc-count.bearish { color: var(--red); }
+    .bias-card .bc-count.unclear { color: var(--text-muted); }
+    .bias-card .bc-label {
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+
+    /* Conviction Rankings */
+    .conviction-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 10px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border-muted);
+      border-radius: 4px;
+      margin-bottom: 4px;
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .conviction-item:hover { border-color: var(--border); }
+    .conviction-item .cv-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .conviction-item .cv-ticker {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      font-size: 12px;
+      color: var(--text-bright);
+      width: 40px;
+    }
+    .conviction-item .cv-dir {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .cv-dir.CALL { color: var(--green); }
+    .cv-dir.PUT { color: var(--red); }
+    .conviction-item .cv-conf {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* Live Log */
+    .log-container {
+      background: var(--bg-inset);
+      border: 1px solid var(--border-muted);
+      border-radius: 4px;
+      padding: 6px 8px;
+      max-height: 250px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      line-height: 1.6;
+    }
+    .log-container::-webkit-scrollbar { width: 3px; }
+    .log-container::-webkit-scrollbar-thumb { background: var(--border); }
+    .log-line { padding: 1px 0; }
+    .log-line .log-ts { color: var(--text-muted); }
+    .log-line.success .log-msg { color: var(--green); }
+    .log-line.warning .log-msg { color: var(--amber); }
+    .log-line.error .log-msg { color: var(--red); }
+    .log-line.info .log-msg { color: var(--text-secondary); }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      font-size: 13px;
+      gap: 8px;
+    }
+    .empty-state .empty-icon {
+      font-size: 24px;
+      opacity: 0.3;
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .section { animation: slideIn 0.2s ease-out; }
+
+    /* DTE data rows — explicit visibility */
+    .dte-table tbody tr.dte-data-row {
+      display: table-row !important;
+    }
+    .dte-table tbody tr.dte-data-row:nth-child(odd) {
+      background: rgba(22, 27, 34, 0.4);
+    }
+    .dte-table tbody tr.dte-data-row.active {
+      background: var(--bg-overlay);
+      outline: 1px solid var(--accent-coral);
+      outline-offset: -1px;
+    }
+
+    /* Expand indicator */
+    .expand-arrow {
+      display: inline-block;
+      transition: transform 0.15s;
+      color: var(--text-muted);
+      font-size: 10px;
+      margin-right: 4px;
+    }
+    .expand-arrow.open { transform: rotate(90deg); }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <!-- TOP BAR -->
+    <div class="top-bar">
+      <span class="brand">0DTE DESK</span>
+      <span class="meta">SPY 597.42 <span style="color:var(--green)">+0.31%</span></span>
+      <span class="live"><span class="live-dot"></span> LIVE</span>
+      <span class="meta" id="clock">14:32:08 ET</span>
+    </div>
+
+    <!-- TAB BAR -->
+    <div class="tab-bar">
+      <button class="tab-btn">Desk</button>
+      <button class="tab-btn active">OI Analysis</button>
+      <button class="tab-btn">Tokens</button>
+    </div>
+
+    <!-- OI LAYOUT -->
+    <div class="oi-layout">
+
+      <!-- LEFT: TICKER LIST -->
+      <div class="oi-left">
+        <div class="panel-header">
+          <span class="title">Tickers</span>
+          <span class="badge">(6)</span>
+        </div>
+        <div class="ticker-list" id="ticker-list"></div>
+      </div>
+
+      <!-- CENTER: DETAIL -->
+      <div class="oi-center">
+        <div class="panel-header">
+          <span class="title">Analysis</span>
+          <span id="detail-header" style="color:var(--text-bright);font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;">SPY — Feb 24, 2026 14:15</span>
+        </div>
+        <div class="detail-body" id="detail-body"></div>
+      </div>
+
+      <!-- RIGHT: CONTROLS -->
+      <div class="oi-right">
+        <div class="panel-header">
+          <span class="title">Analyze</span>
+        </div>
+        <div class="controls-body">
+          <!-- Input -->
+          <div class="ctrl-input-row">
+            <input type="text" class="ctrl-input" placeholder="Ticker (e.g. SPY)" value="AAPL">
+            <button class="ctrl-btn">Analyze</button>
+          </div>
+
+          <!-- DTE Checkboxes -->
+          <div class="dte-checkboxes">
+            <label><input type="checkbox" checked> 30</label>
+            <label><input type="checkbox"> 50</label>
+            <label><input type="checkbox" checked> 60</label>
+            <label><input type="checkbox" checked> 90</label>
+          </div>
+
+          <!-- Run All -->
+          <button class="ctrl-btn secondary" style="margin-bottom:12px;">Run All 18 Tickers</button>
+
+          <!-- Progress -->
+          <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+          <div class="status-text complete">Complete — 6 tickers analyzed</div>
+
+          <!-- Bias Summary -->
+          <div class="section-title" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--accent-gold);text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;margin-bottom:8px;border-bottom:1px solid var(--border-muted);">Market Bias</div>
+          <div class="bias-summary">
+            <div class="bias-card">
+              <div class="bc-count bullish">4</div>
+              <div class="bc-label">Bullish</div>
+            </div>
+            <div class="bias-card">
+              <div class="bc-count bearish">1</div>
+              <div class="bc-label">Bearish</div>
+            </div>
+            <div class="bias-card">
+              <div class="bc-count unclear">1</div>
+              <div class="bc-label">Unclear</div>
+            </div>
+          </div>
+
+          <!-- Conviction Rankings -->
+          <div class="section-title" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--accent-gold);text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;margin-bottom:8px;border-bottom:1px solid var(--border-muted);">Top Conviction</div>
+          <div id="conviction-list"></div>
+
+          <!-- Live Log -->
+          <div class="section-title" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--accent-gold);text-transform:uppercase;letter-spacing:0.8px;padding-bottom:6px;margin-bottom:8px;margin-top:12px;border-bottom:1px solid var(--border-muted);">
+            Live Log
+            <span style="color:var(--text-muted);cursor:pointer;font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;">[clear]</span>
+          </div>
+          <div class="log-container">
+            <div class="log-line success"><span class="log-ts">14:15:02</span> <span class="log-msg">SPY analysis complete — CALL 72%</span></div>
+            <div class="log-line success"><span class="log-ts">14:14:48</span> <span class="log-msg">AAPL analysis complete — CALL 68%</span></div>
+            <div class="log-line info"><span class="log-ts">14:14:32</span> <span class="log-msg">Analyzing MSFT 30/60/90 DTE...</span></div>
+            <div class="log-line success"><span class="log-ts">14:14:20</span> <span class="log-msg">MSFT analysis complete — PUT 61%</span></div>
+            <div class="log-line warning"><span class="log-ts">14:13:55</span> <span class="log-msg">NVDA data quality: B (limited 90 DTE data)</span></div>
+            <div class="log-line success"><span class="log-ts">14:13:40</span> <span class="log-msg">NVDA analysis complete — CALL 75%</span></div>
+            <div class="log-line success"><span class="log-ts">14:13:10</span> <span class="log-msg">TSLA analysis complete — CALL 58%</span></div>
+            <div class="log-line info"><span class="log-ts">14:12:45</span> <span class="log-msg">META analysis complete — NEUTRAL 42%</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // ── MOCK DATA ──
+    const mockData = {
+      SPY: {
+        direction: 'CALL', confidence: 72, confluence: 'aligned',
+        pattern_type: 'institutional_accumulation', data_quality: { overall_score: 'A' },
+        smart_money_summary: 'Institutional call buying concentrated at 595-600 strikes across all expirations. Put/call skew flattening suggests hedges being unwound.',
+        thesis: 'Strong bullish positioning across the term structure with aligned signals from 30 to 90 DTE. The 595-600 call wall shows significant institutional accumulation with 5-day growth of +18%. Max pain gravitational pull at 592 suggests near-term support. Put/call ratios declining across all timeframes confirm risk-on sentiment.',
+        analyzed_at: '14:15',
+        analysis_date: '2026-02-24',
+        prev: { confidence: 68, dte_30_bias: 'BULLISH', dte_30_conf: 65, dte_60_bias: 'NEUTRAL', dte_60_conf: 52 },
+        dte_analyses: [
+          { dte: 30, bias: 'BULLISH', confidence: 74, key_strike: 600, key_oi: 45200, pcr: 0.82, max_pain: 592, smart_money_read: 'BULLISH_ACCUMULATION', gamma_risk: 'squeeze_up', data_quality: 'A', notable_flow: 'Heavy call buying at 595-600, 12K contracts in last session', thesis: 'Near-term institutional positioning shows aggressive call accumulation at the 600 strike with open interest growing 18% over 5 days. The put/call ratio of 0.82 is well below average, confirming bullish sentiment. Gamma exposure suggests potential for a squeeze toward 605 if 600 is breached.' },
+          { dte: 50, bias: 'BULLISH', confidence: 70, key_strike: 605, key_oi: 37800, pcr: 0.87, max_pain: 596, smart_money_read: 'BULLISH_ACCUMULATION', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Call spreads being built at 600/610 level', thesis: 'Intermediate positioning confirms the bullish trend seen at 30 DTE. The 605 call wall at this tenor bridges the gap between near-term 600 and longer-term 610 targets. Spread activity suggests institutional confidence in a grind higher rather than explosive move.' },
+          { dte: 60, bias: 'BULLISH', confidence: 68, key_strike: 610, key_oi: 32100, pcr: 0.91, max_pain: 598, smart_money_read: 'NEUTRAL_LEANING_BULLISH', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Gradual call accumulation at 605-610', thesis: 'Medium-term positioning shows moderate bullish bias. The 610 call wall has been building steadily. P/C ratio near parity suggests some hedging but overall direction remains upward.' },
+          { dte: 90, bias: 'BULLISH', confidence: 65, key_strike: 620, key_oi: 28400, pcr: 0.95, max_pain: 605, smart_money_read: 'BULLISH_ACCUMULATION', gamma_risk: 'neutral', data_quality: 'B', notable_flow: 'Large block trades at 615-620 calls', thesis: 'Longer-term smart money is positioning for continuation higher. The 620 call wall represents a medium-term target. Data quality slightly lower due to thinner liquidity at this tenor.' }
+        ],
+        key_strikes: [
+          { strike: 600, type: 'call_wall', oi: 45200, change_5d: '+18%', interpretation: 'Primary resistance / magnet for near-term' },
+          { strike: 592, type: 'max_pain', oi: 38100, change_5d: '+5%', interpretation: 'Gravitational center — support zone' },
+          { strike: 580, type: 'put_wall', oi: 41800, change_5d: '-3%', interpretation: 'Downside floor — declining = less fear' },
+          { strike: 610, type: 'call_wall', oi: 32100, change_5d: '+12%', interpretation: '60 DTE target — growing interest' }
+        ],
+        trade: {
+          instrument: 'SPY 600C', current_price: 597.42, entry: 596.50, stop: 591.00, target: 605.00, risk_reward: '1:1.55', expiry_dte: 30,
+          entry_triggers: ['Break above 598 with volume confirmation', 'Pullback to 595 support with bid lifting', 'VIX decline below 14.5'],
+          exit_strategy: 'Scale 50% at 602, trail stop to breakeven, exit remainder at 605 or on VIX spike above 16'
+        },
+        success_probability: 65,
+        risk_management: {
+          primary_risks: ['FOMC minutes release Wed could spike VIX', 'Thin liquidity at 605+ could cause rejection', 'Overnight futures gap risk on geopolitical headlines'],
+          hedge_strategy: 'Buy SPY 590P 14 DTE as portfolio hedge',
+          volatility_considerations: 'IV rank 32nd percentile — cheap options, favorable for long calls',
+          position_adjustments: 'If SPY closes below 592, reduce position 50% and reassess'
+        }
+      },
+      AAPL: {
+        direction: 'CALL', confidence: 68, confluence: 'aligned',
+        pattern_type: 'call_wall_buildup', data_quality: { overall_score: 'A' },
+        smart_money_summary: 'Earnings momentum driving call accumulation at 245-250 strikes.',
+        thesis: 'Post-earnings positioning remains bullish with growing call walls at round number strikes. Smart money flow shows continued accumulation.',
+        analyzed_at: '14:14', analysis_date: '2026-02-24',
+        prev: { confidence: 64 },
+        dte_analyses: [
+          { dte: 30, bias: 'BULLISH', confidence: 71, key_strike: 250, key_oi: 28900, pcr: 0.78, max_pain: 245, smart_money_read: 'BULLISH_ACCUMULATION', gamma_risk: 'squeeze_up', data_quality: 'A', notable_flow: 'Call buying surge at 250 strike', thesis: 'Strong near-term bullish setup with call concentration at 250.' },
+          { dte: 50, bias: 'BULLISH', confidence: 66, key_strike: 252, key_oi: 22400, pcr: 0.84, max_pain: 247, smart_money_read: 'NEUTRAL_LEANING_BULLISH', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Calendar spreads at 250-255 range', thesis: 'Intermediate expiration shows continuation of bullish theme. Call wall forming at 252 aligns with the near-term 250 target. Institutional calendar spreads suggest confidence in sustained upside.' },
+          { dte: 60, bias: 'BULLISH', confidence: 63, key_strike: 255, key_oi: 19200, pcr: 0.88, max_pain: 248, smart_money_read: 'NEUTRAL_LEANING_BULLISH', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Steady accumulation at 252-255', thesis: 'Medium-term bias aligns with near-term. 255 call wall emerging.' },
+          { dte: 90, bias: 'NEUTRAL', confidence: 52, key_strike: 260, key_oi: 15100, pcr: 1.02, max_pain: 250, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'B', notable_flow: 'Mixed signals at 90 DTE', thesis: 'Longer-term is less clear. P/C near parity suggests uncertainty beyond Q2.' }
+        ],
+        key_strikes: [
+          { strike: 250, type: 'call_wall', oi: 28900, change_5d: '+14%', interpretation: 'Primary target' },
+          { strike: 245, type: 'max_pain', oi: 22100, change_5d: '+3%', interpretation: 'Support center' },
+          { strike: 235, type: 'put_wall', oi: 31200, change_5d: '-6%', interpretation: 'Downside protection declining' }
+        ],
+        trade: {
+          instrument: 'AAPL 250C', current_price: 247.85, entry: 247.00, stop: 243.50, target: 253.00, risk_reward: '1:1.71', expiry_dte: 30,
+          entry_triggers: ['Break above 248.50 with volume', 'Hold above 245 support on pullback'],
+          exit_strategy: 'Scale 50% at 251, trail stop, exit at 253'
+        },
+        success_probability: 62,
+        risk_management: { primary_risks: ['Broader market pullback risk', 'iPhone supply chain concerns'], hedge_strategy: 'Spread with 240P' }
+      },
+      NVDA: {
+        direction: 'CALL', confidence: 75, confluence: 'aligned',
+        pattern_type: 'momentum_continuation', data_quality: { overall_score: 'B' },
+        smart_money_summary: 'AI capex narrative driving aggressive upside bets across all expirations. Highest conviction name in tech.',
+        thesis: 'Unanimous bullish positioning across DTE structure. AI spending tailwinds keep smart money aggressively long.',
+        analyzed_at: '14:13', analysis_date: '2026-02-24',
+        prev: { confidence: 75 },
+        dte_analyses: [
+          { dte: 30, bias: 'BULLISH', confidence: 78, key_strike: 950, key_oi: 52300, pcr: 0.71, max_pain: 920, smart_money_read: 'BULLISH_ACCUMULATION', gamma_risk: 'squeeze_up', data_quality: 'A', notable_flow: 'Massive call buying 940-960', thesis: 'Extreme bullish positioning. 950 call wall is a magnet. Gamma squeeze potential is high.' },
+          { dte: 50, bias: 'BULLISH', confidence: 76, key_strike: 970, key_oi: 44100, pcr: 0.74, max_pain: 935, smart_money_read: 'BULLISH_ACCUMULATION', gamma_risk: 'squeeze_up', data_quality: 'A', notable_flow: 'Aggressive call sweeps at 960-975 from multiple desks', thesis: 'Intermediate-term flow mirrors near-term conviction. The 970 strike is building rapidly with 5d growth of +20%. Multiple institutional desks are adding exposure, not just retail speculation.' },
+          { dte: 60, bias: 'BULLISH', confidence: 73, key_strike: 980, key_oi: 38700, pcr: 0.79, max_pain: 940, smart_money_read: 'BULLISH_ACCUMULATION', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Large block trades at 970-980', thesis: 'Medium-term continues the upside theme. 980 is the next structural target.' },
+          { dte: 90, bias: 'BULLISH', confidence: 66, key_strike: 1000, key_oi: 25100, pcr: 0.88, max_pain: 960, smart_money_read: 'NEUTRAL_LEANING_BULLISH', gamma_risk: 'neutral', data_quality: 'B', notable_flow: 'Speculative 1000C accumulation', thesis: 'Long-term bets on 1000 psychological level. Lower data quality but directional signal clear.' }
+        ],
+        key_strikes: [
+          { strike: 950, type: 'call_wall', oi: 52300, change_5d: '+22%', interpretation: 'Near-term magnet, massive OI' },
+          { strike: 920, type: 'max_pain', oi: 34600, change_5d: '+4%', interpretation: 'Support floor' },
+          { strike: 880, type: 'put_wall', oi: 29800, change_5d: '-8%', interpretation: 'Downside fear declining rapidly' }
+        ],
+        trade: {
+          instrument: 'NVDA 950C', current_price: 935.20, entry: 930.00, stop: 915.00, target: 960.00, risk_reward: '1:2.0', expiry_dte: 30,
+          entry_triggers: ['Break above 940 with momentum', 'Hold 925 support zone'],
+          exit_strategy: 'Scale 50% at 950, let rest run with trail stop at 940'
+        },
+        success_probability: 68,
+        risk_management: { primary_risks: ['Earnings revision risk', 'Semiconductor export restrictions', 'Valuation multiple compression'], hedge_strategy: 'Bear put spread 900/880 as downside hedge' }
+      },
+      MSFT: {
+        direction: 'PUT', confidence: 61, confluence: 'divergent',
+        pattern_type: 'put_wall_defense', data_quality: { overall_score: 'A' },
+        smart_money_summary: 'Put accumulation at 410-415 suggests institutional hedging. Divergent signals across DTEs — near-term bearish, long-term neutral.',
+        thesis: 'Near-term bearish bias driven by put accumulation, but longer expirations show less conviction. Likely a hedge rather than directional bet.',
+        analyzed_at: '14:14', analysis_date: '2026-02-24',
+        prev: { confidence: 55, dte_30_bias: 'NEUTRAL' },
+        dte_analyses: [
+          { dte: 30, bias: 'BEARISH', confidence: 66, key_strike: 410, key_oi: 31500, pcr: 1.35, max_pain: 418, smart_money_read: 'BEARISH_DISTRIBUTION', gamma_risk: 'squeeze_down', data_quality: 'A', notable_flow: 'Heavy put buying at 410-415', thesis: 'Near-term bearish with elevated P/C and put wall growth. 410 is the downside magnet.' },
+          { dte: 50, bias: 'BEARISH', confidence: 55, key_strike: 415, key_oi: 26800, pcr: 1.18, max_pain: 419, smart_money_read: 'NEUTRAL_LEANING_BEARISH', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Put spread activity at 420/410 strike pair', thesis: 'Intermediate-term confirms near-term bearish lean but with lower conviction. Put spreads suggest defined-risk downside bets rather than outright bearish positioning. The 415 put wall is growing but at a slower pace than the 30 DTE 410 wall.' },
+          { dte: 60, bias: 'NEUTRAL', confidence: 48, key_strike: 420, key_oi: 22300, pcr: 1.05, max_pain: 420, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Balanced flow, slight put lean', thesis: 'Medium-term is a toss-up. Price near max pain suggests range-bound action.' },
+          { dte: 90, bias: 'NEUTRAL', confidence: 44, key_strike: 430, key_oi: 18700, pcr: 0.98, max_pain: 425, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Low conviction either direction', thesis: 'Longer-term OI structure is balanced. No strong directional signal.' }
+        ],
+        key_strikes: [
+          { strike: 410, type: 'put_wall', oi: 31500, change_5d: '+15%', interpretation: 'Growing put wall — downside target' },
+          { strike: 418, type: 'max_pain', oi: 26200, change_5d: '+2%', interpretation: 'Gravitational center' },
+          { strike: 430, type: 'call_wall', oi: 24100, change_5d: '-4%', interpretation: 'Upside resistance weakening' }
+        ],
+        trade: {
+          instrument: 'MSFT 415P', current_price: 420.30, entry: 419.00, stop: 424.00, target: 412.00, risk_reward: '1:1.4', expiry_dte: 30,
+          entry_triggers: ['Break below 418 max pain', 'Failed bounce at 420 resistance'],
+          exit_strategy: 'Target 412, stop 424, scale out at 415'
+        },
+        success_probability: 55,
+        risk_management: { primary_risks: ['Azure growth could surprise upside', 'Broad market rally would override'], hedge_strategy: 'Small MSFT 425C as upside hedge' }
+      },
+      TSLA: {
+        direction: 'CALL', confidence: 58, confluence: 'divergent',
+        pattern_type: 'speculative_call_buying', data_quality: { overall_score: 'B' },
+        smart_money_summary: 'Speculative call activity at round numbers. Near-term bullish but divergent across term structure. High gamma risk both directions.',
+        thesis: 'Speculative bullish activity in near-term but conviction weakens at longer expirations. Typical TSLA vol play.',
+        analyzed_at: '14:13', analysis_date: '2026-02-24',
+        prev: { confidence: 62 },
+        dte_analyses: [
+          { dte: 30, bias: 'BULLISH', confidence: 64, key_strike: 400, key_oi: 61200, pcr: 0.76, max_pain: 380, smart_money_read: 'SPECULATIVE_BULLISH', gamma_risk: 'squeeze_up', data_quality: 'A', notable_flow: 'Retail-driven call buying at 400', thesis: 'Aggressive speculative call positioning at psychological 400 level. High volume but likely retail-heavy.' },
+          { dte: 50, bias: 'BULLISH', confidence: 56, key_strike: 410, key_oi: 41500, pcr: 0.89, max_pain: 385, smart_money_read: 'SPECULATIVE_BULLISH', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Continuation of retail call buying at 400-420 range', thesis: 'Intermediate-term mirrors the speculative near-term theme but conviction fades. The 410 call wall is growing but dominated by small lot sizes — classic retail signature. Institutional flow is absent at this tenor.' },
+          { dte: 60, bias: 'NEUTRAL', confidence: 50, key_strike: 420, key_oi: 35400, pcr: 1.01, max_pain: 390, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'B', notable_flow: 'Balanced flow', thesis: 'Medium-term shows no conviction. Equal call/put positioning.' },
+          { dte: 90, bias: 'BEARISH', confidence: 52, key_strike: 350, key_oi: 42800, pcr: 1.18, max_pain: 375, smart_money_read: 'NEUTRAL_LEANING_BEARISH', gamma_risk: 'neutral', data_quality: 'B', notable_flow: 'Put accumulation at 350 for hedging', thesis: 'Longer-term put accumulation suggests institutions are hedging downside despite near-term bullish retail activity.' }
+        ],
+        key_strikes: [
+          { strike: 400, type: 'call_wall', oi: 61200, change_5d: '+25%', interpretation: 'Speculative target — retail magnet' },
+          { strike: 380, type: 'max_pain', oi: 29800, change_5d: '+1%', interpretation: 'True center of gravity' },
+          { strike: 350, type: 'put_wall', oi: 42800, change_5d: '+10%', interpretation: 'Institutional hedge level' }
+        ],
+        trade: {
+          instrument: 'TSLA 395C', current_price: 388.50, entry: 386.00, stop: 378.00, target: 400.00, risk_reward: '1:1.75', expiry_dte: 30,
+          entry_triggers: ['Break above 390 with momentum', 'Hold 385 on retest'],
+          exit_strategy: 'Take profit at 400, tight stop at 378'
+        },
+        success_probability: 52,
+        risk_management: { primary_risks: ['Elon headline risk', 'Delivery numbers revision', 'Broader EV sector weakness'], hedge_strategy: 'Bear put spread 370/355 as hedge' }
+      },
+      META: {
+        direction: 'CALL', confidence: 42, confluence: 'divergent',
+        pattern_type: 'unclear_mixed_signals', data_quality: { overall_score: 'A' },
+        smart_money_summary: 'Mixed positioning. No clear directional bias from OI structure. Wait for clearer signal.',
+        thesis: 'OI data shows no strong directional conviction. Both call and put walls are balanced. Best to wait for a catalyst.',
+        analyzed_at: '14:12', analysis_date: '2026-02-24',
+        prev: { confidence: 45 },
+        dte_analyses: [
+          { dte: 30, bias: 'NEUTRAL', confidence: 45, key_strike: 650, key_oi: 24300, pcr: 1.02, max_pain: 640, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Balanced flow at 645-655', thesis: 'No clear direction. OI evenly distributed around current price.' },
+          { dte: 50, bias: 'NEUTRAL', confidence: 42, key_strike: 655, key_oi: 20100, pcr: 1.00, max_pain: 643, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Straddle activity at 650 suggests range expectation', thesis: 'Intermediate-term confirms the lack of directional conviction. Straddle positioning at 650 suggests market makers expect META to stay range-bound. No clear catalyst until next earnings.' },
+          { dte: 60, bias: 'NEUTRAL', confidence: 40, key_strike: 660, key_oi: 18900, pcr: 0.98, max_pain: 645, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Low activity', thesis: 'Medium-term equally unclear. Waiting for earnings catalyst.' },
+          { dte: 90, bias: 'NEUTRAL', confidence: 38, key_strike: 670, key_oi: 15200, pcr: 1.01, max_pain: 650, smart_money_read: 'NEUTRAL', gamma_risk: 'neutral', data_quality: 'A', notable_flow: 'Minimal directional flow', thesis: 'Long-term positioning is flat. No conviction from smart money.' }
+        ],
+        key_strikes: [
+          { strike: 650, type: 'call_wall', oi: 24300, change_5d: '+2%', interpretation: 'Weak resistance' },
+          { strike: 640, type: 'max_pain', oi: 21100, change_5d: '+1%', interpretation: 'Center of gravity' },
+          { strike: 620, type: 'put_wall', oi: 22800, change_5d: '+3%', interpretation: 'Mild support floor' }
+        ],
+        trade: {
+          instrument: 'META — WAIT', current_price: 645.80, entry: '--', stop: '--', target: '--', risk_reward: '--', expiry_dte: '--',
+          entry_triggers: ['Wait for directional OI shift', 'Catalyst needed (earnings, product news)'],
+          exit_strategy: 'N/A — no trade recommended'
+        },
+        success_probability: 35,
+        risk_management: { primary_risks: ['No clear edge — avoid trading', 'Catalyst-driven gap risk'] }
+      }
+    };
+
+    // ── RENDER TICKER LIST ──
+    let selectedTicker = 'SPY';
+    const prevAnalyses = {};
+
+    function renderTickerList() {
+      const container = document.getElementById('ticker-list');
+      const tickers = Object.entries(mockData).sort((a, b) => b[1].confidence - a[1].confidence);
+
+      container.innerHTML = tickers.map(([ticker, d]) => {
+        const confClass = d.confidence >= 70 ? 'high' : d.confidence >= 50 ? 'med' : 'low';
+        const dirClass = d.direction === 'CALL' ? 'bullish' : d.direction === 'PUT' ? 'bearish' : '';
+        const confChange = d.prev?.confidence ? d.confidence - d.prev.confidence : null;
+        const changeStr = confChange !== null && confChange !== 0
+          ? `<span class="tk-change">${confChange > 0 ? '▲' : '▼'} ${Math.abs(confChange)}%</span>`
+          : '';
+
+        return `<div class="ticker-item${selectedTicker === ticker ? ' selected' : ''}" onclick="selectTicker('${ticker}')">
+          <div class="tk-left">
+            <span class="tk-name">${ticker}</span>
+            <span class="tk-dir ${dirClass}">${d.direction}</span>
+            <span class="tk-confluence ${d.confluence}">${d.confluence.toUpperCase()}</span>
+          </div>
+          <div class="tk-right">
+            <span class="tk-conf ${confClass}">${d.confidence}%${changeStr ? ' ' : ''}${changeStr}</span>
+            <span class="tk-time">${d.analyzed_at}</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderConvictionList() {
+      const container = document.getElementById('conviction-list');
+      const tickers = Object.entries(mockData)
+        .filter(([, d]) => d.confidence >= 55)
+        .sort((a, b) => b[1].confidence - a[1].confidence)
+        .slice(0, 5);
+
+      container.innerHTML = tickers.map(([ticker, d]) => {
+        const confClass = d.confidence >= 70 ? 'high' : d.confidence >= 50 ? 'med' : 'low';
+        return `<div class="conviction-item" onclick="selectTicker('${ticker}')">
+          <div class="cv-left">
+            <span class="cv-ticker">${ticker}</span>
+            <span class="cv-dir ${d.direction}">${d.direction}</span>
+          </div>
+          <span class="cv-conf" style="color:var(--conf-${confClass})">${d.confidence}%</span>
+        </div>`;
+      }).join('');
+    }
+
+    // ── SELECT TICKER ──
+    function selectTicker(ticker) {
+      selectedTicker = ticker;
+      renderTickerList();
+      renderDetail(mockData[ticker], ticker);
+    }
+
+    // ── RENDER DETAIL ──
+    function renderDetail(d, ticker) {
+      const container = document.getElementById('detail-body');
+      document.getElementById('detail-header').textContent =
+        `${ticker} — Feb 24, 2026 ${d.analyzed_at}`;
+
+      let html = '';
+
+      // Synthesis header
+      const confClass = d.confidence >= 70 ? 'high' : d.confidence >= 50 ? 'med' : 'low';
+      const prevConf = d.prev?.confidence;
+      const confDelta = prevConf != null && prevConf !== d.confidence
+        ? `<span class="delta"><span class="prev">${prevConf}%</span><span class="arrow">→</span>${d.confidence}%</span>`
+        : '';
+
+      html += `<div class="synth-header">
+        <span class="synth-dir ${d.direction}">${d.direction}</span>
+        <div class="synth-conf-wrap">
+          <span class="synth-conf-val" style="color:var(--conf-${confClass})">${d.confidence}%</span>
+          <div class="synth-conf-bar"><div class="synth-conf-fill ${confClass}" style="width:${d.confidence}%"></div></div>
+          ${confDelta}
+        </div>
+        <span class="synth-badge ${d.confluence}">${d.confluence.toUpperCase()}</span>
+        ${d.pattern_type ? `<span class="synth-pattern">${d.pattern_type.replace(/_/g, ' ')}</span>` : ''}
+        ${d.data_quality?.overall_score ? `<span class="synth-dq ${d.data_quality.overall_score}">DATA: ${d.data_quality.overall_score}</span>` : ''}
+      </div>`;
+
+      // Smart money summary
+      if (d.smart_money_summary) {
+        html += `<div class="sm-summary">${d.smart_money_summary}</div>`;
+      }
+
+      // Synthesis thesis
+      if (d.thesis) {
+        html += `<div class="section">
+          <div class="section-title">Synthesis</div>
+          <div class="thesis-box">${d.thesis}</div>
+        </div>`;
+      }
+
+      // DTE Table
+      if (d.dte_analyses?.length > 0) {
+        const sorted = [...d.dte_analyses].sort((a, b) => a.dte - b.dte);
+        const prevLabel = d.prev ? 'vs previous run' : '';
+
+        html += `<div class="section">
+          <div class="section-title">Term Structure ${prevLabel ? `<span class="prev-label">${prevLabel}</span>` : ''}</div>
+          <table class="dte-table">
+            <thead><tr>
+              <th></th><th>DTE</th><th>Bias</th><th>Key Strike</th><th>P/C</th><th>Max Pain</th><th>Smart Money</th><th>Gamma</th>
+            </tr></thead>
+            <tbody>`;
+
+        sorted.forEach((da, i) => {
+          const bias = (da.bias || 'neutral').toLowerCase();
+          const conf = da.confidence || 0;
+          const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
+          const smRead = (da.smart_money_read || '').replace(/_/g, ' ');
+          const smClass = smRead.includes('BULLISH') ? 'bullish' : smRead.includes('BEARISH') ? 'bearish' : 'neutral';
+          const gammaRisk = (da.gamma_risk || 'neutral').replace(/_/g, ' ');
+          const gammaClass = gammaRisk.includes('up') ? 'up' : gammaRisk.includes('down') ? 'down' : 'neutral';
+          const dqColor = da.data_quality === 'A' ? 'var(--green)' : da.data_quality === 'B' ? 'var(--amber)' : 'var(--text-muted)';
+
+          // Check for changes from previous
+          const prevBias = d.prev?.[`dte_${da.dte}_bias`];
+          const prevConf = d.prev?.[`dte_${da.dte}_conf`];
+          const biasChanged = prevBias && prevBias !== da.bias;
+          const confChanged = prevConf && prevConf !== da.confidence;
+          const rowChanged = biasChanged || confChanged;
+
+          html += `<tr class="dte-data-row ${rowChanged ? 'changed' : ''}" onclick="toggleDtePanel(${i}, ${da.dte})">
+            <td><span class="expand-arrow" id="arrow-${i}">▸</span></td>
+            <td class="dte-label-cell">${da.dte}<span class="dte-dq" style="color:${dqColor}">${da.data_quality || ''}</span></td>
+            <td>
+              <span class="bias-pill ${bias}">${da.bias || 'N/A'} <span class="conf" style="color:var(--conf-${confClass})">${conf}%</span></span>
+              ${biasChanged ? `<span class="delta"><span class="prev">${prevBias}</span><span class="arrow">→</span>${da.bias}</span>` : ''}
+              ${confChanged && !biasChanged ? `<span class="delta"><span class="prev">${prevConf}%</span><span class="arrow">→</span>${conf}%</span>` : ''}
+            </td>
+            <td class="strike-cell">$${da.key_strike || '--'} <span class="oi-count">(${da.key_oi ? da.key_oi.toLocaleString() : '--'})</span></td>
+            <td class="pcr-cell">${da.pcr != null ? da.pcr.toFixed(2) : '--'}</td>
+            <td class="maxpain-cell">$${da.max_pain || '--'}</td>
+            <td class="sm-cell ${smClass}">${smRead || '--'}</td>
+            <td class="gamma-cell ${gammaClass}">${gammaRisk !== 'neutral' ? gammaRisk.toUpperCase() : '—'}</td>
+          </tr>`;
+        });
+
+        html += '</tbody></table>';
+
+        // Expand panel placeholder (shown below table on row click)
+        html += '<div id="dte-expand-panel"></div>';
+
+        // Store DTE data for panel expansion
+        html += `<script>window._dteData = ${JSON.stringify(sorted)};<\/script>`;
+
+        html += '</div>';
+      }
+
+      // Key Strikes
+      if (d.key_strikes?.length > 0) {
+        const hasInterp = d.key_strikes.some(s => s.interpretation);
+        html += `<div class="section">
+          <div class="section-title">Key Strikes</div>
+          <table class="strikes-table">
+            <thead><tr><th>Strike</th><th>Type</th><th>OI</th><th>5d Change</th>${hasInterp ? '<th>Reading</th>' : ''}</tr></thead>
+            <tbody>`;
+        d.key_strikes.forEach(s => {
+          const typeClass = 'type-' + (s.type || '').replace(' ', '_');
+          html += `<tr>
+            <td style="font-weight:600;">$${s.strike}</td>
+            <td class="${typeClass}">${(s.type || '--').replace('_', ' ').toUpperCase()}</td>
+            <td>${(s.oi || 0).toLocaleString()}</td>
+            <td style="color:${(s.change_5d || '').startsWith('+') ? 'var(--green)' : (s.change_5d || '').startsWith('-') ? 'var(--red)' : 'var(--text-secondary)'}">${s.change_5d || 'N/A'}</td>
+            ${hasInterp ? `<td class="interp">${s.interpretation || ''}</td>` : ''}
+          </tr>`;
+        });
+        html += '</tbody></table></div>';
+      }
+
+      // Trade Recommendation
+      const trade = d.trade || {};
+      html += `<div class="section">
+        <div class="section-title">Trade Recommendation</div>
+        <div class="trade-card">
+          <div class="trade-card-header">
+            <span class="trade-card-dir ${d.direction}">${trade.instrument || d.direction || '--'}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text-secondary);">${trade.expiry_dte || '--'} DTE</span>
+          </div>
+          <div class="trade-grid">
+            <div class="trade-cell"><div class="tc-label">Current</div><div class="tc-value">$${trade.current_price || '--'}</div></div>
+            <div class="trade-cell"><div class="tc-label">Entry</div><div class="tc-value">$${trade.entry || '--'}</div></div>
+            <div class="trade-cell"><div class="tc-label">Stop</div><div class="tc-value red">$${trade.stop || '--'}</div></div>
+            <div class="trade-cell"><div class="tc-label">Target</div><div class="tc-value green">$${trade.target || '--'}</div></div>
+            <div class="trade-cell"><div class="tc-label">Risk/Reward</div><div class="tc-value gold">${trade.risk_reward || '--'}</div></div>
+            <div class="trade-cell"><div class="tc-label">Win Prob</div><div class="tc-value gold">${d.success_probability || '--'}%</div></div>
+          </div>`;
+
+      // Entry triggers
+      const triggers = trade.entry_triggers || [];
+      if (triggers.length > 0) {
+        html += `<div class="trade-section"><div class="ts-title">Entry Triggers</div>`;
+        triggers.forEach(t => { html += `<div class="trigger-item">${t}</div>`; });
+        html += '</div>';
+      }
+      // Exit strategy
+      if (trade.exit_strategy) {
+        html += `<div class="trade-section"><div class="ts-title">Exit Strategy</div>
+          <div style="font-size:12px;color:var(--text-primary);line-height:1.5;padding:2px 0;">${trade.exit_strategy}</div>
+        </div>`;
+      }
+      html += '</div></div>';
+
+      // Risk Management
+      const rm = d.risk_management || {};
+      const risks = rm.primary_risks || [];
+      if (risks.length > 0 || rm.hedge_strategy) {
+        html += `<div class="section">
+          <div class="section-title">Risk Management</div>`;
+        if (risks.length > 0) {
+          html += '<ul class="risk-list">';
+          risks.forEach(r => { html += `<li>${r}</li>`; });
+          html += '</ul>';
+        }
+        if (rm.hedge_strategy) {
+          html += `<div class="risk-detail"><span class="rd-label">Hedge:</span> ${rm.hedge_strategy}</div>`;
+        }
+        if (rm.volatility_considerations) {
+          html += `<div class="risk-detail"><span class="rd-label">IV:</span> ${rm.volatility_considerations}</div>`;
+        }
+        if (rm.position_adjustments) {
+          html += `<div class="risk-detail"><span class="rd-label">Adjust:</span> ${rm.position_adjustments}</div>`;
+        }
+        html += '</div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    let activeDteIndex = -1;
+
+    function toggleDtePanel(index, dte) {
+      const panel = document.getElementById('dte-expand-panel');
+      const dteData = window._dteData;
+
+      // Deactivate all rows
+      document.querySelectorAll('.dte-data-row').forEach(r => r.classList.remove('active'));
+      document.querySelectorAll('.expand-arrow').forEach(a => a.classList.remove('open'));
+
+      // If clicking the same row, collapse
+      if (activeDteIndex === index) {
+        panel.innerHTML = '';
+        activeDteIndex = -1;
+        return;
+      }
+
+      activeDteIndex = index;
+      const da = dteData[index];
+
+      // Highlight active row
+      const rows = document.querySelectorAll('.dte-data-row');
+      if (rows[index]) rows[index].classList.add('active');
+      const arrow = document.getElementById(`arrow-${index}`);
+      if (arrow) arrow.classList.add('open');
+
+      panel.innerHTML = `<div class="dte-expand-panel">
+        <div class="exp-header">
+          <span class="exp-header-title">${da.dte} DTE — Detail</span>
+          <span class="exp-header-close" onclick="toggleDtePanel(${index}, ${dte})">✕</span>
+        </div>
+        <div class="dte-expand-body">
+          <div class="exp-col" style="flex:1;">
+            <div class="exp-label">Notable Flow</div>
+            <div class="exp-flow">${da.notable_flow || 'No notable flow'}</div>
+          </div>
+          <div class="exp-col" style="flex:2;">
+            <div class="exp-label">Thesis</div>
+            <div class="exp-thesis">${da.thesis || 'No thesis available'}</div>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    // ── CLOCK ──
+    function updateClock() {
+      const now = new Date();
+      document.getElementById('clock').textContent =
+        now.toLocaleTimeString('en-US', { hour12: false, timeZone: 'America/New_York' }) + ' ET';
+    }
+
+    // ── INIT ──
+    renderTickerList();
+    renderConvictionList();
+    renderDetail(mockData.SPY, 'SPY');
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+</html>

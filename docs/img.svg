@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980">
+  <defs>
+    <style>
+      .title { font: 700 44px "Helvetica Neue", Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 500 22px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
+      .h2 { font: 700 24px "Helvetica Neue", Arial, sans-serif; fill: #0f172a; }
+      .body { font: 500 18px "Helvetica Neue", Arial, sans-serif; fill: #334155; }
+      .small { font: 500 16px "Helvetica Neue", Arial, sans-serif; fill: #475569; }
+      .kpi { font: 700 18px "Helvetica Neue", Arial, sans-serif; fill: #0f172a; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#0f172a"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 z" fill="#0ea5e9"/>
+    </marker>
+  </defs>
+
+  <rect width="1600" height="980" fill="#f8fafc"/>
+
+  <text x="60" y="72" class="title">TRADE ENGINE LEARNING ARCHITECTURE</text>
+  <text x="60" y="108" class="subtitle">Decision loop with validated memory, precision recall, and measurable learning outcomes</text>
+
+  <!-- Inputs -->
+  <rect x="60" y="160" width="420" height="220" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="90" y="205" class="h2">Market Inputs</text>
+  <text x="90" y="245" class="body">Order Flow (real-time)</text>
+  <text x="90" y="278" class="body">SPY + Breadth + Technicals</text>
+  <text x="90" y="311" class="body">Session + Regime context</text>
+  <text x="90" y="344" class="small">Fast polling, low-latency feed for each cycle</text>
+
+  <!-- Engine -->
+  <rect x="540" y="160" width="1000" height="360" rx="16" fill="#ffffff" stroke="#0f172a" stroke-width="3"/>
+  <text x="575" y="205" class="h2">Trade Engine (Continuous Loop)</text>
+
+  <rect x="575" y="235" width="290" height="250" rx="12" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="600" y="272" class="kpi">1. Classify State</text>
+  <text x="600" y="305" class="body">Flow / Regime / Tech labels</text>
+  <text x="600" y="336" class="body">Borderline flow re-check</text>
+  <text x="600" y="367" class="body">Build current context hash</text>
+
+  <rect x="895" y="235" width="290" height="250" rx="12" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="2"/>
+  <text x="920" y="272" class="kpi">2. Recall Memory</text>
+  <text x="920" y="305" class="body">Hard filters first</text>
+  <text x="920" y="336" class="body">Semantic ranking second</text>
+  <text x="920" y="367" class="body">Type-balanced memory set</text>
+
+  <rect x="1215" y="235" width="290" height="250" rx="12" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="1240" y="272" class="kpi">3. Decide &amp; Act</text>
+  <text x="1240" y="305" class="body">CALL / PUT / WAIT</text>
+  <text x="1240" y="336" class="body">Entry / Hold / Exit</text>
+  <text x="1240" y="367" class="body">Publish to UI + logs</text>
+
+  <line x1="865" y1="360" x2="895" y2="360" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="1185" y1="360" x2="1215" y2="360" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Learning core -->
+  <rect x="60" y="430" width="1480" height="320" rx="16" fill="#ffffff" stroke="#0f172a" stroke-width="3"/>
+  <text x="95" y="475" class="h2">Learning Core (Reliability Layer)</text>
+
+  <rect x="95" y="505" width="330" height="210" rx="12" fill="#fef9c3" stroke="#eab308" stroke-width="2"/>
+  <text x="120" y="540" class="kpi">Capture Outcomes</text>
+  <text x="120" y="573" class="body">Trade WIN / LOSS</text>
+  <text x="120" y="604" class="body">Missed WAIT opportunities</text>
+  <text x="120" y="635" class="body">Post-exit lessons</text>
+
+  <rect x="455" y="505" width="330" height="210" rx="12" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>
+  <text x="480" y="540" class="kpi">Validate Writes</text>
+  <text x="480" y="573" class="body">Significance thresholds</text>
+  <text x="480" y="604" class="body">Dedup + sanity checks</text>
+  <text x="480" y="635" class="body">Drop low-signal noise</text>
+
+  <rect x="815" y="505" width="330" height="210" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="840" y="540" class="kpi">Structured Memory</text>
+  <text x="840" y="573" class="body">regime / session / flow band</text>
+  <text x="840" y="604" class="body">action / outcome / move</text>
+  <text x="840" y="635" class="body">confidence / timestamp / lesson</text>
+
+  <rect x="1175" y="505" width="330" height="210" rx="12" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="2"/>
+  <text x="1200" y="540" class="kpi">Precision Recall</text>
+  <text x="1200" y="573" class="body">Filter by context first</text>
+  <text x="1200" y="604" class="body">Rank by similarity + recency</text>
+  <text x="1200" y="635" class="body">Quota by memory type</text>
+
+  <line x1="425" y1="610" x2="455" y2="610" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="785" y1="610" x2="815" y2="610" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="1145" y1="610" x2="1175" y2="610" stroke="#0f172a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <!-- Closed loop arrow -->
+  <path d="M1300 760 C1300 845, 740 880, 380 810 C280 790, 210 760, 170 725" fill="none" stroke="#0ea5e9" stroke-width="4" marker-end="url(#arrowBlue)"/>
+  <!-- KPI strip -->
+  <rect x="60" y="780" width="1480" height="150" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+  <text x="95" y="820" class="h2">Learning Scorecard (Weekly)</text>
+  <text x="95" y="858" class="body">False-WAIT rate ↓</text>
+  <text x="430" y="858" class="body">Early-EXIT rate ↓</text>
+  <text x="760" y="858" class="body">Expectancy by setup ↑</text>
+  <text x="1150" y="858" class="body">Memory hit quality ↑</text>
+</svg>

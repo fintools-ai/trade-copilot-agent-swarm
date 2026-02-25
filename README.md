@@ -14,11 +14,29 @@
    ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝     ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚══════╝ ╚═════╝    ╚═╝
 ```
 
+## Disclaimer
+This project is for educational and research purposes only.
+
+- Not intended for real trading or investment
+- No investment advice or guarantees provided
+- Creator assumes no liability for financial losses
+- Consult a financial advisor for investment decisions
+- Past performance does not indicate future results
+- By using this software, you agree to use it solely for learning purposes.
+
+
+## UI
+
+![Terminal UI](docs/ui.png)
+
+
 ## Architecture
 
 ![Architecture](docs/img.png)
 
+
 ## Vision: Proactive LLMs
+
 
 Most AI tools today are **reactive** — they wait for human input, respond, then wait again. This creates a bottleneck: the human becomes the limiting factor.
 
