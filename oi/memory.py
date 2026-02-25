@@ -256,107 +256,77 @@ def recall(ticker, query=None):
 
 
 SENTIMENT_MEMORY_NAME = "market_sentiment"
-_sentiment_cache = {"checked": False, "id": None}
+_sentiment_control = None
+_sentiment_runtime = None
 
 
-def _get_sentiment_memory_id():
-    """Find the market_sentiment memory ID. Read-only — never creates the store."""
-    if _sentiment_cache["checked"]:
-        return _sentiment_cache["id"]
+def _get_sentiment_clients():
+    """Same client pair as market-sentiment-plugin: control + runtime."""
+    global _sentiment_control, _sentiment_runtime
+    if _sentiment_control is None:
+        _sentiment_control = boto3.client("bedrock-agentcore-control", region_name=AWS_REGION)
+        _sentiment_runtime = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
+    return _sentiment_control, _sentiment_runtime
 
-    _sentiment_cache["checked"] = True
-    control = _get_control_client()
 
-    # Use boto3 control plane list_memories (same pattern as market-sentiment-plugin)
+def _find_sentiment_memory():
+    """Find the market_sentiment memory ID — same as market-sentiment-plugin._find_or_create_memory() but read-only."""
+    control, _ = _get_sentiment_clients()
     try:
         response = control.list_memories()
         for mem in response.get("memories", []):
             if SENTIMENT_MEMORY_NAME in mem.get("arn", ""):
-                mid = mem.get("id", "")
-                _sentiment_cache["id"] = mid
-                logger.info(f"Found sentiment memory: {mid}")
-                return mid
+                memory_id = mem.get("id", "")
+                logger.info(f"Found sentiment memory: {memory_id}")
+                return memory_id
     except Exception as e:
-        logger.debug(f"Sentiment memory lookup failed: {e}")
-
-    logger.info("No market_sentiment memory found — sentiment plugin not configured")
+        logger.warning(f"Sentiment list_memories failed: {e}")
     return None
 
 
-def recall_sentiment(ticker):
-    """
-    Retrieve social media sentiment from market_sentiment memory (if it exists).
-    Uses list_events (same as market-sentiment-plugin 'recall TSM').
-    Returns list of fact strings, or empty list if sentiment plugin is not set up.
-    """
-    memory_id = _get_sentiment_memory_id()
+def _recall_events(actor_id, label, days=30):
+    """List events — same as market-sentiment-plugin._recall_events()."""
+    memory_id = _find_sentiment_memory()
     if not memory_id:
+        logger.info(f"{label}: no sentiment memory found")
         return []
 
-    return _list_sentiment_events(
-        memory_id,
-        actor_id=f"sentiment/{ticker}",
-        label=ticker,
-    )
+    _, runtime = _get_sentiment_clients()
+    today = datetime.now()
+    facts = []
+    days_with_data = 0
+
+    t0 = time.time()
+    for i in range(days):
+        day = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+        session_id = f"sentiment-{day}"
+        try:
+            response = runtime.list_events(
+                memoryId=memory_id,
+                actorId=actor_id,
+                sessionId=session_id,
+                maxResults=10,
+            )
+            for event in response.get("events", []):
+                for item in event.get("payload", []):
+                    text = item.get("conversational", {}).get("content", {}).get("text", "")
+                    if text:
+                        facts.append(text)
+            if any(e.get("events") for e in [response]):
+                days_with_data += 1
+        except Exception:
+            pass  # No events for this day
+
+    dur = time.time() - t0
+    logger.info(f"{label}: recalled {len(facts)} sentiment events from {days_with_data} days ({dur:.1f}s)")
+    return facts
+
+
+def recall_sentiment(ticker):
+    """Retrieve per-ticker sentiment — mirrors market-sentiment-plugin recall_sentiment()."""
+    return _recall_events(f"sentiment/{ticker}", ticker)
 
 
 def recall_market_sentiment():
-    """
-    Retrieve overall market sentiment from market_sentiment memory.
-    Uses list_events (same as market-sentiment-plugin 'recall MARKET').
-    Returns list of fact strings, or empty list if not available.
-    """
-    memory_id = _get_sentiment_memory_id()
-    if not memory_id:
-        return []
-
-    return _list_sentiment_events(
-        memory_id,
-        actor_id="sentiment/MARKET",
-        label="MARKET",
-    )
-
-
-def _list_sentiment_events(memory_id, actor_id, label, days=10):
-    """List recent sentiment events using boto3 runtime list_events (same as market-sentiment-plugin recall)."""
-    runtime = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
-    facts = []
-    today = datetime.now()
-
-    try:
-        t0 = time.time()
-        days_with_data = 0
-
-        for i in range(days):
-            day = (today - timedelta(days=i)).strftime("%Y-%m-%d")
-            session_id = f"sentiment-{day}"
-
-            try:
-                response = runtime.list_events(
-                    memoryId=memory_id,
-                    actorId=actor_id,
-                    sessionId=session_id,
-                    maxResults=10,
-                )
-
-                for event in response.get("events", []):
-                    for item in event.get("payload", []):
-                        text = item.get("conversational", {}).get("content", {}).get("text", "")
-                        if text:
-                            facts.append(text)
-                            days_with_data += 1
-            except Exception:
-                pass  # No events for this day
-
-        dur = time.time() - t0
-        if facts:
-            logger.info(f"{label}: recalled {len(facts)} sentiment events from {days_with_data} days ({dur:.1f}s)")
-            for i, fact in enumerate(facts, 1):
-                logger.info(f"{label}: sentiment[{i}] {fact[:200]}")
-        else:
-            logger.info(f"{label}: no sentiment events ({dur:.1f}s)")
-
-    except Exception as e:
-        logger.warning(f"{label}: sentiment recall failed - {e}")
-
-    return facts
+    """Retrieve overall market sentiment — mirrors market-sentiment-plugin recall for MARKET."""
+    return _recall_events("sentiment/MARKET", "MARKET")

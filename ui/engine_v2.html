@@ -10,14 +10,14 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg: #000; --bg-1: #0a0a0a; --bg-2: #111; --bg-3: #1a1a1a;
-      --border: #222; --border-bright: #333;
-      --text: #ddd; --text-dim: #999; --text-muted: #666; --text-dark: #444;
-      --accent: #ff6600;
-      --green: #22c55e; --green-bg: #0a1f0f;
-      --red: #ef4444; --red-bg: #1f0a0a;
-      --blue: #3b82f6; --blue-bg: #0a0f1f;
-      --purple: #a78bfa; --yellow: #eab308; --orange: #f97316;
+      --bg: #101114; --bg-1: #16181d; --bg-2: #1c1f26; --bg-3: #22262f;
+      --border: #1f2229; --border-bright: #2a2e38;
+      --text: #d4d6dc; --text-dim: #8b8f9a; --text-muted: #555a66; --text-dark: #3a3e48;
+      --accent: #c4875a;
+      --green: #5cb87a; --green-bg: #142118;
+      --red: #d4605a; --red-bg: #211717;
+      --blue: #5a8cb8; --blue-bg: #161a22;
+      --purple: #9b8ab8; --yellow: #c9a84c; --orange: #c4875a;
     }
 
     body {
@@ -63,8 +63,8 @@
       letter-spacing: 1px;
       margin-left: 12px;
     }
-    .regime-pill.trend { background: #1a0a2e; color: #b388ff; border: 1px solid #7c4dff; }
-    .regime-pill.revert { background: #0a1a2e; color: #82b1ff; border: 1px solid #448aff; }
+    .regime-pill.trend { background: #1e1a28; color: #b0a0cc; border: 1px solid #8070a8; }
+    .regime-pill.revert { background: #161a22; color: #7a9ec0; border: 1px solid #5a8cb8; }
     .regime-pill.unknown { background: var(--bg-2); color: var(--text-dim); border: 1px solid var(--border-bright); }
     .session-pill {
       padding: 2px 8px;
@@ -72,10 +72,13 @@
       font-weight: bold;
       margin-left: 8px;
     }
-    .session-pill.open { background: var(--green-bg); color: var(--green); border: 1px solid #166534; }
-    .session-pill.pre { background: var(--blue-bg); color: var(--blue); border: 1px solid #1e40af; }
+    .session-pill.open { background: var(--green-bg); color: var(--green); border: 1px solid #1a3d28; }
+    .session-pill.pre { background: var(--blue-bg); color: var(--blue); border: 1px solid #1a3050; }
     .session-pill.closed { background: var(--bg-2); color: var(--text-muted); border: 1px solid var(--border); }
     .top-meta { color: var(--text-dim); font-size: 11px; }
+    .countdown { margin-left: 6px; }
+    .countdown.warn { color: var(--yellow); }
+    .countdown.urgent { color: var(--red); animation: pulse 1.5s infinite; }
     .live-dot {
       display: inline-block; width: 6px; height: 6px;
       background: var(--red); border-radius: 50%; margin-right: 5px;
@@ -249,6 +252,23 @@
       background: var(--bg);
       position: relative;
     }
+    .snap-live {
+      position: absolute;
+      bottom: 8px;
+      right: 8px;
+      background: var(--bg-2);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 9px;
+      font-weight: bold;
+      padding: 3px 10px;
+      cursor: pointer;
+      z-index: 10;
+      display: none;
+      letter-spacing: 0.5px;
+    }
+    .snap-live:hover { background: var(--bg-3); }
+    .snap-live.visible { display: block; }
 
     /* ── REASONING + MEMORY AREA ──────────────────── */
     .reasoning-area {
@@ -272,6 +292,21 @@
       flex-shrink: 0;
     }
     .panel-hdr .dim { color: var(--text-dim); font-weight: normal; }
+    .reasoning-new-badge {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      text-align: center;
+      padding: 3px 0;
+      background: var(--bg-2);
+      border-bottom: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 9px;
+      font-weight: bold;
+      cursor: pointer;
+      display: none;
+    }
+    .reasoning-new-badge.visible { display: block; }
     .reasoning-scroll {
       flex: 1;
       overflow-y: auto;
@@ -310,8 +345,8 @@
     .badge.call { background: var(--green-bg); color: var(--green); }
     .badge.put { background: var(--red-bg); color: var(--red); }
     .badge.wait { background: var(--bg-3); color: var(--text-muted); }
-    .badge.hold { background: #221100; color: var(--accent); }
-    .badge.exit { background: #221100; color: var(--orange); }
+    .badge.hold { background: #241e16; color: var(--accent); }
+    .badge.exit { background: #241e16; color: var(--orange); }
 
     .reasoning-body {
       font-size: 11px;
@@ -320,7 +355,7 @@
     }
     .reasoning-item.latest .reasoning-body {
       font-size: 12px;
-      color: #eee;
+      color: #e0e1e5;
     }
 
     /* Memory toggle inside reasoning cards */
@@ -365,8 +400,8 @@
     }
     .mem-tag.win { background: var(--green-bg); color: var(--green); }
     .mem-tag.loss { background: var(--red-bg); color: var(--red); }
-    .mem-tag.missed { background: #1f1a0a; color: var(--yellow); }
-    .mem-tag.lesson { background: #1a0a2e; color: var(--purple); }
+    .mem-tag.missed { background: #221e14; color: var(--yellow); }
+    .mem-tag.lesson { background: #1e1a28; color: var(--purple); }
 
     /* Markdown in reasoning */
     .md-content { white-space: normal; }
@@ -422,7 +457,7 @@
       margin-left: 8px;
       vertical-align: middle;
     }
-    .sig-conv.high { background: #332200; color: var(--accent); border: 1px solid var(--accent); }
+    .sig-conv.high { background: #2a2218; color: var(--accent); border: 1px solid var(--accent); }
     .sig-conv.medium { background: var(--bg-3); color: var(--text-dim); border: 1px solid var(--border-bright); }
     .sig-conv.low { background: var(--bg-2); color: var(--text-muted); border: 1px solid var(--border); }
     .sig-levels-grid {
@@ -543,37 +578,61 @@
     .bottom-bar .connected { color: var(--green); }
     .bottom-bar .disconnected { color: var(--red); }
     .bottom-bar .pnl-summary { color: var(--text-dim); }
+    .mute-btn {
+      cursor: pointer;
+      font-size: 11px;
+      margin-left: 6px;
+      opacity: 0.7;
+    }
+    .mute-btn:hover { opacity: 1; }
+    .reconnect-btn {
+      color: var(--accent);
+      cursor: pointer;
+      margin-left: 4px;
+      display: none;
+    }
+    .reconnect-btn:hover { text-decoration: underline; }
+    .reconnect-btn.visible { display: inline; }
 
-    /* ── ERROR TOAST ──────────────────────────────── */
-    .error-toast {
+    /* ── TOAST SYSTEM ────────────────────────────── */
+    .toast-container {
       position: fixed;
       top: 40px;
       left: 50%;
       transform: translateX(-50%);
-      background: #1a0000;
-      border: 1px solid var(--red);
-      color: var(--red);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      pointer-events: none;
+    }
+    .toast {
       padding: 6px 16px;
       font-size: 11px;
-      z-index: 9999;
-      display: none;
       max-width: 600px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      pointer-events: auto;
+      cursor: pointer;
+      animation: toastIn 0.3s ease-out;
     }
-    .error-toast.visible { display: block; animation: fadeToast 8s ease-out forwards; }
-    @keyframes fadeToast { 0%,80% { opacity: 1; } 100% { opacity: 0; display: none; } }
+    .toast.error   { background: #211717; border: 1px solid var(--red); color: var(--red); }
+    .toast.warning { background: #221e14; border: 1px solid var(--yellow); color: var(--yellow); }
+    .toast.success { background: #142118; border: 1px solid var(--green); color: var(--green); }
+    .toast.fade-out { animation: toastOut 0.3s ease-in forwards; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
 
     /* ── TRANSITIONS ──────────────────────────────── */
     .flash-green { animation: flashG 0.5s ease-out; }
     .flash-red { animation: flashR 0.5s ease-out; }
-    @keyframes flashG { 0% { background: #003300; } 100% { background: transparent; } }
-    @keyframes flashR { 0% { background: #330000; } 100% { background: transparent; } }
+    @keyframes flashG { 0% { background: #142118; } 100% { background: transparent; } }
+    @keyframes flashR { 0% { background: #211717; } 100% { background: transparent; } }
   </style>
 </head>
 <body>
-  <div class="error-toast" id="error-toast"></div>
+  <div class="toast-container" id="toast-container"></div>
   <div class="shell">
 
     <!-- ── TOP BAR ──────────────────────────────────── -->
@@ -588,7 +647,7 @@
         <span class="session-pill closed" id="session-pill">--</span>
       </div>
       <div class="top-meta">
-        <span id="clock">--:--:-- PT</span>
+        <span id="clock">--:--:-- PT</span><span class="countdown" id="countdown"></span>
       </div>
     </div>
 
@@ -651,7 +710,9 @@
           </div>
 
           <!-- CHART -->
-          <div class="chart-container" id="chart-container"></div>
+          <div class="chart-container" id="chart-container">
+            <div class="snap-live" id="snap-live" onclick="snapToLive()">&#9658; LIVE</div>
+          </div>
         </div>
 
         <!-- RESIZE-V between chart and reasoning -->
@@ -660,6 +721,7 @@
         <!-- REASONING + MEMORY -->
         <div class="reasoning-area" id="reasoning-area">
           <div class="panel-hdr">Reasoning + Memory <span class="dim" id="reasoning-count">0</span></div>
+          <div class="reasoning-new-badge" id="reasoning-new-badge" onclick="scrollReasoningToTop()"></div>
           <div class="reasoning-scroll" id="reasoning-scroll">
             <div style="color:var(--text-dark);text-align:center;padding:20px;font-size:10px;">Waiting for first engine cycle...</div>
           </div>
@@ -736,6 +798,8 @@
       <span>
         <span class="stat" id="bottom-latency">--</span> |
         <span id="bottom-status" class="disconnected">Connecting...</span>
+        <span class="reconnect-btn" id="reconnect-btn" onclick="connect()">[Reconnect]</span>
+        <span class="mute-btn" id="mute-btn" onclick="toggleMute()">🔊</span>
       </span>
     </div>
 
@@ -770,6 +834,52 @@ function saveJSON(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
 
+let reasoningAutoScroll = true;
+let newReasoningCount = 0;
+
+// ══════════════════════════════════════════════════════════
+// AUDIO ALERTS
+// ══════════════════════════════════════════════════════════
+let audioCtx = null;
+let lastAlertedAction = null;
+let audioMuted = localStorage.getItem('engine_v2_muted') === 'true';
+let isLoadingHistory = false;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playTone(freq, duration, startDelay = 0) {
+  const ctx = getAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.frequency.value = freq;
+  osc.type = 'sine';
+  gain.gain.setValueAtTime(0.15, ctx.currentTime + startDelay);
+  gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + startDelay + duration);
+  osc.start(ctx.currentTime + startDelay);
+  osc.stop(ctx.currentTime + startDelay + duration);
+}
+
+function alertSignal(action) {
+  if (audioMuted || isLoadingHistory) return;
+  if (action === lastAlertedAction) return;
+  lastAlertedAction = action;
+  const a = (action || '').toUpperCase();
+  if (a === 'CALL')      { playTone(440, 0.08); playTone(660, 0.08, 0.1); }
+  else if (a === 'PUT')  { playTone(660, 0.08); playTone(440, 0.08, 0.1); }
+  else if (a === 'EXIT') { playTone(880, 0.12); }
+}
+
+function toggleMute() {
+  audioMuted = !audioMuted;
+  localStorage.setItem('engine_v2_muted', audioMuted);
+  document.getElementById('mute-btn').textContent = audioMuted ? '\u{1F507}' : '\u{1F50A}';
+}
+
 // ══════════════════════════════════════════════════════════
 // CHART SETUP
 // ══════════════════════════════════════════════════════════
@@ -787,48 +897,49 @@ let userScrolledBack = false;
 function initChart() {
   const container = document.getElementById('chart-container');
   chart = LightweightCharts.createChart(container, {
-    layout: { background: { color: '#000' }, textColor: '#888', fontSize: 10, fontFamily: 'Menlo, Monaco, monospace' },
-    grid: { vertLines: { color: '#0a0a0a' }, horzLines: { color: '#0a0a0a' } },
+    layout: { background: { color: '#101114' }, textColor: '#8b8f9a', fontSize: 10, fontFamily: 'Menlo, Monaco, monospace' },
+    grid: { vertLines: { color: '#1c1f26' }, horzLines: { color: '#1c1f26' } },
     timeScale: {
       timeVisible: true, secondsVisible: false,
-      borderColor: '#1a1a1a', rightOffset: 5, barSpacing: 8,
+      borderColor: '#22262f', rightOffset: 5, barSpacing: 8,
     },
     rightPriceScale: {
-      borderColor: '#1a1a1a', autoScale: true,
+      borderColor: '#22262f', autoScale: true,
       scaleMargins: { top: 0.08, bottom: 0.08 },
     },
     crosshair: {
       mode: LightweightCharts.CrosshairMode.Normal,
-      vertLine: { color: '#333', style: LightweightCharts.LineStyle.Dotted, width: 1 },
-      horzLine: { color: '#333', style: LightweightCharts.LineStyle.Dotted, width: 1 },
+      vertLine: { color: '#2a2e38', style: LightweightCharts.LineStyle.Dotted, width: 1 },
+      horzLine: { color: '#2a2e38', style: LightweightCharts.LineStyle.Dotted, width: 1 },
     },
     handleScroll: { mouseWheel: true, pressedMouseMove: true },
     handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true },
   });
 
   candleSeries = chart.addCandlestickSeries({
-    upColor: '#22c55e', downColor: '#ef4444',
-    borderUpColor: '#22c55e', borderDownColor: '#ef4444',
-    wickUpColor: '#22c55e80', wickDownColor: '#ef444480',
+    upColor: '#5cb87a', downColor: '#d4605a',
+    borderUpColor: '#5cb87a', borderDownColor: '#d4605a',
+    wickUpColor: '#5cb87a80', wickDownColor: '#d4605a80',
     priceLineVisible: true, lastValueVisible: true,
   });
 
   // VWAP lines
-  vwapSeries = chart.addLineSeries({ color: '#3b82f6', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-  vwapP1Series = chart.addLineSeries({ color: '#3b82f680', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-  vwapM1Series = chart.addLineSeries({ color: '#3b82f680', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-  vwapP2Series = chart.addLineSeries({ color: '#3b82f640', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-  vwapM2Series = chart.addLineSeries({ color: '#3b82f640', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  vwapSeries = chart.addLineSeries({ color: '#5a8cb8', lineWidth: 2, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  vwapP1Series = chart.addLineSeries({ color: '#5a8cb880', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  vwapM1Series = chart.addLineSeries({ color: '#5a8cb880', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  vwapP2Series = chart.addLineSeries({ color: '#5a8cb840', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  vwapM2Series = chart.addLineSeries({ color: '#5a8cb840', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
 
   // EMA lines
-  ema9Series = chart.addLineSeries({ color: '#eab308', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-  ema21Series = chart.addLineSeries({ color: '#f97316', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  ema9Series = chart.addLineSeries({ color: '#c9a84c', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+  ema21Series = chart.addLineSeries({ color: '#c4875a', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
 
   // Track scroll position
   chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
     if (!range) return;
     const totalBars = Object.keys(candleMap).length;
     userScrolledBack = range.to < totalBars - 2;
+    document.getElementById('snap-live').classList.toggle('visible', userScrolledBack);
   });
 
   new ResizeObserver(() => {
@@ -878,14 +989,14 @@ function updateORBLines(high, low) {
   if (orbLowLine) { try { candleSeries.removePriceLine(orbLowLine); } catch {} orbLowLine = null; }
   if (high) {
     orbHighLine = candleSeries.createPriceLine({
-      price: high, color: '#a78bfa', lineWidth: 1,
+      price: high, color: '#9b8ab8', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'ORB H',
     });
   }
   if (low) {
     orbLowLine = candleSeries.createPriceLine({
-      price: low, color: '#a78bfa', lineWidth: 1,
+      price: low, color: '#9b8ab8', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'ORB L',
     });
@@ -898,21 +1009,21 @@ function updateSignalLines(entry, stop, target) {
   if (targetLine) { try { candleSeries.removePriceLine(targetLine); } catch {} targetLine = null; }
   if (entry) {
     entryLine = candleSeries.createPriceLine({
-      price: entry, color: '#3b82f6', lineWidth: 1,
+      price: entry, color: '#5a8cb8', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'Entry',
     });
   }
   if (stop) {
     stopLine = candleSeries.createPriceLine({
-      price: stop, color: '#ef4444', lineWidth: 1,
+      price: stop, color: '#d4605a', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'Stop',
     });
   }
   if (target) {
     targetLine = candleSeries.createPriceLine({
-      price: target, color: '#22c55e', lineWidth: 1,
+      price: target, color: '#5cb87a', lineWidth: 1,
       lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: 'Target',
     });
@@ -925,7 +1036,7 @@ function addChartMarker(price, type, action) {
   const marker = {
     time: ct + (type === 'ENTRY' ? 5 : 10),
     position: type === 'ENTRY' ? 'belowBar' : 'aboveBar',
-    color: type === 'ENTRY' ? (action === 'CALL' ? '#22c55e' : '#ef4444') : '#f97316',
+    color: type === 'ENTRY' ? (action === 'CALL' ? '#5cb87a' : '#d4605a') : '#c4875a',
     shape: type === 'ENTRY' ? 'arrowUp' : 'arrowDown',
     text: (type === 'ENTRY' ? 'E' : 'X') + ' $' + price.toFixed(2),
   };
@@ -939,6 +1050,12 @@ function loadChartFromStorage() {
   if (!candleSeries) return;
   candles.forEach(c => { candleMap[c.time] = c; candleSeries.update(c); });
   if (markers.length) candleSeries.setMarkers(markers.sort((a, b) => a.time - b.time));
+}
+
+function snapToLive() {
+  if (chart) chart.timeScale().scrollToRealTime();
+  userScrolledBack = false;
+  document.getElementById('snap-live').classList.remove('visible');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1108,6 +1225,9 @@ function renderSignal(sig, content, timestamp) {
   const cls = sigCls(sig.signal === 'HOLD' ? 'HOLD' : action);
   const label = sig.signal === 'HOLD' ? 'HOLD' : action;
 
+  // Audio alert on action change
+  alertSignal(label);
+
   // Signal card
   const actEl = document.getElementById('sig-action');
   actEl.textContent = label;
@@ -1175,6 +1295,12 @@ function renderSignal(sig, content, timestamp) {
 function renderReasonings() {
   const el = document.getElementById('reasoning-scroll');
   document.getElementById('reasoning-count').textContent = S.reasonings.length;
+  if (!reasoningAutoScroll) {
+    newReasoningCount++;
+    const badge = document.getElementById('reasoning-new-badge');
+    badge.textContent = newReasoningCount + ' new \u25BC';
+    badge.classList.add('visible');
+  }
   el.innerHTML = S.reasonings.map((r, i) => {
     let text = r.content || '';
     // Strip trailing JSON line
@@ -1246,6 +1372,7 @@ function renderPosition(d) {
     panel.innerHTML = '<div class="pos-empty">FLAT -- scanning for setup</div>';
     updateSignalLines(null, null, null);
     addChartMarker(d.exit_price, 'EXIT', d.action);
+    showToast('EXIT ' + (d.action||'') + ' @ ' + fmtPrice(d.exit_price), 'success');
     return;
   }
 
@@ -1262,6 +1389,7 @@ function renderPosition(d) {
   if (d.event === 'ENTRY') {
     addChartMarker(d.entry, 'ENTRY', d.action);
     updateSignalLines(d.entry, d.stop, d.target);
+    showToast('ENTRY ' + (d.action||'') + ' @ ' + fmtPrice(d.entry), 'success');
   }
 
   renderPositionCard();
@@ -1394,6 +1522,7 @@ function connect() {
     S.connected = true;
     document.getElementById('bottom-status').textContent = 'Connected';
     document.getElementById('bottom-status').className = 'connected';
+    document.getElementById('reconnect-btn').classList.remove('visible');
     if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   };
 
@@ -1401,6 +1530,8 @@ function connect() {
     S.connected = false;
     document.getElementById('bottom-status').textContent = 'Reconnecting...';
     document.getElementById('bottom-status').className = 'disconnected';
+    document.getElementById('reconnect-btn').classList.add('visible');
+    showToast('Connection lost — reconnecting...', 'warning');
   };
 
   evtSource.onmessage = (e) => {
@@ -1464,27 +1595,42 @@ function handleEvent(msg) {
   }
 }
 
-function showError(text) {
-  const el = document.getElementById('error-toast');
-  el.textContent = 'ERROR: ' + text;
-  el.classList.remove('visible');
-  void el.offsetWidth; // reflow to restart animation
-  el.classList.add('visible');
-  setTimeout(() => el.classList.remove('visible'), 8000);
+function showToast(text, type = 'error') {
+  const container = document.getElementById('toast-container');
+  // Limit to 3 visible toasts
+  while (container.children.length >= 3) {
+    container.removeChild(container.firstChild);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + type;
+  toast.textContent = (type === 'error' ? 'ERROR: ' : type === 'warning' ? 'WARN: ' : '') + text;
+  toast.addEventListener('click', () => dismissToast(toast));
+  container.appendChild(toast);
+  setTimeout(() => dismissToast(toast), 6000);
 }
+function dismissToast(toast) {
+  if (!toast.parentNode) return;
+  toast.classList.add('fade-out');
+  setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+}
+// Backward compat alias
+function showError(text) { showToast(text, 'error'); }
 
 // ══════════════════════════════════════════════════════════
 // HISTORY LOADING
 // ══════════════════════════════════════════════════════════
 async function loadHistory() {
   try {
+    isLoadingHistory = true;
     const resp = await fetch('/history');
     if (!resp.ok) return;
     const events = await resp.json();
     for (const msg of events) {
       handleEvent(msg);
     }
-  } catch {}
+  } catch {} finally {
+    isLoadingHistory = false;
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1505,14 +1651,19 @@ function initResize() {
     resizeH.classList.add('active');
     document.body.style.cursor = 'col-resize';
 
+    let hRaf = null;
     const onMove = (e) => {
-      const dx = e.clientX - startX;
-      const newLeft = Math.max(300, startLeftW + dx);
-      const newRight = Math.max(260, Math.min(500, startRightW - dx));
-      colLeft.style.flex = 'none';
-      colLeft.style.width = newLeft + 'px';
-      colRight.style.width = newRight + 'px';
-      if (chart) chart.applyOptions({ width: document.getElementById('chart-container').clientWidth });
+      if (hRaf) return;
+      hRaf = requestAnimationFrame(() => {
+        const dx = e.clientX - startX;
+        const newLeft = Math.max(300, startLeftW + dx);
+        const newRight = Math.max(260, Math.min(500, startRightW - dx));
+        colLeft.style.flex = 'none';
+        colLeft.style.width = newLeft + 'px';
+        colRight.style.width = newRight + 'px';
+        if (chart) chart.applyOptions({ width: document.getElementById('chart-container').clientWidth });
+        hRaf = null;
+      });
     };
     const onUp = () => {
       resizeH.classList.remove('active');
@@ -1536,14 +1687,20 @@ function initResize() {
     resizeV.classList.add('active');
     document.body.style.cursor = 'row-resize';
 
+    let vRaf = null;
     const onMove = (e) => {
-      const dy = e.clientY - startY;
-      const newH = Math.max(150, Math.min(window.innerHeight * 0.8, startH + dy));
-      chartRow.style.height = newH + 'px';
-      if (chart) chart.applyOptions({ height: document.getElementById('chart-container').clientHeight });
+      if (vRaf) return;
+      vRaf = requestAnimationFrame(() => {
+        const dy = e.clientY - startY;
+        const newH = Math.max(150, Math.min(window.innerHeight * 0.8, startH + dy));
+        chartRow.style.height = newH + 'px';
+        if (chart) chart.applyOptions({ height: document.getElementById('chart-container').clientHeight });
+        vRaf = null;
+      });
     };
     const onUp = () => {
       resizeV.classList.remove('active');
+      localStorage.setItem('engine_v2_chartH', chartRow.style.height);
       document.body.style.cursor = '';
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
@@ -1570,6 +1727,43 @@ function initBreadthToggle() {
 // ══════════════════════════════════════════════════════════
 function updateClock() {
   document.getElementById('clock').textContent = ptTime() + ' PT';
+
+  // Market hours: 9:30-16:00 ET
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const etMins = et.getHours() * 60 + et.getMinutes();
+  const openMins = 9 * 60 + 30;   // 09:30 ET
+  const closeMins = 16 * 60;      // 16:00 ET
+
+  const cdEl = document.getElementById('countdown');
+
+  if (etMins < openMins) {
+    // Pre-market: countdown to open
+    const diff = openMins - etMins;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    cdEl.textContent = '| ' + (h > 0 ? h + 'h ' : '') + m + 'm to open';
+    cdEl.className = 'countdown';
+  } else if (etMins < closeMins) {
+    // Market open: countdown to close
+    const diff = closeMins - etMins;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    cdEl.textContent = '| ' + (h > 0 ? h + 'h ' : '') + m + 'm to close';
+    cdEl.className = 'countdown' + (diff <= 10 ? ' urgent' : diff <= 30 ? ' warn' : '');
+  } else {
+    // After hours
+    cdEl.textContent = '| closed';
+    cdEl.className = 'countdown';
+  }
+}
+
+function scrollReasoningToTop() {
+  const el = document.getElementById('reasoning-scroll');
+  el.scrollTop = 0;
+  reasoningAutoScroll = true;
+  newReasoningCount = 0;
+  document.getElementById('reasoning-new-badge').classList.remove('visible');
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1587,16 +1781,32 @@ if (lastDate !== today) {
   localStorage.setItem('engine_v2_last_date', today);
 }
 
+const savedChartH = localStorage.getItem('engine_v2_chartH');
+if (savedChartH) document.getElementById('chart-levels-row').style.height = savedChartH;
 initChart();
 loadChartFromStorage();
 initResize();
 initBreadthToggle();
+
+// Reasoning scroll-lock
+const reasoningEl = document.getElementById('reasoning-scroll');
+reasoningEl.addEventListener('scroll', () => {
+  if (reasoningEl.scrollTop <= 5) {
+    reasoningAutoScroll = true;
+    newReasoningCount = 0;
+    document.getElementById('reasoning-new-badge').classList.remove('visible');
+  } else {
+    reasoningAutoScroll = false;
+  }
+});
+
 renderPerf();
 renderTradeHistory();
 connect();
 loadHistory();
 updateClock();
 setInterval(updateClock, 1000);
+document.getElementById('mute-btn').textContent = audioMuted ? '\u{1F507}' : '\u{1F50A}';
 
 // Live P&L ticker — update position card every second
 setInterval(() => {
