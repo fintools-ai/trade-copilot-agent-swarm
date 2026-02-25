@@ -189,114 +189,244 @@
     .token-cost { color: #00ff00; }
 
     /* OI ANALYSIS TAB */
+    /* ── OI TAB LAYOUT ── */
     .oi-layout { display: flex; flex: 1; overflow: hidden; }
-    .oi-left { width: 240px; min-width: 180px; border-right: 1px solid #222; display: flex; flex-direction: column; overflow: hidden; }
+    .oi-left { width: 260px; min-width: 200px; border-right: 1px solid #222; display: flex; flex-direction: column; overflow: hidden; }
     .oi-center { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
     .oi-right { width: 300px; min-width: 220px; border-left: 1px solid #222; display: flex; flex-direction: column; overflow: hidden; }
 
     .oi-panel-header {
-      padding: 4px 6px; background: #0a0a0a; border-bottom: 1px solid #333;
-      color: #ff9900; font-weight: bold; font-size: 10px; text-transform: uppercase;
+      padding: 6px 10px; background: #0a0a0a; border-bottom: 1px solid #333;
+      color: #ff9900; font-weight: bold; font-size: 11px; text-transform: uppercase;
       display: flex; justify-content: space-between; align-items: center;
+      letter-spacing: 0.5px;
     }
-    .oi-panel-body { flex: 1; overflow-y: auto; padding: 4px; }
-    .oi-panel-body::-webkit-scrollbar { width: 4px; }
-    .oi-panel-body::-webkit-scrollbar-thumb { background: #333; }
+    .oi-panel-body { flex: 1; overflow-y: auto; padding: 6px; }
+    .oi-panel-body::-webkit-scrollbar { width: 5px; }
+    .oi-panel-body::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
 
+    /* Ticker list items */
     .oi-ticker-item {
-      padding: 6px 8px; cursor: pointer; border-bottom: 1px solid #111;
+      padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #151515;
       display: flex; justify-content: space-between; align-items: center;
+      border-left: 3px solid transparent; transition: all 0.1s;
     }
     .oi-ticker-item:hover { background: #111; }
-    .oi-ticker-item.selected { background: #1a1a0a; border-left: 2px solid #ff6600; }
-    .oi-ticker-item .ticker-name { font-weight: bold; color: #fff; font-size: 11px; }
-    .oi-ticker-item .ticker-conf { font-size: 10px; }
+    .oi-ticker-item.selected { background: #1a1a0a; border-left-color: #ff6600; }
+    .oi-ticker-item .ticker-name { font-weight: bold; color: #e0e0e0; font-size: 12px; }
+    .oi-ticker-item .ticker-conf { font-size: 11px; font-weight: bold; }
     .oi-ticker-item .ticker-conf.high { color: #00ff00; }
     .oi-ticker-item .ticker-conf.med { color: #ffcc00; }
-    .oi-ticker-item .ticker-conf.low { color: #888; }
+    .oi-ticker-item .ticker-conf.low { color: #666; }
     .oi-ticker-item .ticker-tag {
-      font-size: 8px; padding: 1px 4px; font-weight: bold; margin-left: 4px;
+      font-size: 9px; padding: 2px 6px; font-weight: bold; margin-left: 6px;
+      border-radius: 2px; letter-spacing: 0.3px;
     }
     .oi-ticker-item .ticker-tag.aligned { background: #003300; color: #00ff00; }
     .oi-ticker-item .ticker-tag.divergent { background: #332200; color: #ffaa00; }
     .oi-ticker-item .ticker-tag.bullish { background: #003300; color: #00ff00; }
     .oi-ticker-item .ticker-tag.bearish { background: #330000; color: #ff4444; }
 
-    .oi-term-strip { display: flex; gap: 4px; margin-bottom: 8px; }
-    .oi-dte-card {
-      flex: 1; padding: 6px; background: #0a0a0a; border: 1px solid #333; text-align: center;
-    }
-    .oi-dte-card .dte-label { font-size: 9px; color: #888; text-transform: uppercase; }
-    .oi-dte-card .dte-bias { font-size: 10px; font-weight: bold; margin-top: 2px; }
-    .oi-dte-card .dte-bias.bullish { color: #00ff00; }
-    .oi-dte-card .dte-bias.bearish { color: #ff4444; }
-    .oi-dte-card .dte-bias.neutral { color: #888; }
-    .oi-dte-card .dte-strike { font-size: 9px; color: #ff9900; margin-top: 2px; }
-
-    /* Per-DTE expanded analysis cards */
-    .oi-dte-card-expanded {
-      flex: 1; padding: 8px; background: #0a0a0a; border: 1px solid #333;
-      text-align: left; min-width: 0;
-    }
-    .oi-dte-card-expanded .dte-label { font-size: 9px; color: #888; text-transform: uppercase; font-weight: bold; }
-    .oi-dte-card-expanded .dte-bias { font-size: 11px; font-weight: bold; margin-top: 2px; }
-    .oi-dte-card-expanded .dte-bias.bullish { color: #00ff00; }
-    .oi-dte-card-expanded .dte-bias.bearish { color: #ff4444; }
-    .oi-dte-card-expanded .dte-bias.neutral { color: #888; }
-    .oi-dte-card-expanded .dte-conf { font-size: 10px; margin-top: 2px; }
-    .oi-dte-card-expanded .dte-conf.high { color: #00ff00; }
-    .oi-dte-card-expanded .dte-conf.med { color: #ffcc00; }
-    .oi-dte-card-expanded .dte-conf.low { color: #888; }
-    .oi-dte-card-expanded .dte-strike { font-size: 9px; color: #ff9900; margin-top: 2px; }
-    .oi-dte-card-expanded .dte-pcr { font-size: 8px; color: #888; margin-top: 2px; }
-    .oi-dte-card-expanded .dte-flow { font-size: 8px; color: #ff9900; margin-top: 3px; font-style: italic; }
-    .oi-dte-card-expanded .dte-thesis {
-      font-size: 9px; color: #aaa; margin-top: 4px; line-height: 1.4;
-      max-height: 80px; overflow-y: auto; border-top: 1px solid #222; padding-top: 4px;
-    }
-
     /* Synthesis header */
     .oi-synthesis-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 8px 10px; background: #0a0a0a; border: 1px solid #333; margin-bottom: 8px;
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px; background: #080808; border: 1px solid #333;
+      border-radius: 3px; margin-bottom: 12px;
     }
-    .synth-direction { font-size: 16px; font-weight: bold; }
+    .synth-direction { font-size: 20px; font-weight: bold; letter-spacing: 1px; }
     .synth-direction.CALL { color: #00ff00; }
     .synth-direction.PUT { color: #ff4444; }
-    .synth-conf { font-size: 14px; color: #ff9900; font-weight: bold; }
-    .synth-confluence { font-size: 9px; padding: 2px 8px; border-radius: 2px; text-transform: uppercase; }
+    .synth-conf { font-size: 16px; color: #ff9900; font-weight: bold; }
+    .synth-confluence { font-size: 10px; padding: 3px 10px; border-radius: 2px; text-transform: uppercase; font-weight: bold; letter-spacing: 0.5px; }
     .synth-confluence.aligned { background: #003300; color: #00ff00; border: 1px solid #005500; }
     .synth-confluence.divergent { background: #332200; color: #ffaa00; border: 1px solid #554400; }
 
-    .oi-section { margin-bottom: 8px; }
+    /* Smart money callout */
+    .oi-smart-money {
+      padding: 8px 12px; background: #0d0800; border-left: 3px solid #ff9900;
+      margin-bottom: 12px; font-size: 11px; color: #ffcc66;
+      font-style: italic; line-height: 1.6;
+    }
+
+    /* Sections */
+    .oi-section { margin-bottom: 14px; }
     .oi-section-title {
       font-size: 10px; font-weight: bold; color: #ff9900; text-transform: uppercase;
-      padding: 4px 6px; background: #0a0a0a; border-bottom: 1px solid #333; margin-bottom: 4px;
+      padding: 5px 8px; background: #0a0a0a; border-bottom: 1px solid #333;
+      margin-bottom: 6px; letter-spacing: 0.5px;
     }
-    .oi-thesis { color: #ccc; font-size: 11px; padding: 6px; line-height: 1.5; background: #0a0a0a; border: 1px solid #222; }
-    .oi-strikes-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-    .oi-strikes-table th {
-      text-align: left; color: #888; font-size: 9px; text-transform: uppercase;
-      padding: 3px 6px; border-bottom: 1px solid #333; background: #0a0a0a;
+    .oi-thesis {
+      color: #ccc; font-size: 12px; padding: 10px 12px; line-height: 1.7;
+      background: #060606; border: 1px solid #1a1a1a; border-radius: 2px;
     }
-    .oi-strikes-table td { padding: 3px 6px; border-bottom: 1px solid #111; color: #ccc; }
-    .oi-strikes-table .type-call_wall { color: #00ff00; }
-    .oi-strikes-table .type-put_wall { color: #ff4444; }
-    .oi-strikes-table .type-max_pain { color: #ff9900; }
 
-    .oi-trade-box {
-      background: #0a0a0a; border: 1px solid #333; padding: 8px; margin-top: 4px;
+    /* DTE Table */
+    .oi-dte-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11px; }
+    .oi-dte-table th {
+      text-align: left; color: #666; font-size: 9px; text-transform: uppercase;
+      padding: 6px 10px; border-bottom: 1px solid #333; background: #0a0a0a;
+      letter-spacing: 0.5px; font-weight: 600;
     }
-    .oi-trade-box .trade-direction { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+    .oi-dte-table td {
+      padding: 8px 10px; border-bottom: 1px solid #151515; color: #ccc;
+      vertical-align: top;
+    }
+    .oi-dte-table tbody tr { cursor: pointer; transition: background 0.1s; }
+    .oi-dte-table tbody tr:hover { background: #0d0d0d; }
+    .oi-dte-table tbody tr.dte-active { background: #0d0d0d; outline: 1px solid #ff6600; outline-offset: -1px; }
+    .oi-dte-table .dte-bias-cell { font-weight: bold; font-size: 11px; }
+    .oi-dte-table .dte-bias-cell.bullish { color: #00ff00; }
+    .oi-dte-table .dte-bias-cell.bearish { color: #ff4444; }
+    .oi-dte-table .dte-bias-cell.neutral { color: #666; }
+    .oi-dte-table .dte-conf-val { font-weight: bold; }
+    .oi-dte-table .dte-conf-val.high { color: #00ff00; }
+    .oi-dte-table .dte-conf-val.med { color: #ffcc00; }
+    .oi-dte-table .dte-conf-val.low { color: #666; }
+    .oi-dte-table .dte-sm { font-size: 9px; font-weight: 600; }
+    .oi-dte-table .dte-sm.bullish { color: #00bb00; }
+    .oi-dte-table .dte-sm.bearish { color: #dd3333; }
+    .oi-dte-table .dte-sm.neutral { color: #555; }
+    .oi-dte-table .dte-gamma { font-size: 9px; font-weight: 600; }
+    .oi-dte-table .dte-gamma.up { color: #00ff00; }
+    .oi-dte-table .dte-gamma.down { color: #ff4444; }
+    .oi-dte-table .dte-gamma.neutral { color: #444; }
+
+    /* DTE expand panel */
+    .oi-dte-expand {
+      background: #080808; border: 1px solid #333; border-top: 2px solid #ff6600;
+      margin-bottom: 10px; padding: 10px 14px; border-radius: 0 0 3px 3px;
+      animation: oiSlideIn 0.15s ease-out;
+    }
+    .oi-dte-expand .exp-title {
+      font-size: 11px; font-weight: bold; color: #e0e0e0; margin-bottom: 8px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .oi-dte-expand .exp-close { cursor: pointer; color: #555; font-size: 12px; }
+    .oi-dte-expand .exp-close:hover { color: #ccc; }
+    .oi-dte-expand .exp-body { display: flex; gap: 16px; }
+    .oi-dte-expand .exp-col { flex: 1; }
+    .oi-dte-expand .exp-label { font-size: 9px; color: #666; text-transform: uppercase; font-weight: bold; margin-bottom: 4px; letter-spacing: 0.3px; }
+    .oi-dte-expand .exp-flow { font-size: 11px; color: #ff9900; font-style: italic; line-height: 1.5; }
+    .oi-dte-expand .exp-thesis { font-size: 11px; color: #bbb; line-height: 1.6; }
+    @keyframes oiSlideIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Legacy term strip (fallback) */
+    .oi-term-strip { display: flex; gap: 6px; margin-bottom: 10px; }
+    .oi-dte-card {
+      flex: 1; padding: 8px; background: #080808; border: 1px solid #333; text-align: center;
+    }
+    .oi-dte-card .dte-label { font-size: 9px; color: #888; text-transform: uppercase; }
+    .oi-dte-card .dte-bias { font-size: 11px; font-weight: bold; margin-top: 3px; }
+    .oi-dte-card .dte-bias.bullish { color: #00ff00; }
+    .oi-dte-card .dte-bias.bearish { color: #ff4444; }
+    .oi-dte-card .dte-bias.neutral { color: #888; }
+    .oi-dte-card .dte-strike { font-size: 10px; color: #ff9900; margin-top: 3px; }
+
+    /* Key Strikes table */
+    .oi-strikes-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .oi-strikes-table th {
+      text-align: left; color: #666; font-size: 9px; text-transform: uppercase;
+      padding: 6px 10px; border-bottom: 1px solid #333; background: #0a0a0a;
+      letter-spacing: 0.5px;
+    }
+    .oi-strikes-table td { padding: 6px 10px; border-bottom: 1px solid #151515; color: #ccc; }
+    .oi-strikes-table .type-call_wall { color: #00ff00; font-weight: bold; }
+    .oi-strikes-table .type-put_wall { color: #ff4444; font-weight: bold; }
+    .oi-strikes-table .type-max_pain { color: #ff9900; font-weight: bold; }
+
+    /* Trade recommendation */
+    .oi-trade-box {
+      background: #080808; border: 1px solid #333; border-radius: 3px; overflow: hidden;
+    }
+    .oi-trade-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; background: #0a0a0a; border-bottom: 1px solid #222;
+    }
+    .oi-trade-box .trade-direction { font-size: 15px; font-weight: bold; }
     .oi-trade-box .trade-direction.CALL { color: #00ff00; }
     .oi-trade-box .trade-direction.PUT { color: #ff4444; }
-    .oi-trade-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 10px; }
-    .oi-trade-row .label { color: #888; }
-    .oi-trade-row .value { color: #fff; }
-    .oi-risk-list { list-style: none; padding: 4px 6px; }
-    .oi-risk-list li { color: #ff6666; font-size: 10px; padding: 2px 0; }
-    .oi-risk-list li::before { content: "! "; color: #ff4444; font-weight: bold; }
+    .oi-trade-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #151515;
+    }
+    .oi-trade-cell {
+      padding: 8px 12px; background: #080808;
+    }
+    .oi-trade-cell .tc-label { font-size: 9px; color: #666; text-transform: uppercase; margin-bottom: 2px; }
+    .oi-trade-cell .tc-value { font-size: 12px; font-weight: bold; color: #e0e0e0; }
+    .oi-trade-cell .tc-value.green { color: #00ff00; }
+    .oi-trade-cell .tc-value.red { color: #ff4444; }
+    .oi-trade-cell .tc-value.gold { color: #ff9900; }
+    .oi-trade-triggers {
+      padding: 8px 12px; border-top: 1px solid #1a1a1a;
+    }
+    .oi-trade-triggers .trig-title { font-size: 9px; color: #666; text-transform: uppercase; margin-bottom: 4px; font-weight: bold; }
+    .oi-trade-triggers .trig-item { font-size: 10px; color: #bbb; padding: 2px 0; }
+    .oi-trade-triggers .trig-item::before { content: "> "; color: #ff6600; font-weight: bold; }
 
+    /* Risk management */
+    .oi-risk-list { list-style: none; padding: 6px 10px; }
+    .oi-risk-list li { color: #ff8888; font-size: 11px; padding: 3px 0; line-height: 1.4; }
+    .oi-risk-list li::before { content: "! "; color: #ff4444; font-weight: bold; }
+    .oi-risk-detail { font-size: 10px; color: #aaa; padding: 4px 10px; line-height: 1.4; }
+    .oi-risk-detail .rd-label { color: #666; font-weight: bold; text-transform: uppercase; font-size: 9px; }
+
+    /* Sentiment */
+    .oi-sentiment-card { background: #0a0a0a; border: 1px solid #333; overflow: hidden; }
+    .oi-sentiment-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px; background: #111; border-bottom: 1px solid #222;
+    }
+    .oi-sentiment-header .sh-icon { font-size: 13px; opacity: 0.6; }
+    .oi-sentiment-header .sh-dir { font-size: 11px; font-weight: bold; }
+    .oi-sentiment-header .sh-dir.bullish { color: #00cc44; }
+    .oi-sentiment-header .sh-dir.bearish { color: #dd3333; }
+    .oi-sentiment-header .sh-dir.neutral, .oi-sentiment-header .sh-dir.mixed { color: #888; }
+    .oi-sentiment-header .sh-conf { font-size: 11px; font-weight: bold; color: #ff6600; }
+    .oi-sentiment-header .sh-meta { margin-left: auto; font-size: 9px; color: #666; }
+    .oi-sentiment-themes { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 12px; border-bottom: 1px solid #1a1a1a; }
+    .oi-sentiment-themes .st-tag {
+      font-size: 9px; color: #999; padding: 2px 6px;
+      background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 2px;
+    }
+    .oi-sentiment-summary { padding: 8px 12px; font-size: 11px; color: #aaa; line-height: 1.6; }
+    .oi-sentiment-notable { padding: 4px 12px 8px; font-size: 9px; color: #666; }
+    .oi-sentiment-notable span { color: #cc7733; }
+    .oi-sentiment-market {
+      background: #080808; border: 1px solid #222; padding: 8px 12px; margin-top: 8px;
+    }
+    .oi-sentiment-market .sm-label {
+      font-size: 9px; font-weight: bold; color: #666; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;
+    }
+    .oi-sentiment-market .sm-badge {
+      font-size: 8px; padding: 1px 5px; border-radius: 2px; font-weight: bold;
+    }
+    .oi-sentiment-market .sm-badge.risk-on { color: #00cc44; border: 1px solid #004400; background: #001a00; }
+    .oi-sentiment-market .sm-badge.risk-off { color: #dd3333; border: 1px solid #440000; background: #1a0000; }
+    .oi-sentiment-market .sm-badge.neutral { color: #888; border: 1px solid #333; }
+    .oi-sentiment-market .sm-text { font-size: 11px; color: #aaa; line-height: 1.5; }
+    .oi-sentiment-align {
+      margin-top: 6px; padding: 5px 8px; font-size: 10px; font-weight: bold;
+    }
+    .oi-sentiment-align.confirms { color: #00cc44; background: #001a00; border: 1px solid #004400; }
+    .oi-sentiment-align.contrarian { color: #ffaa00; background: #1a1100; border: 1px solid #443300; }
+    .oi-sentiment-align.neutral { color: #888; background: #111; border: 1px solid #333; }
+
+    /* Date group headers */
+    .oi-date-group {
+      font-size: 9px; font-weight: bold; color: #666; text-transform: uppercase;
+      letter-spacing: 0.8px; padding: 8px 10px 4px; margin-top: 4px;
+      border-bottom: 1px solid #222; display: flex; justify-content: space-between; align-items: center;
+    }
+    .oi-date-group:first-child { margin-top: 0; }
+    .oi-date-group .dg-count { font-size: 9px; color: #555; font-weight: normal; }
+    .oi-date-group .dg-badge {
+      font-size: 8px; font-weight: bold; padding: 1px 5px; border-radius: 2px;
+    }
+    .oi-date-group .dg-badge.today { color: #ff6600; border: 1px solid #663300; background: #1a0a00; }
+    .oi-date-group .dg-badge.yesterday { color: #888; border: 1px solid #333; }
+
+    /* Controls */
     .oi-run-btn {
       font-family: 'Consolas', monospace; font-size: 10px; font-weight: bold;
       padding: 6px 16px; border: 1px solid #ff6600; background: #1a0a00;
@@ -306,9 +436,7 @@
     .oi-run-btn:hover { background: #331a00; }
     .oi-run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .oi-status-bar { color: #888; font-size: 10px; padding: 4px 0; margin-bottom: 8px; }
-    .oi-progress-bar {
-      height: 3px; background: #222; margin-bottom: 8px; overflow: hidden;
-    }
+    .oi-progress-bar { height: 3px; background: #222; margin-bottom: 8px; overflow: hidden; }
     .oi-progress-fill { height: 100%; background: #ff6600; transition: width 0.3s; width: 0%; }
 
     .oi-context-card {
@@ -328,16 +456,14 @@
     .oi-conviction-item .cv-dir.PUT { color: #ff4444; }
     .oi-conviction-item .cv-conf { font-size: 10px; color: #ff9900; }
 
-    .oi-empty { color: #444; font-size: 11px; padding: 20px; text-align: center; }
-    .oi-bias-summary {
-      display: flex; gap: 8px; margin-bottom: 8px;
-    }
-    .oi-bias-card { flex: 1; text-align: center; padding: 6px; background: #0a0a0a; border: 1px solid #333; }
-    .oi-bias-card .bias-count { font-size: 18px; font-weight: bold; }
+    .oi-empty { color: #444; font-size: 12px; padding: 30px; text-align: center; }
+    .oi-bias-summary { display: flex; gap: 8px; margin-bottom: 8px; }
+    .oi-bias-card { flex: 1; text-align: center; padding: 8px; background: #080808; border: 1px solid #333; border-radius: 2px; }
+    .oi-bias-card .bias-count { font-size: 20px; font-weight: bold; }
     .oi-bias-card .bias-count.bullish { color: #00ff00; }
     .oi-bias-card .bias-count.bearish { color: #ff4444; }
-    .oi-bias-card .bias-count.unclear { color: #888; }
-    .oi-bias-card .bias-label { font-size: 9px; color: #888; text-transform: uppercase; }
+    .oi-bias-card .bias-count.unclear { color: #666; }
+    .oi-bias-card .bias-label { font-size: 9px; color: #888; text-transform: uppercase; margin-top: 2px; }
 
     /* MAIN */
     .main {
@@ -1994,12 +2120,7 @@
     function renderOnDemandTickers(results) {
       const container = document.getElementById('oi-ticker-list');
 
-      // Convert dict to array and sort by analyzed_at descending (most recent first)
-      const tickers = Object.entries(results).map(([ticker, data]) => ({
-        ticker,
-        ...data
-      }));
-      tickers.sort((a, b) => (b.analyzed_at || '').localeCompare(a.analyzed_at || ''));
+      const tickers = Object.entries(results).map(([ticker, data]) => ({ ticker, ...data }));
 
       document.getElementById('oi-ticker-count').textContent = `(${tickers.length})`;
 
@@ -2008,28 +2129,56 @@
         return;
       }
 
-      container.innerHTML = tickers.map(t => {
-        const conf = t.confidence || 0;
-        const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
-        const dirTag = t.direction === 'CALL' ? 'bullish' : t.direction === 'PUT' ? 'bearish' : '';
-        const confTag = t.confluence === 'aligned' ? 'aligned' : t.confluence === 'divergent' ? 'divergent' : '';
-        const errorFlag = (t.status === 'error') ? '<span style="color:#ff4444;font-size:8px;margin-left:4px;">ERR</span>' : '';
-        const timeStr = t.analyzed_at || '';
-        const dateStr = t.analysis_date ? new Date(t.analysis_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
-        const dateTimeStr = dateStr ? `${dateStr} ${timeStr}` : timeStr;
+      // Group by analysis_date
+      const groups = {};
+      tickers.forEach(t => {
+        const date = t.analysis_date || 'unknown';
+        if (!groups[date]) groups[date] = [];
+        groups[date].push(t);
+      });
 
-        return `<div class="oi-ticker-item${oiSelectedTicker === t.ticker ? ' selected' : ''}" onclick="selectOITicker('${t.ticker}')">
-          <span>
-            <span class="ticker-name">${t.ticker}</span>${errorFlag}
-            ${dirTag ? `<span class="ticker-tag ${dirTag}">${t.direction}</span>` : ''}
-            ${confTag ? `<span class="ticker-tag ${confTag}">${confTag.toUpperCase()}</span>` : ''}
-          </span>
-          <span style="display:flex;gap:6px;align-items:center;">
-            <span class="ticker-conf ${confClass}">${conf}%</span>
-            <span style="color:#555;font-size:8px;">${dateTimeStr}</span>
-          </span>
-        </div>`;
-      }).join('');
+      // Sort dates descending, tickers within each group by confidence
+      const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+      sortedDates.forEach(date => groups[date].sort((a, b) => (b.confidence || 0) - (a.confidence || 0)));
+
+      const today = new Date().toISOString().slice(0, 10);
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+      let html = '';
+      sortedDates.forEach(date => {
+        const count = groups[date].length;
+        const dateLabel = (date !== 'unknown')
+          ? new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+          : 'UNKNOWN';
+        let badge = '';
+        if (date === today) badge = '<span class="dg-badge today">TODAY</span>';
+        else if (date === yesterday) badge = '<span class="dg-badge yesterday">YESTERDAY</span>';
+
+        html += `<div class="oi-date-group"><span>${dateLabel} ${badge}</span><span class="dg-count">${count}</span></div>`;
+
+        groups[date].forEach(t => {
+          const conf = t.confidence || 0;
+          const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
+          const dirTag = t.direction === 'CALL' ? 'bullish' : t.direction === 'PUT' ? 'bearish' : '';
+          const confTag = t.confluence === 'aligned' ? 'aligned' : t.confluence === 'divergent' ? 'divergent' : '';
+          const errorFlag = (t.status === 'error') ? '<span style="color:#ff4444;font-size:8px;margin-left:4px;">ERR</span>' : '';
+          const timeStr = t.analyzed_at || '';
+
+          html += `<div class="oi-ticker-item${oiSelectedTicker === t.ticker ? ' selected' : ''}" data-ticker="${t.ticker}" onclick="selectOITicker('${t.ticker}')">
+            <span>
+              <span class="ticker-name">${t.ticker}</span>${errorFlag}
+              ${dirTag ? `<span class="ticker-tag ${dirTag}">${t.direction}</span>` : ''}
+              ${confTag ? `<span class="ticker-tag ${confTag}">${confTag.toUpperCase()}</span>` : ''}
+            </span>
+            <span style="display:flex;gap:6px;align-items:center;">
+              <span class="ticker-conf ${confClass}">${conf}%</span>
+              <span style="color:#555;font-size:8px;">${timeStr}</span>
+            </span>
+          </div>`;
+        });
+      });
+
+      container.innerHTML = html;
 
       // Auto-select first ticker if none selected
       if (!oiSelectedTicker && tickers.length > 0) {
@@ -2051,9 +2200,8 @@
       document.getElementById('oi-selected-ticker').textContent = headerText;
 
       // Highlight in list
-      document.querySelectorAll('.oi-ticker-item').forEach(el => el.classList.remove('selected'));
       document.querySelectorAll('.oi-ticker-item').forEach(el => {
-        if (el.textContent.includes(ticker)) el.classList.add('selected');
+        el.classList.toggle('selected', el.dataset.ticker === ticker);
       });
 
       // Find analysis for this ticker from on-demand data
@@ -2076,18 +2224,18 @@
 
       let html = '';
 
-      // Synthesis header bar with pattern type and data quality
+      // Synthesis header
       html += `<div class="oi-synthesis-header">
         <span class="synth-direction ${analysis.direction || ''}">${analysis.direction || '--'}</span>
         <span class="synth-conf">${analysis.confidence || '--'}%</span>
         <span class="synth-confluence ${analysis.confluence || ''}">${(analysis.confluence || '--').toUpperCase()}</span>
-        ${analysis.pattern_type ? `<span style="font-size:8px;color:#888;padding:2px 6px;background:#111;border:1px solid #333;">${analysis.pattern_type.replace(/_/g,' ').toUpperCase()}</span>` : ''}
-        ${dq.overall_score ? `<span style="font-size:9px;color:${dq.overall_score === 'A' ? '#00ff00' : dq.overall_score === 'B' ? '#ffcc00' : '#ff6666'};margin-left:auto;">DATA: ${dq.overall_score}</span>` : ''}
+        ${analysis.pattern_type ? `<span style="font-size:9px;color:#888;padding:3px 8px;background:#111;border:1px solid #333;border-radius:2px;">${analysis.pattern_type.replace(/_/g,' ').toUpperCase()}</span>` : ''}
+        ${dq.overall_score ? `<span style="font-size:10px;font-weight:bold;color:${dq.overall_score === 'A' ? '#00ff00' : dq.overall_score === 'B' ? '#ffcc00' : '#ff6666'};margin-left:auto;">DATA: ${dq.overall_score}</span>` : ''}
       </div>`;
 
-      // Smart Money Summary (if available)
+      // Smart Money Summary
       if (analysis.smart_money_summary) {
-        html += `<div style="padding:4px 8px;background:#0a0a0a;border:1px solid #222;margin-bottom:6px;font-size:10px;color:#ff9900;font-style:italic;">${analysis.smart_money_summary}</div>`;
+        html += `<div class="oi-smart-money">${analysis.smart_money_summary}</div>`;
       }
 
       // Synthesis Thesis
@@ -2096,10 +2244,10 @@
         html += `<div class="oi-thesis">${analysis.thesis}</div></div>`;
       }
 
-      // Per-DTE Analysis Strip
-      html += renderDteAnalysisStrip(dteAnalyses);
+      // Per-DTE Analysis Table
+      html += renderDteAnalysisTable(dteAnalyses);
 
-      // Fallback: old term structure if no per-DTE data
+      // Fallback: old term structure
       if (dteAnalyses.length === 0) {
         const term = analysis.term_structure || {};
         const shortTerm = term.short_term || {};
@@ -2111,14 +2259,21 @@
         html += '</div></div>';
       }
 
-      // Key Strikes (with interpretation column)
+      // Key Strikes
       if (keyStrikes.length > 0) {
         const hasInterp = keyStrikes.some(s => s.interpretation);
         html += '<div class="oi-section"><div class="oi-section-title">Key Strikes</div>';
-        html += `<table class="oi-strikes-table"><thead><tr><th>Strike</th><th>Type</th><th>OI</th><th>5d Change</th>${hasInterp ? '<th>Interpretation</th>' : ''}</tr></thead><tbody>`;
+        html += `<table class="oi-strikes-table"><thead><tr><th>Strike</th><th>Type</th><th>OI</th><th>5d Change</th>${hasInterp ? '<th>Reading</th>' : ''}</tr></thead><tbody>`;
         keyStrikes.forEach(s => {
           const typeClass = 'type-' + (s.type || '').replace(' ', '_');
-          html += `<tr><td>$${s.strike}</td><td class="${typeClass}">${s.type || '--'}</td><td>${(s.oi || 0).toLocaleString()}</td><td>${s.change_5d || 'N/A'}</td>${hasInterp ? `<td style="color:#aaa;font-size:9px;">${s.interpretation || ''}</td>` : ''}</tr>`;
+          const changeColor = (s.change_5d || '').startsWith('+') ? '#00bb00' : (s.change_5d || '').startsWith('-') ? '#dd3333' : '#888';
+          html += `<tr>
+            <td style="font-weight:bold;">$${s.strike}</td>
+            <td class="${typeClass}">${(s.type || '--').replace(/_/g,' ').toUpperCase()}</td>
+            <td>${(s.oi || 0).toLocaleString()}</td>
+            <td style="color:${changeColor};font-weight:bold;">${s.change_5d || 'N/A'}</td>
+            ${hasInterp ? `<td style="color:#999;font-size:10px;">${s.interpretation || ''}</td>` : ''}
+          </tr>`;
         });
         html += '</tbody></table></div>';
       }
@@ -2126,31 +2281,85 @@
       // Trade Recommendation
       html += '<div class="oi-section"><div class="oi-section-title">Trade Recommendation</div>';
       html += '<div class="oi-trade-box">';
-      html += `<div class="trade-direction ${analysis.direction || ''}">${trade.instrument || analysis.direction || '--'}</div>`;
-      html += `<div class="oi-trade-row"><span class="label">Current</span><span class="value">$${trade.current_price || '--'}</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">Entry</span><span class="value">$${trade.entry || '--'}</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">Stop</span><span class="value" style="color:#ff4444;">$${trade.stop || '--'}</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">Target</span><span class="value" style="color:#00ff00;">$${trade.target || '--'}</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">R/R</span><span class="value">${trade.risk_reward || '--'}</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">Expiry</span><span class="value">${trade.expiry_dte || '--'} DTE</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">Confidence</span><span class="value" style="color:#ff9900;">${analysis.confidence || '--'}%</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">Win Prob</span><span class="value" style="color:#ff9900;">${analysis.success_probability || '--'}%</span></div>`;
-      html += `<div class="oi-trade-row"><span class="label">Confluence</span><span class="value">${analysis.confluence || '--'}</span></div>`;
+      html += `<div class="oi-trade-header">
+        <span class="trade-direction ${analysis.direction || ''}">${trade.instrument || analysis.direction || '--'}</span>
+        <span style="font-size:10px;color:#888;">${trade.expiry_dte || '--'} DTE</span>
+      </div>`;
+      html += '<div class="oi-trade-grid">';
+      html += `<div class="oi-trade-cell"><div class="tc-label">Current</div><div class="tc-value">$${trade.current_price || '--'}</div></div>`;
+      html += `<div class="oi-trade-cell"><div class="tc-label">Entry</div><div class="tc-value">$${trade.entry || '--'}</div></div>`;
+      html += `<div class="oi-trade-cell"><div class="tc-label">Stop</div><div class="tc-value red">$${trade.stop || '--'}</div></div>`;
+      html += `<div class="oi-trade-cell"><div class="tc-label">Target</div><div class="tc-value green">$${trade.target || '--'}</div></div>`;
+      html += `<div class="oi-trade-cell"><div class="tc-label">Risk/Reward</div><div class="tc-value gold">${trade.risk_reward || '--'}</div></div>`;
+      html += `<div class="oi-trade-cell"><div class="tc-label">Win Prob</div><div class="tc-value gold">${analysis.success_probability || '--'}%</div></div>`;
+      html += '</div>';
+
       // Entry triggers
       const triggers = trade.entry_triggers || [];
       if (triggers.length > 0) {
-        html += `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #222;">`;
-        html += `<div style="font-size:8px;color:#888;text-transform:uppercase;margin-bottom:2px;">Entry Triggers</div>`;
-        triggers.forEach(t => { html += `<div style="font-size:9px;color:#aaa;padding:1px 0;">• ${t}</div>`; });
+        html += '<div class="oi-trade-triggers"><div class="trig-title">Entry Triggers</div>';
+        triggers.forEach(t => { html += `<div class="trig-item">${t}</div>`; });
         html += '</div>';
       }
       // Exit strategy
       if (trade.exit_strategy) {
-        html += `<div style="margin-top:4px;padding-top:4px;border-top:1px solid #222;">`;
-        html += `<div style="font-size:8px;color:#888;text-transform:uppercase;margin-bottom:2px;">Exit Strategy</div>`;
-        html += `<div style="font-size:9px;color:#aaa;">${trade.exit_strategy}</div></div>`;
+        html += '<div class="oi-trade-triggers"><div class="trig-title">Exit Strategy</div>';
+        html += `<div style="font-size:11px;color:#bbb;line-height:1.5;">${trade.exit_strategy}</div></div>`;
       }
       html += '</div></div>';
+
+      // Crowd Sentiment
+      const sentiment = analysis.sentiment || {};
+      const tickerSent = sentiment.ticker;
+      const marketSent = sentiment.market;
+      if (tickerSent || marketSent) {
+        html += '<div class="oi-section"><div class="oi-section-title">Crowd Sentiment</div>';
+        if (tickerSent) {
+          const sDir = tickerSent.direction || 'neutral';
+          const sDirLabel = sDir.charAt(0).toUpperCase() + sDir.slice(1);
+          html += `<div class="oi-sentiment-card">
+            <div class="oi-sentiment-header">
+              <span class="sh-icon">\u{1D54F}</span>
+              <span class="sh-dir ${sDir}">${sDirLabel}</span>
+              <span class="sh-conf">${tickerSent.confidence || '--'}%</span>
+              <span class="sh-meta">${tickerSent.posts || '?'} posts \u00B7 ${tickerSent.time_range || ''}</span>
+            </div>`;
+          const themes = tickerSent.themes || [];
+          if (themes.length) {
+            html += '<div class="oi-sentiment-themes">';
+            themes.forEach(t => { html += `<span class="st-tag">${t}</span>`; });
+            html += '</div>';
+          }
+          if (tickerSent.summary) html += `<div class="oi-sentiment-summary">${tickerSent.summary}</div>`;
+          const notable = tickerSent.notable || [];
+          if (notable.length) html += `<div class="oi-sentiment-notable">Notable: <span>${notable.join('</span>, <span>')}</span></div>`;
+
+          // Alignment indicator
+          const oiDir = analysis.direction === 'CALL' ? 'bullish' : analysis.direction === 'PUT' ? 'bearish' : 'neutral';
+          let alignClass, alignText;
+          if (sDir === oiDir) {
+            alignClass = 'confirms';
+            alignText = '\u2713 Sentiment confirms OI bias \u2014 ' + sDir + ' crowd + ' + sDir + ' OI = higher conviction';
+          } else if (sDir === 'mixed' || sDir === 'neutral') {
+            alignClass = 'neutral';
+            alignText = '\u25CB Sentiment neutral/mixed \u2014 no crowd confirmation or contradiction';
+          } else {
+            alignClass = 'contrarian';
+            alignText = '\u26A0 Contrarian setup \u2014 crowd ' + sDir + ' vs OI ' + oiDir + ' \u2014 smart money may disagree with crowd';
+          }
+          html += `<div class="oi-sentiment-align ${alignClass}">${alignText}</div>`;
+          html += '</div>';
+        }
+
+        if (marketSent) {
+          const riskClass = marketSent.risk_appetite === 'risk-on' ? 'risk-on' : marketSent.risk_appetite === 'risk-off' ? 'risk-off' : 'neutral';
+          html += `<div class="oi-sentiment-market">
+            <div class="sm-label">Market Sentiment <span class="sm-badge ${riskClass}">${(marketSent.risk_appetite || 'neutral').toUpperCase()}</span></div>
+            <div class="sm-text">${marketSent.summary || ''}</div>
+          </div>`;
+        }
+        html += '</div>';
+      }
 
       // Risk Management
       if (risks.length > 0 || riskMgmt.hedge_strategy) {
@@ -2161,13 +2370,13 @@
           html += '</ul>';
         }
         if (riskMgmt.hedge_strategy) {
-          html += `<div style="font-size:9px;color:#aaa;padding:4px 6px;"><span style="color:#888;">Hedge:</span> ${riskMgmt.hedge_strategy}</div>`;
+          html += `<div class="oi-risk-detail"><span class="rd-label">Hedge: </span>${riskMgmt.hedge_strategy}</div>`;
         }
         if (riskMgmt.volatility_considerations) {
-          html += `<div style="font-size:9px;color:#aaa;padding:2px 6px;"><span style="color:#888;">IV:</span> ${riskMgmt.volatility_considerations}</div>`;
+          html += `<div class="oi-risk-detail"><span class="rd-label">IV: </span>${riskMgmt.volatility_considerations}</div>`;
         }
         if (riskMgmt.position_adjustments) {
-          html += `<div style="font-size:9px;color:#aaa;padding:2px 6px;"><span style="color:#888;">Adjust:</span> ${riskMgmt.position_adjustments}</div>`;
+          html += `<div class="oi-risk-detail"><span class="rd-label">Adjust: </span>${riskMgmt.position_adjustments}</div>`;
         }
         html += '</div>';
       }
@@ -2175,42 +2384,79 @@
       container.innerHTML = html;
     }
 
-    function renderDteAnalysisStrip(dteAnalyses) {
+    // Store DTE data for expand panel
+    let _oiDteData = [];
+    let _oiActiveDte = -1;
+
+    function renderDteAnalysisTable(dteAnalyses) {
       if (!dteAnalyses || dteAnalyses.length === 0) return '';
-
-      let html = '<div class="oi-section"><div class="oi-section-title">Per-DTE Analysis</div>';
-      html += '<div class="oi-term-strip">';
-
       const sorted = [...dteAnalyses].sort((a, b) => (a.dte || 0) - (b.dte || 0));
+      _oiDteData = sorted;
+      _oiActiveDte = -1;
 
-      sorted.forEach(da => {
+      let html = '<div class="oi-section"><div class="oi-section-title">Term Structure</div>';
+      html += `<table class="oi-dte-table"><thead><tr>
+        <th>DTE</th><th>Bias</th><th>Conf</th><th>Key Strike</th><th>P/C</th><th>Max Pain</th><th>Smart Money</th><th>Gamma</th>
+      </tr></thead><tbody>`;
+
+      sorted.forEach((da, i) => {
         const bias = (da.bias || 'neutral').toLowerCase();
         const conf = da.confidence || 0;
         const confClass = conf >= 70 ? 'high' : conf >= 50 ? 'med' : 'low';
-        const smRead = da.smart_money_read || '';
-        const smColor = smRead.includes('BULLISH') ? '#00ff00' : smRead.includes('BEARISH') ? '#ff4444' : '#888';
-        const gammaRisk = da.gamma_risk || '';
-        const gammaColor = gammaRisk.includes('squeeze_up') ? '#00ff00' : gammaRisk.includes('squeeze_down') ? '#ff4444' : '#888';
-        const dqColor = da.data_quality === 'A' ? '#00ff00' : da.data_quality === 'B' ? '#ffcc00' : '#888';
+        const smRead = (da.smart_money_read || '').replace(/_/g, ' ');
+        const smClass = smRead.includes('BULLISH') ? 'bullish' : smRead.includes('BEARISH') ? 'bearish' : 'neutral';
+        const gammaRisk = (da.gamma_risk || 'neutral').replace(/_/g, ' ');
+        const gammaClass = gammaRisk.includes('up') ? 'up' : gammaRisk.includes('down') ? 'down' : 'neutral';
+        const dqColor = da.data_quality === 'A' ? '#00ff00' : da.data_quality === 'B' ? '#ffcc00' : '#555';
 
-        html += `<div class="oi-dte-card-expanded">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div class="dte-label">${da.dte || '?'} DTE</div>
-            ${da.data_quality ? `<span style="font-size:7px;color:${dqColor};">${da.data_quality}</span>` : ''}
-          </div>
-          <div class="dte-bias ${bias}">${(da.bias || 'N/A').toUpperCase()}</div>
-          <div class="dte-conf ${confClass}">${conf}%</div>
-          <div class="dte-strike">${da.key_strike ? '$' + da.key_strike : '--'}${da.key_oi ? ' (' + da.key_oi.toLocaleString() + ')' : ''}</div>
-          <div class="dte-pcr">P/C: ${da.pcr != null ? da.pcr.toFixed(2) : '--'} | MaxPain: ${da.max_pain ? '$' + da.max_pain : '--'}</div>
-          ${smRead ? `<div style="font-size:7px;color:${smColor};margin-top:2px;">${smRead.replace(/_/g,' ')}</div>` : ''}
-          ${gammaRisk && gammaRisk !== 'neutral' && gammaRisk !== 'unknown' ? `<div style="font-size:7px;color:${gammaColor};margin-top:1px;">GAMMA: ${gammaRisk.replace(/_/g,' ').toUpperCase()}</div>` : ''}
-          ${da.notable_flow ? `<div class="dte-flow">${da.notable_flow}</div>` : ''}
-          ${da.thesis ? `<div class="dte-thesis">${da.thesis}</div>` : ''}
-        </div>`;
+        html += `<tr onclick="toggleOIDtePanel(${i})" id="oi-dte-row-${i}">
+          <td style="font-weight:bold;color:#e0e0e0;">${da.dte || '?'} <span style="font-size:8px;color:${dqColor};">${da.data_quality || ''}</span></td>
+          <td class="dte-bias-cell ${bias}">${(da.bias || 'N/A').toUpperCase()}</td>
+          <td class="dte-conf-val ${confClass}">${conf}%</td>
+          <td style="color:#ff9900;">$${da.key_strike || '--'} <span style="color:#666;font-size:9px;">${da.key_oi ? '(' + da.key_oi.toLocaleString() + ')' : ''}</span></td>
+          <td>${da.pcr != null ? da.pcr.toFixed(2) : '--'}</td>
+          <td style="color:#888;">$${da.max_pain || '--'}</td>
+          <td class="dte-sm ${smClass}">${smRead || '--'}</td>
+          <td class="dte-gamma ${gammaClass}">${gammaRisk !== 'neutral' ? gammaRisk.toUpperCase() : '--'}</td>
+        </tr>`;
       });
 
-      html += '</div></div>';
+      html += '</tbody></table><div id="oi-dte-expand"></div></div>';
       return html;
+    }
+
+    function toggleOIDtePanel(index) {
+      const panel = document.getElementById('oi-dte-expand');
+      // Deactivate all rows
+      document.querySelectorAll('.oi-dte-table tbody tr').forEach(r => r.classList.remove('dte-active'));
+
+      if (_oiActiveDte === index) {
+        panel.innerHTML = '';
+        _oiActiveDte = -1;
+        return;
+      }
+
+      _oiActiveDte = index;
+      const da = _oiDteData[index];
+      const row = document.getElementById(`oi-dte-row-${index}`);
+      if (row) row.classList.add('dte-active');
+
+      panel.innerHTML = `<div class="oi-dte-expand">
+        <div class="exp-title">
+          <span>${da.dte} DTE Detail</span>
+          <span class="exp-close" onclick="toggleOIDtePanel(${index})">x</span>
+        </div>
+        <div class="exp-body">
+          <div class="exp-col" style="flex:1;">
+            <div class="exp-label">Notable Flow</div>
+            <div class="exp-flow">${da.notable_flow || 'No notable flow data'}</div>
+          </div>
+          <div class="exp-col" style="flex:2;">
+            <div class="exp-label">Thesis</div>
+            <div class="exp-thesis">${da.thesis || 'No thesis available'}</div>
+          </div>
+        </div>
+      </div>`;
     }
 
     function renderDteCard(label, data) {

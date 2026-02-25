@@ -181,6 +181,10 @@ class OIAnalyzer:
                     historical_context if historical_context else None,
                     sentiment_context if sentiment_context else None,
                 )
+
+                # Attach raw sentiment for UI display
+                analysis["sentiment"] = _build_sentiment_payload(ticker_sentiment, market_sentiment)
+
                 analyses.append(analysis)
                 store_analysis_result(ticker, today, analysis)
 
@@ -324,6 +328,9 @@ class OIAnalyzer:
                 sentiment_context,
             )
 
+            # Attach raw sentiment for UI display
+            analysis["sentiment"] = _build_sentiment_payload(ticker_sentiment, market_sentiment)
+
             # 5. Store
             store_analysis_result(ticker, today, analysis)
             store_episode(ticker, analysis, market_context)
@@ -357,6 +364,89 @@ class OIAnalyzer:
             pct = 5 + int((completed / total) * 25)  # 5-30% range
             set_status("running", message, pct)
             publish_progress(message, pct)
+
+
+def _parse_sentiment_fact(fact_text):
+    """Parse a sentiment fact string into structured data for the UI.
+
+    Expected format from market-sentiment-plugin:
+      {ticker} | {date} | sentiment: {direction} {confidence}% | {posts} posts
+      themes: ...
+      notable: ...
+      summary: ...
+    """
+    result = {}
+    lines = fact_text.strip().split("\n")
+    if not lines:
+        return result
+
+    # Parse header line
+    header = lines[0]
+    parts = [p.strip() for p in header.split("|")]
+    for part in parts:
+        if part.startswith("sentiment:"):
+            tokens = part.replace("sentiment:", "").strip().split()
+            if tokens:
+                result["direction"] = tokens[0]
+            if len(tokens) > 1:
+                try:
+                    result["confidence"] = int(tokens[1].replace("%", ""))
+                except ValueError:
+                    pass
+        elif part.strip().endswith("posts"):
+            try:
+                result["posts"] = int(part.strip().split()[0])
+            except (ValueError, IndexError):
+                pass
+        elif "→" in part or "->" in part:
+            result["time_range"] = part
+        elif len(parts) > 1 and part == parts[1]:
+            result["date"] = part
+
+    # Parse body lines
+    for line in lines[1:]:
+        if line.startswith("themes:"):
+            result["themes"] = [t.strip() for t in line.replace("themes:", "").split(",") if t.strip()]
+        elif line.startswith("notable:"):
+            result["notable"] = [n.strip() for n in line.replace("notable:", "").split(",") if n.strip()]
+        elif line.startswith("summary:"):
+            result["summary"] = line.replace("summary:", "").strip()
+        elif line.startswith("sector_rotation:"):
+            val = line.replace("sector_rotation:", "").strip()
+            if val and val.lower() != "none":
+                result["sector_rotation"] = val
+        elif line.startswith("macro_concerns:"):
+            val = line.replace("macro_concerns:", "").strip()
+            if val and val.lower() != "none":
+                result["macro_concerns"] = val
+        elif line.startswith("risk_appetite:"):
+            # Market-level field
+            ra_part = line.split("|")[0] if "|" in line else line
+            result["risk_appetite"] = ra_part.replace("risk_appetite:", "").strip()
+            # Also parse themes from same line if present
+            if "themes:" in line:
+                themes_part = line.split("themes:")[1].strip()
+                result["themes"] = [t.strip() for t in themes_part.split(",") if t.strip()]
+
+    return result
+
+
+def _build_sentiment_payload(ticker_sentiment, market_sentiment):
+    """Build structured sentiment payload from raw fact strings for UI display."""
+    payload = {}
+
+    if ticker_sentiment:
+        # Use the most recent fact (first in list)
+        parsed = _parse_sentiment_fact(ticker_sentiment[0])
+        if parsed:
+            payload["ticker"] = parsed
+
+    if market_sentiment:
+        parsed = _parse_sentiment_fact(market_sentiment[0])
+        if parsed:
+            payload["market"] = parsed
+
+    return payload if payload else None
 
 
 if __name__ == "__main__":
